@@ -15,12 +15,21 @@ pub struct Config {
     pub token_file: Option<PathBuf>,
     pub sample_interval_secs: u64,
     pub send_interval_secs: u64,
-    /// Samples kept while the core is unreachable; the oldest go first.
+    /// Rows kept in memory while the core is unreachable and the spool is
+    /// unavailable; the oldest go first.
     pub buffer_capacity: usize,
+    /// Rows per batch: samples, facts, process rows and events together.
     pub max_batch: usize,
+    /// Where the spool and the journal position live. Defaults to the
+    /// directory systemd provides through `StateDirectory=`; without one the
+    /// agent buffers in memory only.
+    pub state_dir: Option<PathBuf>,
+    /// Size limit of the spool on disk.
+    pub spool_max_bytes: u64,
     pub request_timeout_secs: u64,
     pub proc_root: PathBuf,
     pub sys_root: PathBuf,
+    pub cgroup_root: PathBuf,
     /// Name prefixes of block devices that are never reported.
     pub disk_exclude: Vec<String>,
 }
@@ -34,9 +43,12 @@ impl Default for Config {
             send_interval_secs: 10,
             buffer_capacity: 50_000,
             max_batch: 5_000,
+            state_dir: None,
+            spool_max_bytes: 100 * 1024 * 1024,
             request_timeout_secs: 5,
             proc_root: "/proc".into(),
             sys_root: "/sys".into(),
+            cgroup_root: "/sys/fs/cgroup".into(),
             disk_exclude: vec!["loop".into(), "ram".into()],
         }
     }
@@ -44,13 +56,16 @@ impl Default for Config {
 
 impl Config {
     pub fn load(path: Option<&Path>) -> Result<Self, String> {
-        let config: Config = match path {
+        let mut config: Config = match path {
             None => Config::default(),
             Some(path) => {
                 let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
                 toml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?
             }
         };
+        if config.state_dir.is_none() {
+            config.state_dir = std::env::var_os("STATE_DIRECTORY").map(PathBuf::from);
+        }
         if config.sample_interval_secs == 0 || config.send_interval_secs == 0 {
             return Err("intervals must be at least one second".into());
         }
@@ -72,7 +87,9 @@ impl Config {
         Roots {
             proc: self.proc_root.clone(),
             sys: self.sys_root.clone(),
+            cgroup: self.cgroup_root.clone(),
             disk_exclude: self.disk_exclude.clone(),
+            state: self.state_dir.clone(),
         }
     }
 

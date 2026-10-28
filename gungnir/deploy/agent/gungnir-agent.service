@@ -14,6 +14,10 @@ RestartSec=5
 
 # No privileges: a transient user, no capabilities, read-only system.
 DynamicUser=yes
+# Reading the system journal, kernel messages included.
+SupplementaryGroups=systemd-journal
+# Spool for outages of the core and the journal position: /var/lib/gungnir-agent.
+StateDirectory=gungnir-agent
 CapabilityBoundingSet=
 NoNewPrivileges=yes
 ProtectSystem=strict

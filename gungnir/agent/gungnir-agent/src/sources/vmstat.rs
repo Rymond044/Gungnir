@@ -5,7 +5,7 @@ use std::io;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use super::{Reading, Roots, Source, rate, read};
+use super::{Collected, Reading, Roots, Source, rate, read};
 
 /// Counters this source turns into signals. Direct reclaim is the sum of the
 /// per-zone `allocstall_*` counters.
@@ -39,7 +39,7 @@ pub struct ProcVmstat {
 
 pub fn open_proc_vmstat(roots: &Roots, now: Instant) -> io::Result<Box<dyn Source>> {
     let mut source = ProcVmstat { path: roots.proc.join("vmstat"), prev: None };
-    source.collect(now, &mut Vec::new())?;
+    source.collect(now, &mut Collected::default())?;
     Ok(Box::new(source))
 }
 
@@ -48,7 +48,7 @@ impl Source for ProcVmstat {
         self.path.display().to_string()
     }
 
-    fn collect(&mut self, now: Instant, out: &mut Vec<Reading>) -> io::Result<()> {
+    fn collect(&mut self, now: Instant, out: &mut Collected) -> io::Result<()> {
         let cur = parse(&read(&self.path)?);
         if let Some((then, prev)) = &self.prev {
             let seconds = now.duration_since(*then).as_secs_f64();
@@ -62,12 +62,12 @@ impl Source for ProcVmstat {
             ];
             for (key, signal) in per_s {
                 if let Some(v) = pair(key).and_then(|(p, c)| rate(p, c, seconds)) {
-                    out.push(Reading::host(signal, v));
+                    out.readings.push(Reading::host(signal, v));
                 }
             }
             // OOM kills are rare events, so the signal is a count per interval.
             if let Some((p, c)) = pair("oom_kill").filter(|(p, c)| c >= p) {
-                out.push(Reading::host("mem.oom_kills", (c - p) as f64));
+                out.readings.push(Reading::host("mem.oom_kills", (c - p) as f64));
             }
         }
         self.prev = Some((now, cur));

@@ -1,4 +1,4 @@
-"""Command line: `gungnir-core serve | migrate | status | host add|list|rotate-token`."""
+"""Command line: `gungnir-core serve | migrate | maintain | status | host add|list|rotate-token`."""
 
 import argparse
 import logging
@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 import psycopg
 
-from gungnir_core import hosts, telemetry
+from gungnir_core import hosts, maintenance, telemetry
 from gungnir_core.db import database_url, migrate
 from gungnir_core.display import render_status
 
@@ -21,9 +21,11 @@ def main() -> None:
     serve.add_argument("--port", type=int, default=8080)
 
     commands.add_parser("migrate", help="apply pending schema migrations")
+    commands.add_parser("maintain", help="create partitions, roll up and expire data now")
 
     status = commands.add_parser("status", help="show a host's agent, signal sources and latest values")
     status.add_argument("name")
+    status.add_argument("--groups", action="store_true", help="also list control group series")
 
     host = commands.add_parser("host", help="manage hosts").add_subparsers(dest="action", required=True)
     host.add_parser("add", help="add a host and print its agent token once").add_argument("name")
@@ -47,8 +49,10 @@ def main() -> None:
             print("\n".join(applied) if applied else "schema is up to date")
             return
         migrate(conn)
-        if args.command == "status":
-            show_status(conn, args.name)
+        if args.command == "maintain":
+            print(maintenance.run(conn))
+        elif args.command == "status":
+            show_status(conn, args.name, args.groups)
         elif args.action == "add":
             try:
                 token = hosts.add(conn, args.name)
@@ -66,14 +70,17 @@ def main() -> None:
                 print(f"{h.name}\tlast seen {seen}\tagent {h.agent_version or '-'}")
 
 
-def show_status(conn: psycopg.Connection, name: str) -> None:
+def show_status(conn: psycopg.Connection, name: str, groups: bool) -> None:
     summary = hosts.summary(conn, name)
     host = hosts.by_name(conn, name)
     if summary is None or host is None:
         sys.exit(f"no host '{name}'")
     sources = telemetry.source_states(conn, host)
     series = telemetry.series_of(conn, host)
-    print(render_status(summary, sources, series, datetime.now(UTC)))
+    now = datetime.now(UTC)
+    facts = telemetry.latest_facts(conn, host)
+    processes = telemetry.processes_at(conn, host, now)
+    print(render_status(summary, sources, series, now, facts, processes, groups))
 
 
 if __name__ == "__main__":

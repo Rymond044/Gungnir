@@ -10,7 +10,7 @@ use std::io;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use super::{Reading, Roots, Source, invalid, rate, read};
+use super::{Collected, Reading, Roots, Source, invalid, rate, read};
 
 /// Sectors in diskstats are always 512 bytes, whatever the device uses.
 const SECTOR: f64 = 512.0;
@@ -88,7 +88,7 @@ pub fn open_sys_block(roots: &Roots, now: Instant) -> io::Result<Box<dyn Source>
 
 fn open(roots: &Roots, origin: Origin, now: Instant) -> io::Result<Box<dyn Source>> {
     let mut source = Disks { roots: roots.clone(), origin, prev: None };
-    source.collect(now, &mut Vec::new())?;
+    source.collect(now, &mut Collected::default())?;
     Ok(Box::new(source))
 }
 
@@ -126,12 +126,12 @@ impl Source for Disks {
         }
     }
 
-    fn collect(&mut self, now: Instant, out: &mut Vec<Reading>) -> io::Result<()> {
+    fn collect(&mut self, now: Instant, out: &mut Collected) -> io::Result<()> {
         let cur = self.snapshot()?;
         if let Some((then, prev)) = &self.prev {
             let seconds = now.duration_since(*then).as_secs_f64();
             for (disk, b) in &cur {
-                out.push(reading("disk.in_flight", disk, b.in_flight as f64));
+                out.readings.push(reading("disk.in_flight", disk, b.in_flight as f64));
                 if let Some(a) = prev.get(disk) {
                     push_deltas(disk, a, b, seconds, out);
                 }
@@ -146,10 +146,10 @@ fn reading(signal: &'static str, disk: &str, value: f64) -> Reading {
     Reading { signal, entity: disk.to_owned(), value }
 }
 
-fn push_deltas(disk: &str, a: &Stat, b: &Stat, seconds: f64, out: &mut Vec<Reading>) {
+fn push_deltas(disk: &str, a: &Stat, b: &Stat, seconds: f64, out: &mut Collected) {
     let mut push = |signal, value: Option<f64>| {
         if let Some(v) = value {
-            out.push(reading(signal, disk, v));
+            out.readings.push(reading(signal, disk, v));
         }
     };
     push("disk.read_bytes_per_s", rate(a.read_sectors, b.read_sectors, seconds).map(|v| v * SECTOR));
@@ -217,9 +217,9 @@ mod tests {
             weighted_ms: 4000,
             ..Default::default()
         };
-        let mut out = Vec::new();
+        let mut out = Collected::default();
         push_deltas("sda", &a, &b, 2.0, &mut out);
-        let v = |s| find(&out, s, "sda").unwrap().value;
+        let v = |s| find(&out.readings, s, "sda").unwrap().value;
         assert_eq!(v("disk.read_bytes_per_s"), 1000.0 * 512.0);
         assert_eq!(v("disk.read_ops_per_s"), 50.0);
         assert_eq!(v("disk.read_await_ms"), 2.0);

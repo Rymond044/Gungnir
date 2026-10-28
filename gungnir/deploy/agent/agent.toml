@@ -5,10 +5,17 @@ core_url = "http://127.0.0.1:8080"
 sample_interval_secs = 5
 send_interval_secs = 10
 
-# Samples kept in memory while the core is unreachable (about 1.5 h at
-# 45 signals every 5 s); the oldest are dropped first.
+# Rows (samples, facts, process rows, events) per batch, and the most kept
+# in memory. While the core is unreachable, all but one batch moves to the
+# spool on disk; memory fills up only when there is no spool.
 buffer_capacity = 50000
 max_batch = 5000
 request_timeout_secs = 5
+
+# The spool and the journal position live in the state directory, which
+# systemd provides (StateDirectory= in the unit). Oldest spool files are
+# removed beyond this size.
+# state_dir = "/var/lib/gungnir-agent"
+spool_max_bytes = 104857600
 
 disk_exclude = ["loop", "ram"]

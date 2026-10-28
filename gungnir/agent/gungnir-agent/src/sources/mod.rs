@@ -5,11 +5,20 @@
 //! rest are fallbacks. A module with no working candidate is disabled and
 //! reported, and the agent carries on without it.
 
+mod cgroup;
 mod cpu;
 mod disk;
 mod fs;
+mod journal;
 mod memory;
+mod power;
+mod pressure;
+mod processes;
+mod selfstat;
 mod vmstat;
+
+pub use journal::Event;
+pub use processes::Process;
 
 use std::io;
 use std::path::PathBuf;
@@ -31,13 +40,40 @@ impl Reading {
     }
 }
 
+/// A text-valued fact about the host, such as its power profile. Facts are
+/// context for diagnosis, not series to detect anomalies in.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Fact {
+    pub name: &'static str,
+    pub entity: String,
+    pub value: String,
+}
+
+/// What one round of collection yields.
+#[derive(Debug, Default)]
+pub struct Collected {
+    pub readings: Vec<Reading>,
+    pub facts: Vec<Fact>,
+    pub processes: Vec<Process>,
+    pub events: Vec<Event>,
+}
+
+impl Collected {
+    pub fn is_empty(&self) -> bool {
+        self.readings.is_empty()
+            && self.facts.is_empty()
+            && self.processes.is_empty()
+            && self.events.is_empty()
+    }
+}
+
 pub trait Source {
     /// The facility in use, e.g. `/proc/stat` or `sysinfo(2)`.
     fn origin(&self) -> String;
 
-    /// Appends the current readings. Counter-based signals need two calls
-    /// before they appear, because a rate needs a previous value.
-    fn collect(&mut self, now: Instant, out: &mut Vec<Reading>) -> io::Result<()>;
+    /// Appends the current readings and context. Counter-based signals need
+    /// two calls before they appear, because a rate needs a previous value.
+    fn collect(&mut self, now: Instant, out: &mut Collected) -> io::Result<()>;
 }
 
 /// Where the kernel interfaces are mounted. Tests point these at fixtures.
@@ -45,7 +81,12 @@ pub trait Source {
 pub struct Roots {
     pub proc: PathBuf,
     pub sys: PathBuf,
+    /// The cgroup v2 hierarchy, normally `/sys/fs/cgroup`.
+    pub cgroup: PathBuf,
     pub disk_exclude: Vec<String>,
+    /// The agent's own state directory, where the journal position is kept
+    /// across restarts. None when the agent runs without one.
+    pub state: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -78,6 +119,13 @@ const MODULES: &[Module] = &[
     Module { name: "vmstat", candidates: &[vmstat::open_proc_vmstat] },
     Module { name: "disk", candidates: &[disk::open_proc_diskstats, disk::open_sys_block] },
     Module { name: "fs", candidates: &[fs::open_mounts] },
+    Module { name: "pressure", candidates: &[pressure::open_proc_pressure] },
+    Module { name: "cgroup", candidates: &[cgroup::open_cgroup2] },
+    Module { name: "processes", candidates: &[processes::open_proc_pids] },
+    Module { name: "power_supply", candidates: &[power::open_power_supply] },
+    Module { name: "power_profile", candidates: &[power::open_platform_profile, power::open_cpufreq_epp] },
+    Module { name: "journal", candidates: &[journal::open_journalctl, journal::open_kmsg] },
+    Module { name: "self", candidates: &[selfstat::open_proc_self] },
 ];
 
 pub struct Probed {
@@ -137,6 +185,25 @@ fn invalid(what: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, what.into())
 }
 
+/// Reads a kernel file and trims the trailing newline.
+fn read_trimmed(path: &std::path::Path) -> io::Result<String> {
+    read(path).map(|text| text.trim_end().to_owned())
+}
+
+/// Clock ticks per second, the unit of CPU times in `/proc/<pid>/stat`.
+fn clock_ticks() -> f64 {
+    // SAFETY: sysconf only reads a system value.
+    let n = unsafe { libc::sysconf(libc::_SC_CLK_TCK) };
+    if n > 0 { n as f64 } else { 100.0 }
+}
+
+/// Size of a memory page, the unit of resident memory in `/proc/<pid>/stat`.
+fn page_bytes() -> u64 {
+    // SAFETY: sysconf only reads a system value.
+    let n = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+    if n > 0 { n as u64 } else { 4096 }
+}
+
 /// Per-second rate of a monotonic counter. A counter that went backwards
 /// (wrap or reset) gives no rate rather than a huge one.
 fn rate(prev: u64, cur: u64, seconds: f64) -> Option<f64> {
@@ -146,7 +213,33 @@ fn rate(prev: u64, cur: u64, seconds: f64) -> Option<f64> {
 #[cfg(test)]
 pub(crate) fn fixture_roots() -> Roots {
     let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
-    Roots { proc: base.join("proc"), sys: base.join("sys"), disk_exclude: vec![] }
+    Roots {
+        proc: base.join("proc"),
+        sys: base.join("sys"),
+        cgroup: base.join("cgroup"),
+        disk_exclude: vec![],
+        state: None,
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn missing_roots() -> Roots {
+    Roots {
+        proc: PathBuf::from("/nonexistent/proc"),
+        sys: PathBuf::from("/nonexistent/sys"),
+        cgroup: PathBuf::from("/nonexistent/cgroup"),
+        disk_exclude: vec![],
+        state: None,
+    }
+}
+
+/// A fresh scratch directory for a test, removed by the caller.
+#[cfg(test)]
+pub(crate) fn scratch_dir(name: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("gungnir-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
 }
 
 #[cfg(test)]
@@ -160,11 +253,7 @@ mod tests {
 
     #[test]
     fn missing_source_disables_module_without_failing() {
-        let roots = Roots {
-            proc: PathBuf::from("/nonexistent/proc"),
-            sys: PathBuf::from("/nonexistent/sys"),
-            disk_exclude: vec![],
-        };
+        let roots = missing_roots();
         let probed = probe(&roots);
         let cpu = probed.statuses.iter().find(|s| s.module == "cpu").unwrap();
         assert_eq!(cpu.state, State::Disabled);
@@ -173,11 +262,7 @@ mod tests {
 
     #[test]
     fn memory_falls_back_to_sysinfo() {
-        let roots = Roots {
-            proc: PathBuf::from("/nonexistent/proc"),
-            sys: PathBuf::from("/nonexistent/sys"),
-            disk_exclude: vec![],
-        };
+        let roots = missing_roots();
         let probed = probe(&roots);
         let memory = probed.statuses.iter().find(|s| s.module == "memory").unwrap();
         assert_eq!(memory.state, State::Fallback);

@@ -10,3 +10,5 @@ node_modules/
 # Agent tokens are secrets; never commit them.
 token
 *.token
+# Outputs of scenario runs on this machine.
+gungnir/scenarios/runs/

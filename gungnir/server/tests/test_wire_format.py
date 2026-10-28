@@ -1,7 +1,13 @@
+import time
+
 import pytest
 from pydantic import ValidationError
 
 from gungnir_core.ingest import MAX_SAMPLES, Batch
+
+# Ten minutes ago on a minute boundary: inside raw retention, and its minute
+# is complete for rollups.
+RECENT = (int(time.time()) // 60 - 10) * 60_000
 
 
 def batch(**overrides) -> dict:
@@ -10,13 +16,38 @@ def batch(**overrides) -> dict:
         "seq": 1,
         "sources": [{"module": "cpu", "state": "preferred", "origin": "/proc/stat"}],
         "dropped": 0,
-        "samples": [{"ts": 1_761_000_005_000, "signal": "cpu.iowait_ratio", "entity": "host", "value": 0.02}],
+        "samples": [{"ts": RECENT, "signal": "cpu.iowait_ratio", "entity": "host", "value": 0.02}],
     }
     return body | overrides
 
 
 def sample(**overrides) -> dict:
-    return {"ts": 1, "signal": "disk.read_await_ms", "entity": "sda", "value": 1.5} | overrides
+    return {"ts": RECENT, "signal": "disk.read_await_ms", "entity": "sda", "value": 1.5} | overrides
+
+
+def process(**overrides) -> dict:
+    return {
+        "ts": RECENT,
+        "pid": 4242,
+        "ppid": 1,
+        "comm": "stress-ng",
+        "state": "R",
+        "threads": 1,
+        "cpu_cores": 0.98,
+        "rss_bytes": 8 << 20,
+        "cgroup": "system.slice/load.service",
+        "unit": "load.service",
+    } | overrides
+
+
+def event(**overrides) -> dict:
+    return {
+        "ts": RECENT,
+        "source": "kernel",
+        "priority": 3,
+        "message": "Out of memory: Killed process 4242 (stress-ng)",
+        "key": "s=1;i=1",
+    } | overrides
 
 
 def test_valid_batch_parses():
@@ -44,3 +75,13 @@ def test_unknown_fields_are_rejected():
 def test_batch_size_is_bounded():
     with pytest.raises(ValidationError):
         Batch.model_validate(batch(samples=[sample(ts=i) for i in range(MAX_SAMPLES + 1)]))
+
+
+def test_context_is_optional_for_older_agents():
+    parsed = Batch.model_validate(batch())
+    assert parsed.facts == parsed.processes == parsed.events == []
+
+
+def test_event_source_is_closed():
+    with pytest.raises(ValidationError):
+        Batch.model_validate(batch(events=[event(source="dmesg")]))

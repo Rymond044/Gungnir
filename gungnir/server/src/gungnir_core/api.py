@@ -10,12 +10,13 @@ from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, R
 from fastapi.responses import JSONResponse
 from psycopg_pool import ConnectionPool
 
-from gungnir_core import hosts, telemetry
+from gungnir_core import hosts, maintenance, telemetry
 from gungnir_core.db import migrate, open_pool
 from gungnir_core.hosts import Host
 from gungnir_core.ingest import Batch
 
-# A full batch of 10 000 samples is about 1 MB of JSON.
+# A full batch of 10 000 samples is about 1 MB of JSON; 5 000 process rows
+# add about 1.5 MB.
 MAX_BODY = 4 * 1024 * 1024
 
 
@@ -27,7 +28,11 @@ def create_app(pool: ConnectionPool | None = None) -> FastAPI:
         app.state.series = telemetry.SeriesIds()
         with app.state.pool.connection() as conn:
             migrate(conn)
+            maintenance.ensure_partitions(conn, datetime.now(UTC))
+        worker = maintenance.Worker(app.state.pool)
+        worker.start()
         yield
+        worker.stop()
         if own:
             app.state.pool.close()
 
@@ -79,9 +84,8 @@ router = APIRouter()
 
 
 @router.post("/ingest")
-def ingest(batch: Batch, request: Request, conn: Conn, host: AgentHost) -> dict:
-    inserted = telemetry.store(conn, request.app.state.series, host, batch)
-    return {"accepted": len(batch.samples), "inserted": inserted}
+def ingest(batch: Batch, request: Request, conn: Conn, host: AgentHost) -> telemetry.Stored:
+    return telemetry.store(conn, request.app.state.series, host, batch, datetime.now(UTC))
 
 
 @router.get("/hosts")
@@ -109,7 +113,50 @@ def samples(
     until: datetime | None = None,
     limit: Annotated[int, Query(ge=1, le=100_000)] = 10_000,
 ) -> list[dict]:
-    until = until or datetime.now(UTC)
-    since = since or until - timedelta(hours=1)
+    since, until = window(since, until, timedelta(hours=1))
     rows = telemetry.samples_of(conn, host, signal, entity, since, until, limit)
     return [{"ts": ts, "value": value} for ts, value in rows]
+
+
+def window(since: datetime | None, until: datetime | None, default: timedelta) -> tuple[datetime, datetime]:
+    until = until or datetime.now(UTC)
+    return since or until - default, until
+
+
+@router.get("/hosts/{name}/rollups")
+def rollups(
+    host: NamedHost,
+    conn: Conn,
+    signal: str,
+    entity: str = "host",
+    since: datetime | None = None,
+    until: datetime | None = None,
+    limit: Annotated[int, Query(ge=1, le=100_000)] = 10_000,
+) -> list[dict]:
+    """Minute aggregates; `sum / n` is the mean of the samples present."""
+    since, until = window(since, until, timedelta(days=1))
+    rows = telemetry.rollups_of(conn, host, signal, entity, since, until, limit)
+    return [{"ts": ts, "min": lo, "max": hi, "sum": total, "n": n} for ts, lo, hi, total, n in rows]
+
+
+@router.get("/hosts/{name}/events")
+def events(
+    host: NamedHost,
+    conn: Conn,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    limit: Annotated[int, Query(ge=1, le=10_000)] = 1_000,
+) -> list[telemetry.EventRow]:
+    since, until = window(since, until, timedelta(days=1))
+    return telemetry.events_of(conn, host, since, until, limit)
+
+
+@router.get("/hosts/{name}/processes")
+def processes(host: NamedHost, conn: Conn, at: datetime | None = None) -> list[telemetry.ProcessRow]:
+    """The process snapshot nearest before `at` (default: now)."""
+    return telemetry.processes_at(conn, host, at or datetime.now(UTC))
+
+
+@router.get("/hosts/{name}/facts")
+def facts(host: NamedHost, conn: Conn) -> list[telemetry.FactRow]:
+    return telemetry.latest_facts(conn, host)

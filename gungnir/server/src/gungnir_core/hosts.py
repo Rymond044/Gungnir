@@ -54,11 +54,11 @@ class HostSummary:
     agent_version: str | None
     agent_started_at: datetime | None
     utc_offset_s: int | None
-    dropped_samples: int
+    dropped_rows: int
 
 
 SUMMARY = (
-    "SELECT name, created_at, last_seen_at, agent_version, agent_started_at, utc_offset_s, dropped_samples"
+    "SELECT name, created_at, last_seen_at, agent_version, agent_started_at, utc_offset_s, dropped_rows"
     " FROM hosts"
 )
 

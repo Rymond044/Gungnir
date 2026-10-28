@@ -5,7 +5,7 @@ use std::io;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use super::{Reading, Roots, Source, read};
+use super::{Collected, Reading, Roots, Source, read};
 
 /// Read-only image formats are always full and say nothing about the host.
 const SKIP_TYPES: &[&str] = &["squashfs", "iso9660", "udf", "erofs"];
@@ -54,7 +54,7 @@ pub struct Mounts {
 
 pub fn open_mounts(roots: &Roots, now: Instant) -> io::Result<Box<dyn Source>> {
     let mut source = Mounts { path: roots.proc.join("self/mounts") };
-    source.collect(now, &mut Vec::new())?;
+    source.collect(now, &mut Collected::default())?;
     Ok(Box::new(source))
 }
 
@@ -63,7 +63,7 @@ impl Source for Mounts {
         format!("{} + statvfs(3)", self.path.display())
     }
 
-    fn collect(&mut self, _now: Instant, out: &mut Vec<Reading>) -> io::Result<()> {
+    fn collect(&mut self, _now: Instant, out: &mut Collected) -> io::Result<()> {
         for point in mount_points(&read(&self.path)?) {
             // A mount that vanished or is hidden from this process is skipped,
             // not treated as a failure of the whole source.
@@ -73,13 +73,13 @@ impl Source for Mounts {
             let usable = used + st.f_bavail;
             let push = |signal, value| Reading { signal, entity: point.clone(), value };
             if usable > 0 {
-                out.push(push("fs.used_ratio", used as f64 / usable as f64));
+                out.readings.push(push("fs.used_ratio", used as f64 / usable as f64));
             }
-            out.push(push("fs.available_bytes", (st.f_bavail * st.f_frsize) as f64));
+            out.readings.push(push("fs.available_bytes", (st.f_bavail * st.f_frsize) as f64));
             // Btrfs and some others have no fixed inode table and report zero.
             if st.f_files > 0 {
                 let inodes_used = st.f_files.saturating_sub(st.f_ffree);
-                out.push(push("fs.inodes_used_ratio", inodes_used as f64 / st.f_files as f64));
+                out.readings.push(push("fs.inodes_used_ratio", inodes_used as f64 / st.f_files as f64));
             }
         }
         Ok(())
@@ -106,9 +106,9 @@ proc /proc proc rw 0 0
     #[test]
     fn reports_root_filesystem() {
         let mut source = Mounts { path: PathBuf::from("/proc/self/mounts") };
-        let mut out = Vec::new();
+        let mut out = Collected::default();
         source.collect(Instant::now(), &mut out).unwrap();
-        let root = out.iter().find(|r| r.signal == "fs.used_ratio" && r.entity == "/").unwrap();
+        let root = out.readings.iter().find(|r| r.signal == "fs.used_ratio" && r.entity == "/").unwrap();
         assert!((0.0..=1.0).contains(&root.value));
     }
 }

@@ -4,7 +4,7 @@ use std::io;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use super::{Reading, Roots, Source, invalid, rate, read};
+use super::{Collected, Reading, Roots, Source, invalid, rate, read};
 
 /// Aggregate CPU times in clock ticks. `user` and `nice` already include
 /// guest time, so guest fields are not added again.
@@ -82,7 +82,7 @@ pub struct ProcStat {
 
 pub fn open_proc_stat(roots: &Roots, now: Instant) -> io::Result<Box<dyn Source>> {
     let mut source = ProcStat { path: roots.proc.join("stat"), prev: None };
-    source.collect(now, &mut Vec::new())?;
+    source.collect(now, &mut Collected::default())?;
     Ok(Box::new(source))
 }
 
@@ -91,10 +91,10 @@ impl Source for ProcStat {
         self.path.display().to_string()
     }
 
-    fn collect(&mut self, now: Instant, out: &mut Vec<Reading>) -> io::Result<()> {
+    fn collect(&mut self, now: Instant, out: &mut Collected) -> io::Result<()> {
         let cur = parse(&read(&self.path)?)?;
-        out.push(Reading::host("cpu.runnable_tasks", cur.running as f64));
-        out.push(Reading::host("cpu.blocked_tasks", cur.blocked as f64));
+        out.readings.push(Reading::host("cpu.runnable_tasks", cur.running as f64));
+        out.readings.push(Reading::host("cpu.blocked_tasks", cur.blocked as f64));
 
         if let Some((then, prev)) = self.prev {
             let seconds = now.duration_since(then).as_secs_f64();
@@ -104,19 +104,20 @@ impl Source for ProcStat {
             let total = b.total().saturating_sub(a.total());
             if total > 0 {
                 let share = |p: u64, c: u64| c.saturating_sub(p) as f64 / total as f64;
-                out.push(Reading::host("cpu.user_ratio", share(a.user, b.user)));
-                out.push(Reading::host("cpu.nice_ratio", share(a.nice, b.nice)));
-                out.push(Reading::host("cpu.system_ratio", share(a.system, b.system)));
-                out.push(Reading::host("cpu.iowait_ratio", share(a.iowait, b.iowait)));
-                out.push(Reading::host("cpu.irq_ratio", share(a.irq + a.softirq, b.irq + b.softirq)));
-                out.push(Reading::host("cpu.steal_ratio", share(a.steal, b.steal)));
-                out.push(Reading::host("cpu.idle_ratio", share(a.idle, b.idle)));
+                out.readings.push(Reading::host("cpu.user_ratio", share(a.user, b.user)));
+                out.readings.push(Reading::host("cpu.nice_ratio", share(a.nice, b.nice)));
+                out.readings.push(Reading::host("cpu.system_ratio", share(a.system, b.system)));
+                out.readings.push(Reading::host("cpu.iowait_ratio", share(a.iowait, b.iowait)));
+                out.readings
+                    .push(Reading::host("cpu.irq_ratio", share(a.irq + a.softirq, b.irq + b.softirq)));
+                out.readings.push(Reading::host("cpu.steal_ratio", share(a.steal, b.steal)));
+                out.readings.push(Reading::host("cpu.idle_ratio", share(a.idle, b.idle)));
             }
             if let Some(v) = rate(prev.context_switches, cur.context_switches, seconds) {
-                out.push(Reading::host("cpu.context_switches_per_s", v));
+                out.readings.push(Reading::host("cpu.context_switches_per_s", v));
             }
             if let Some(v) = rate(prev.forks, cur.forks, seconds) {
-                out.push(Reading::host("cpu.forks_per_s", v));
+                out.readings.push(Reading::host("cpu.forks_per_s", v));
             }
         }
         self.prev = Some((now, cur));
@@ -155,16 +156,16 @@ mod tests {
         write("100 0 100 700 100 0 0 0 0 0", 1000);
         let mut source = ProcStat { path: path.clone(), prev: None };
         let t0 = Instant::now();
-        let mut out = Vec::new();
+        let mut out = Collected::default();
         source.collect(t0, &mut out).unwrap();
-        assert!(find(&out, "cpu.iowait_ratio", "host").is_none());
+        assert!(find(&out.readings, "cpu.iowait_ratio", "host").is_none());
 
         write("150 0 150 750 150 0 0 0 0 0", 3000);
-        out.clear();
+        out.readings.clear();
         source.collect(t0 + Duration::from_secs(2), &mut out).unwrap();
-        assert_eq!(find(&out, "cpu.iowait_ratio", "host").unwrap().value, 0.25);
-        assert_eq!(find(&out, "cpu.context_switches_per_s", "host").unwrap().value, 1000.0);
-        assert_eq!(find(&out, "cpu.blocked_tasks", "host").unwrap().value, 1.0);
+        assert_eq!(find(&out.readings, "cpu.iowait_ratio", "host").unwrap().value, 0.25);
+        assert_eq!(find(&out.readings, "cpu.context_switches_per_s", "host").unwrap().value, 1000.0);
+        assert_eq!(find(&out.readings, "cpu.blocked_tasks", "host").unwrap().value, 1.0);
 
         std::fs::remove_dir_all(dir).unwrap();
     }
