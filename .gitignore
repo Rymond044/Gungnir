@@ -1,0 +1,12 @@
+target/
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+node_modules/
+.env
+*.log
+.ruff_cache/
+# Agent tokens are secrets; never commit them.
+token
+*.token
