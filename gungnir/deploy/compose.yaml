@@ -24,6 +24,9 @@ services:
     build: ../server
     environment:
       GUNGNIR_DATABASE_URL: postgresql://gungnir:${GUNGNIR_DB_PASSWORD:-gungnir}@db:5432/gungnir
+    volumes:
+      # Times printed by the command line follow the host's time zone.
+      - /etc/localtime:/etc/localtime:ro
     depends_on:
       db:
         condition: service_healthy

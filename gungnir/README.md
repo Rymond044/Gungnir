@@ -23,7 +23,9 @@ docker compose -f deploy/compose.yaml exec core gungnir-core host add <name> > t
 (cd deploy/agent && sudo ./install.sh ../../token)         # systemd service gungnir-agent
 ```
 
-`gungnir-agent --probe` prints the probed signal sources and one round of readings. API docs: `http://127.0.0.1:8080/docs`.
+Check: `docker compose -f deploy/compose.yaml exec core gungnir-core status <name>` shows the agent, its signal sources and the latest value of every signal in its unit; `gungnir-agent --probe` prints what the agent itself sees. API docs: `http://127.0.0.1:8080/docs`.
+
+`docker compose down` keeps the database (named volume `gungnir_db`); `down -v` deletes it.
 
 ## Develop
 

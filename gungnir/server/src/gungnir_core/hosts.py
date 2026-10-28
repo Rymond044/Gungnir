@@ -56,9 +56,13 @@ class HostSummary:
     dropped_samples: int
 
 
+SUMMARY = "SELECT name, created_at, last_seen_at, agent_version, agent_started_at, dropped_samples FROM hosts"
+
+
 def summaries(conn: psycopg.Connection) -> list[HostSummary]:
-    rows = conn.execute(
-        "SELECT name, created_at, last_seen_at, agent_version, agent_started_at, dropped_samples"
-        " FROM hosts ORDER BY name"
-    ).fetchall()
-    return [HostSummary(*row) for row in rows]
+    return [HostSummary(*row) for row in conn.execute(SUMMARY + " ORDER BY name").fetchall()]
+
+
+def summary(conn: psycopg.Connection, name: str) -> HostSummary | None:
+    row = conn.execute(SUMMARY + " WHERE name = %s", (name,)).fetchone()
+    return HostSummary(*row) if row else None

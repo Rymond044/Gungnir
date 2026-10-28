@@ -1,13 +1,15 @@
-"""Command line: `gungnir-core serve | migrate | host add|list|rotate-token`."""
+"""Command line: `gungnir-core serve | migrate | status | host add|list|rotate-token`."""
 
 import argparse
 import logging
 import sys
+from datetime import UTC, datetime
 
 import psycopg
 
-from gungnir_core import hosts
+from gungnir_core import hosts, telemetry
 from gungnir_core.db import database_url, migrate
+from gungnir_core.display import render_status
 
 
 def main() -> None:
@@ -19,6 +21,9 @@ def main() -> None:
     serve.add_argument("--port", type=int, default=8080)
 
     commands.add_parser("migrate", help="apply pending schema migrations")
+
+    status = commands.add_parser("status", help="show a host's agent, signal sources and latest values")
+    status.add_argument("name")
 
     host = commands.add_parser("host", help="manage hosts").add_subparsers(dest="action", required=True)
     host.add_parser("add", help="add a host and print its agent token once").add_argument("name")
@@ -42,7 +47,9 @@ def main() -> None:
             print("\n".join(applied) if applied else "schema is up to date")
             return
         migrate(conn)
-        if args.action == "add":
+        if args.command == "status":
+            show_status(conn, args.name)
+        elif args.action == "add":
             try:
                 token = hosts.add(conn, args.name)
             except psycopg.errors.UniqueViolation:
@@ -57,6 +64,16 @@ def main() -> None:
             for h in hosts.summaries(conn):
                 seen = h.last_seen_at.isoformat(timespec="seconds") if h.last_seen_at else "never"
                 print(f"{h.name}\tlast seen {seen}\tagent {h.agent_version or '-'}")
+
+
+def show_status(conn: psycopg.Connection, name: str) -> None:
+    summary = hosts.summary(conn, name)
+    host = hosts.by_name(conn, name)
+    if summary is None or host is None:
+        sys.exit(f"no host '{name}'")
+    sources = telemetry.source_states(conn, host)
+    series = telemetry.series_of(conn, host)
+    print(render_status(summary, sources, series, datetime.now(UTC)))
 
 
 if __name__ == "__main__":
