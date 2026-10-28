@@ -1,0 +1,43 @@
+[Unit]
+Description=gungnIR agent: host signal collection
+Documentation=file:///etc/gungnir/agent.toml
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/gungnir-agent --config /etc/gungnir/agent.toml
+# The token file is readable by root only; systemd hands a copy to the
+# unprivileged agent under $CREDENTIALS_DIRECTORY.
+LoadCredential=token:/etc/gungnir/agent.token
+Restart=on-failure
+RestartSec=5
+
+# No privileges: a transient user, no capabilities, read-only system.
+DynamicUser=yes
+CapabilityBoundingSet=
+NoNewPrivileges=yes
+ProtectSystem=strict
+# Read-only rather than hidden, so statvfs sees filesystems mounted there.
+ProtectHome=read-only
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+# A guard against a runaway agent, well above the NFR-1 target of 30 MB.
+MemoryMax=64M
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,14 @@
+# gungnIR agent configuration. Every key is optional; the values shown are the
+# defaults. The token is not configured here: see LoadCredential= in the unit.
+
+core_url = "http://127.0.0.1:8080"
+sample_interval_secs = 5
+send_interval_secs = 10
+
+# Samples kept in memory while the core is unreachable (about 1.5 h at
+# 45 signals every 5 s); the oldest are dropped first.
+buffer_capacity = 50000
+max_batch = 5000
+request_timeout_secs = 5
+
+disk_exclude = ["loop", "ram"]

@@ -1,0 +1,35 @@
+# Core and its database. Both ports are bound to localhost only: agents on
+# other machines need TLS first (NFR-8, docs/open-questions.md).
+name: gungnir
+
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: gungnir
+      POSTGRES_PASSWORD: ${GUNGNIR_DB_PASSWORD:-gungnir}
+      POSTGRES_DB: gungnir
+    volumes:
+      - db:/var/lib/postgresql
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "gungnir", "-d", "gungnir"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  core:
+    build: ../server
+    environment:
+      GUNGNIR_DATABASE_URL: postgresql://gungnir:${GUNGNIR_DB_PASSWORD:-gungnir}@db:5432/gungnir
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+
+volumes:
+  db:

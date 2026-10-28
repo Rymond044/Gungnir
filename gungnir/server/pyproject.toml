@@ -1,0 +1,32 @@
+[project]
+name = "gungnir-core"
+version = "0.1.0"
+description = "gungnIR core: ingest, storage, detection, diagnosis and the API"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.162",
+    "psycopg[binary]>=3.3",
+    "psycopg-pool>=3.3",
+    "pydantic>=2.14",
+    "uvicorn>=0.54",
+]
+
+[project.scripts]
+gungnir-core = "gungnir_core.cli:main"
+
+[dependency-groups]
+dev = ["httpx2>=2.16", "pytest>=9.2", "ruff>=0.17"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 110
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
