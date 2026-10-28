@@ -53,9 +53,18 @@ def test_host_shows_agent_and_last_contact(client, token):
     assert host["name"] == "laptop"
     assert host["agent_version"] == "0.1.0"
     assert host["dropped_samples"] == 7
+    assert host["utc_offset_s"] == 10800
     assert host["last_seen_at"] is not None
 
 
 def test_malformed_batch_gets_422(client, token):
     response = client.post("/api/v1/ingest", json=batch(seq=0), headers=auth(token))
     assert response.status_code == 422
+
+
+def test_agent_without_utc_offset_is_accepted_and_keeps_the_last_one(client, token):
+    client.post("/api/v1/ingest", json=batch(), headers=auth(token))
+    older_agent = batch(agent={"version": "0.0.9", "started_at": 1_761_000_000_000})
+    assert client.post("/api/v1/ingest", json=older_agent, headers=auth(token)).status_code == 200
+    (host,) = client.get("/api/v1/hosts").json()
+    assert host["utc_offset_s"] == 10800

@@ -36,6 +36,10 @@ class SourceStatus(Strict):
 class AgentInfo(Strict):
     version: Annotated[str, Field(max_length=32)]
     started_at: Annotated[int, Field(ge=0)]
+    # Optional so that an agent older than the field is still accepted.
+    utc_offset_s: Annotated[
+        int | None, Field(ge=-12 * 3600, le=14 * 3600, description="host's local time minus UTC")
+    ] = None
 
 
 class Batch(Strict):

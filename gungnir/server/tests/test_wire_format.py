@@ -6,7 +6,7 @@ from gungnir_core.ingest import MAX_SAMPLES, Batch
 
 def batch(**overrides) -> dict:
     body = {
-        "agent": {"version": "0.1.0", "started_at": 1_761_000_000_000},
+        "agent": {"version": "0.1.0", "started_at": 1_761_000_000_000, "utc_offset_s": 10800},
         "seq": 1,
         "sources": [{"module": "cpu", "state": "preferred", "origin": "/proc/stat"}],
         "dropped": 0,

@@ -2,6 +2,7 @@
 //! buffers the samples and delivers them to the core.
 
 mod buffer;
+mod clock;
 mod config;
 mod sources;
 mod transport;
@@ -11,7 +12,7 @@ use std::process::ExitCode;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use log::{error, info, warn};
 
@@ -102,7 +103,7 @@ fn run(args: Args) -> Result<(), String> {
         statuses: probed.statuses,
         buffer: Buffer::new(config.buffer_capacity),
         transport,
-        info: AgentInfo { version: VERSION, started_at: now_ms() },
+        info: AgentInfo { version: VERSION, started_at: clock::now_ms(), utc_offset_s: clock::utc_offset_s() },
         seq: 0,
         max_batch: config.max_batch,
     };
@@ -174,7 +175,7 @@ enum Delivery {
 
 impl Agent {
     fn sample(&mut self, now: Instant, readings: &mut Vec<Reading>) {
-        let ts = now_ms();
+        let ts = clock::now_ms();
         for (source, failing) in self.sources.iter_mut().zip(self.failing.iter_mut()) {
             readings.clear();
             match source.collect(now, readings) {
@@ -206,7 +207,13 @@ impl Agent {
         let dropped = self.buffer.dropped();
         let samples = self.buffer.head(self.max_batch);
         let count = samples.len();
-        let batch = Batch { agent: self.info, seq: self.seq, sources: &self.statuses, dropped, samples };
+        let batch = Batch {
+            agent: AgentInfo { utc_offset_s: clock::utc_offset_s(), ..self.info },
+            seq: self.seq,
+            sources: &self.statuses,
+            dropped,
+            samples,
+        };
         match self.transport.send(&batch) {
             Outcome::Accepted => {
                 self.buffer.consume(count);
@@ -251,8 +258,4 @@ fn print_probe(sources: &mut [Box<dyn Source>], statuses: &[ModuleStatus]) -> Re
     let report = serde_json::json!({ "sources": statuses, "readings": readings });
     println!("{}", serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?);
     Ok(())
-}
-
-fn now_ms() -> i64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
 }

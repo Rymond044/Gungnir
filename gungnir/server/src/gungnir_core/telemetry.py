@@ -57,8 +57,14 @@ def store(conn: psycopg.Connection, ids: SeriesIds, host: Host, batch: Batch) ->
     with conn.transaction():
         conn.execute(
             "UPDATE hosts SET last_seen_at = now(), agent_version = %s, agent_started_at = %s,"
-            " dropped_samples = %s WHERE id = %s",
-            (batch.agent.version, from_ms(batch.agent.started_at), batch.dropped, host.id),
+            " utc_offset_s = coalesce(%s, utc_offset_s), dropped_samples = %s WHERE id = %s",
+            (
+                batch.agent.version,
+                from_ms(batch.agent.started_at),
+                batch.agent.utc_offset_s,
+                batch.dropped,
+                host.id,
+            ),
         )
         for s in batch.sources:
             conn.execute(

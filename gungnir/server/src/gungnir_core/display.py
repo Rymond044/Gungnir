@@ -1,6 +1,6 @@
 """Plain-text rendering of a host's state for the command line."""
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta, timezone
 
 from gungnir_core.hosts import HostSummary
 from gungnir_core.telemetry import SeriesInfo, SourceState
@@ -42,6 +42,13 @@ def format_age(seconds: float) -> str:
     return f"{seconds / 86400:.0f} d ago"
 
 
+def host_zone(host: HostSummary) -> timezone:
+    """The host's local time zone as a fixed offset; UTC until its agent reports one."""
+    if host.utc_offset_s is None:
+        return UTC
+    return timezone(timedelta(seconds=host.utc_offset_s))
+
+
 def render_status(
     host: HostSummary, sources: list[SourceState], series: list[SeriesInfo], now: datetime
 ) -> str:
@@ -50,8 +57,9 @@ def render_status(
         lines.append(f"{host.name}: no data received yet")
         return "\n".join(lines)
 
-    started = host.agent_started_at.astimezone().strftime("%Y-%m-%d %H:%M:%S %z")
-    lines.append(f"Host {host.name}")
+    started = host.agent_started_at.astimezone(host_zone(host)).strftime("%Y-%m-%d %H:%M:%S %z")
+    zone = "its local time" if host.utc_offset_s is not None else "UTC, the agent has not reported its offset"
+    lines.append(f"Host {host.name} (times in {zone})")
     lines.append(f"  agent {host.agent_version}, started {started}")
     lines.append(f"  last contact {format_age((now - host.last_seen_at).total_seconds())}")
     lines.append(f"  samples lost to buffer overflow: {host.dropped_samples}")

@@ -26,7 +26,7 @@ def test_values_are_shown_in_their_units(signal, value, text):
 
 def test_status_marks_fallbacks_and_stale_values():
     now = datetime(2026, 10, 28, 16, 0, tzinfo=UTC)
-    host = HostSummary("laptop", now, now - timedelta(seconds=4), "0.1.0", now - timedelta(hours=1), 0)
+    host = HostSummary("laptop", now, now - timedelta(seconds=4), "0.1.0", now - timedelta(hours=1), 10800, 0)
     sources = [
         SourceState("cpu", "preferred", "/proc/stat", None, now),
         SourceState("memory", "fallback", "sysinfo(2)", "/proc/meminfo: gone", now),
@@ -36,6 +36,7 @@ def test_status_marks_fallbacks_and_stale_values():
         SeriesInfo("disk.read_await_ms", "sda", now - timedelta(minutes=10), 1.5),
     ]
     text = render_status(host, sources, series, now)
+    assert "started 2026-10-28 18:00:00 +0300" in text
     assert "last contact 4 s ago" in text
     assert "fallback   sysinfo(2)  (/proc/meminfo: gone)" in text
     assert "98.0 %" in text

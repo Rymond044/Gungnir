@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 env_logger = { version = "0.11", default-features = false, features = ["auto-color"] }
+libc = "0.2"
 log = "0.4"
 rustix = { version = "1", features = ["fs", "system"] }
 serde = { version = "1", features = ["derive"] }

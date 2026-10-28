@@ -25,6 +25,8 @@ pub struct Batch<'a> {
 pub struct AgentInfo {
     pub version: &'static str,
     pub started_at: i64,
+    /// Current offset of the host's local time from UTC, in seconds.
+    pub utc_offset_s: i32,
 }
 
 pub enum Outcome {

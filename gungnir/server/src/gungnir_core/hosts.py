@@ -53,10 +53,14 @@ class HostSummary:
     last_seen_at: datetime | None
     agent_version: str | None
     agent_started_at: datetime | None
+    utc_offset_s: int | None
     dropped_samples: int
 
 
-SUMMARY = "SELECT name, created_at, last_seen_at, agent_version, agent_started_at, dropped_samples FROM hosts"
+SUMMARY = (
+    "SELECT name, created_at, last_seen_at, agent_version, agent_started_at, utc_offset_s, dropped_samples"
+    " FROM hosts"
+)
 
 
 def summaries(conn: psycopg.Connection) -> list[HostSummary]:
