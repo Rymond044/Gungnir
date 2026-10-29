@@ -88,7 +88,7 @@ def load_limits(table: str, filename: str, host: str | None = None) -> list[Limi
     shipped = limits_from(knowledge.entries(knowledge.directory() / filename, table))
     limits = {(lim.signal, lim.level): lim for lim in shipped}
     if host:
-        for lim in limits_from(knowledge.entries(knowledge.local_file(host), table)):
+        for lim in limits_from(knowledge.entries(knowledge.local_file(host), table, required=False)):
             limits[(lim.signal, lim.level)] = lim
     return list(limits.values())
 

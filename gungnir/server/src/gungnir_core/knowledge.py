@@ -29,15 +29,25 @@ def local_file(host: str) -> Path:
 
 
 def load(path: Path) -> dict:
-    with open(path, "rb") as f:
-        return tomllib.load(f)
+    try:
+        with open(path, "rb") as f:
+            return tomllib.load(f)
+    except OSError as err:
+        raise KnowledgeError(f"cannot read knowledge file {path}: {err.strerror}") from err
 
 
-def entries(path: Path, table: str) -> list[dict]:
+def entries(path: Path, table: str, required: bool = True) -> list[dict]:
     """The entries of an array of tables, each checked for provenance:
-    `provenance = { source = "...", grade = "documented" }`."""
-    if not path.exists():
-        return []
+    `provenance = { source = "...", grade = "documented" }`. A shipped file
+    that cannot be read is an error, never an empty rule set; an optional
+    file (the host-local one) may be absent."""
+    if not required:
+        try:
+            path.stat()
+        except FileNotFoundError:
+            return []
+        except OSError as err:
+            raise KnowledgeError(f"cannot read knowledge file {path}: {err.strerror}") from err
     items = load(path).get(table, [])
     for i, item in enumerate(items, 1):
         where = f"{path}: [[{table}]] #{i}"

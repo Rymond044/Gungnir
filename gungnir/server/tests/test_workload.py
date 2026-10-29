@@ -89,3 +89,14 @@ def test_operator_rules_go_to_the_host_file(tmp_path, monkeypatch):
     assert rule.cls == "backup" and rule.unit == ("kopia.service",)
     assert rule.source == "operator, laptop, 2026-10-29"
     assert rule.priority == workload.OPERATOR_PRIORITY
+
+
+def test_an_unreadable_knowledge_directory_is_an_error(tmp_path, monkeypatch):
+    # Not an empty rule set: the core would run without rules and say nothing.
+    monkeypatch.setenv("GUNGNIR_KNOWLEDGE_DIR", str(tmp_path / "missing"))
+    with pytest.raises(knowledge.KnowledgeError, match="cannot read"):
+        workload.load_rules("laptop")
+    from gungnir_core.detection.detectors import thresholds
+
+    with pytest.raises(knowledge.KnowledgeError, match="cannot read"):
+        thresholds("laptop")

@@ -154,6 +154,12 @@ SELECT id, variant, since, until FROM replays ORDER BY id;
 SELECT hour, class, power, count(*) FROM histograms GROUP BY 1, 2, 3 ORDER BY 1 DESC LIMIT 20;
 ```
 
+## When something is off
+
+- No records although loads ran: `dc logs core | grep -i "cannot read knowledge"`. The core runs as uid 999 and reads `knowledge/` through a read-only mount, so the directory must be world-readable: `chmod 755 knowledge`. Then `dc restart core`.
+- `calibrate.sh` stopped after the loads: the phases are in `scenarios/runs/<time>-calibration.jsonl`; finish by hand with `core runs import laptop - < <file>`, `core calibrate laptop <run>`, `core workload unmatched laptop`.
+- Detection far behind: `SELECT now() - at FROM detection_state`; after a long stop it catches up one hour per step.
+
 ## Explanatory note
 
 From the workspace (`DIPLOMA/`):

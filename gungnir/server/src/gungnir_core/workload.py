@@ -76,7 +76,7 @@ def load_rules(host: str | None = None) -> list[Rule]:
     rules = rules_from(knowledge.entries(path, RULE_TABLE), str(path))
     if host:
         local = knowledge.local_file(host)
-        rules += rules_from(knowledge.entries(local, RULE_TABLE), str(local))
+        rules += rules_from(knowledge.entries(local, RULE_TABLE, required=False), str(local))
     return sorted(rules, key=lambda r: -r.priority)
 
 
