@@ -13,7 +13,12 @@ set -euo pipefail
 
 host=${1:?usage: calibrate.sh HOST}
 here=$(cd "$(dirname "$0")" && pwd)
-core=${GUNGNIR_CORE:-docker compose -f $here/../deploy/compose.yaml exec -T core gungnir-core}
+# An array, so that a path with spaces survives; GUNGNIR_CORE is split on spaces.
+if [ -n "${GUNGNIR_CORE:-}" ]; then
+    read -r -a core <<<"$GUNGNIR_CORE"
+else
+    core=(docker compose -f "$here/../deploy/compose.yaml" exec -T core gungnir-core)
+fi
 idle_s=${CAL_IDLE_S:-300}
 step_s=${CAL_STEP_S:-60}
 # Between phases, so that one load fades before the next starts.
@@ -91,6 +96,6 @@ echo "Phases recorded in $label_file"
 
 # The last batch reaches the core within about 10 s.
 sleep 15
-$core runs import "$host" - <"$label_file"
-$core calibrate "$host" "$run"
-$core workload unmatched "$host"
+"${core[@]}" runs import "$host" - <"$label_file"
+"${core[@]}" calibrate "$host" "$run"
+"${core[@]}" workload unmatched "$host"
