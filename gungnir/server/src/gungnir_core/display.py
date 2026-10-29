@@ -1,6 +1,7 @@
 """Plain-text rendering of a host's state for the command line."""
 
 from datetime import UTC, datetime, timedelta, timezone
+from fnmatch import fnmatchcase
 
 from gungnir_core.hosts import HostSummary
 from gungnir_core.telemetry import FactRow, ProcessRow, SeriesInfo, SourceState
@@ -125,4 +126,91 @@ def render_status(
         lines.append(
             f"  control groups: {len(groups)} series of {entities} groups, sparse (--groups lists them)"
         )
+    return "\n".join(lines)
+
+
+def stamp(ts: datetime, zone: timezone) -> str:
+    return ts.astimezone(zone).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def render_baselines(series: list, book, pattern: str | None) -> str:
+    """Current baselines of a host: median and spread per series and class,
+    with the power correction factors that apply."""
+    by_id = {s.id: s for s in series}
+    rows = []
+    for (sid, cls), b in book.baselines.items():
+        s = by_id.get(sid)
+        if s is None or (pattern and not fnmatchcase(s.signal, pattern)):
+            continue
+        rows.append((s.signal, s.entity, cls, b))
+    if not rows:
+        return "no baselines yet: a class needs a day of history in the last week"
+    rows.sort(key=lambda r: (r[0], r[1], r[2]))
+    lines = [f"Baselines as of {book.version:%Y-%m-%d %H:00} UTC (median, MAD, samples, power factors)"]
+    for signal, entity, cls, b in rows:
+        factors = " ".join(f"{p} x{f:.2f}" for p, f in sorted(b.factors.items()) if abs(f - 1) > 0.005)
+        lines.append(
+            f"  {signal:<32} {entity[-40:]:<40} {cls:<12} {format_value(signal, b.median):>12}"
+            f" {format_value(signal, b.mad):>12} {b.samples:>8}  {factors}"
+        )
+    return "\n".join(lines)
+
+
+def format_span(seconds: float) -> str:
+    seconds = int(seconds)
+    if seconds < 60:
+        return f"{seconds} s"
+    if seconds < 3600:
+        return f"{seconds // 60} min {seconds % 60:02d} s"
+    return f"{seconds // 3600} h {seconds % 3600 // 60:02d} min"
+
+
+def against(signal: str, basis: dict) -> str:
+    """What a record was judged against, in words."""
+    kind = basis.get("basis")
+    if kind == "baseline":
+        text = (
+            f"baseline of {basis.get('class')}: median {format_value(signal, basis['median'])},"
+            f" MAD {format_value(signal, basis['mad'])}"
+        )
+        if abs(basis.get("factor", 1.0) - 1) > 0.005:
+            text += f", power factor {basis['factor']:.2f} ({basis.get('power')})"
+        return text
+    if kind == "calibration":
+        return (
+            f"cold start: {basis['share']:.0%} of measured capacity {format_value(signal, basis['capacity'])}"
+        )
+    if kind == "threshold":
+        if basis.get("above") is not None:
+            return f"limit above {format_value(signal, basis['above'])}"
+        return f"limit below {format_value(signal, basis['below'])}"
+    if kind == "forest":
+        return f"forest of {basis.get('class')}: feature {basis.get('feature')}, z {basis.get('z', 0):.1f}"
+    return "-"
+
+
+def render_records(rows: list, now: datetime, zone: timezone, title: str) -> str:
+    if not rows:
+        return f"{title}: no records"
+    still_open = sum(r.ended_at is None for r in rows)
+    noun = "record" if len(rows) == 1 else "records"
+    lines = [f"{title}: {len(rows)} {noun}, {still_open} open (newest first)", ""]
+    for r in rows:
+        start = r.started_at.astimezone(zone)
+        fmt = "%H:%M:%S" if start.date() == now.astimezone(zone).date() else "%m-%d %H:%M:%S"
+        end = r.ended_at.astimezone(zone).strftime("%H:%M:%S") if r.ended_at else "open"
+        length = format_span(((r.ended_at or now) - r.started_at).total_seconds())
+        what = r.detector + (f" {r.level}" if r.level else "")
+        series = r.signal if r.entity == "host" else f"{r.signal} {r.entity.rsplit('/', 1)[-1]}"
+        # A limit below which the value fell to zero gives an infinite ratio.
+        score = f"{r.peak_score:.1f}" if r.peak_score < 1000 else ">999"
+        arrow = "up" if r.direction == "up" else "down"
+        lines.append(
+            f"{start.strftime(fmt)} - {end:<8} {length:>13}  {r.kind:<7} {what:<17}"
+            f" {series}  {arrow}, score {score}"
+        )
+        value = format_value(r.signal, r.value) if r.value is not None else "-"
+        context = f"class {r.workload_class or '-'}, {r.power_profile or '-'}"
+        episode = f", episode {r.episode}" if r.episode else ""
+        lines.append(f"    value {value}; {context}; against {against(r.signal, r.baseline)}{episode}")
     return "\n".join(lines)

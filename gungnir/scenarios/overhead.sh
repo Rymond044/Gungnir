@@ -11,7 +11,8 @@ phase_s=${1:-120}
 unit=gungnir-agent.service
 cg=/sys/fs/cgroup/system.slice/$unit
 runs=$(dirname "$0")/runs
-label_file=$runs/$(date -u +%Y%m%dT%H%M%SZ)-overhead.jsonl
+run=$(date -u +%Y%m%dT%H%M%SZ)-overhead
+label_file=$runs/$run.jsonl
 cpus=$(nproc)
 mem_load=$(( $(awk '/MemTotal/ {print $2}' /proc/meminfo) / 4 ))k
 command -v stress-ng >/dev/null || { echo "stress-ng is not installed" >&2; exit 1; }
@@ -59,8 +60,11 @@ phase() {
     end_ms=$(now_ms)
     [ -n "$pid" ] && wait "$pid" 2>/dev/null || true
 
-    printf '{"phase":"%s","start_ms":%s,"end_ms":%s,"command":"%s"}\n' \
-        "$name" "$start_ms" "$end_ms" "${*:-none}" >>"$label_file"
+    local normal=false command=null
+    [ "$name" = idle ] && normal=true
+    [ $# -gt 0 ] && command="\"$*\""
+    printf '{"run":"%s","kind":"overhead","phase":"%s","start_ms":%s,"end_ms":%s,"normal":%s,"expected":%s,"command":%s}\n' \
+        "$run" "$name" "$start_ms" "$end_ms" "$normal" "${expected[$name]}" "$command" >>"$label_file"
     awk -v name="$name" -v us=$(( end_us - start_us )) -v ms=$(( end_ms - start_ms )) \
         -v cpus="$cpus" -v avg=$(( sum / n )) -v peak="$peak" -v cg_peak="$cg_peak" 'BEGIN {
         core = us / (ms * 1000) * 100
@@ -69,6 +73,14 @@ phase() {
     }'
 }
 
+# Signals each phase should show up in, for evaluation (labels.py).
+declare -A expected=(
+    [idle]='[]'
+    [cpu]='["cpu.user_ratio","cpu.idle_ratio","cpu.pressure_some_ratio"]'
+    [memory]='["mem.available_bytes","mem.anon_bytes","mem.used_ratio"]'
+    [disk]='["disk.write_bytes_per_s","disk.util_ratio"]'
+    [fork]='["cpu.forks_per_s","proc.count"]'
+)
 load_for="--timeout ${phase_s}s"
 echo "Agent overhead, $phase_s s per phase, $cpus CPUs, $(date -u +%FT%TZ)"
 echo "| phase    | % core | % host | RSS avg | RSS max | unit max |"

@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, R
 from fastapi.responses import JSONResponse
 from psycopg_pool import ConnectionPool
 
-from gungnir_core import hosts, maintenance, telemetry
+from gungnir_core import hosts, maintenance, pipeline, telemetry
 from gungnir_core.db import migrate, open_pool
 from gungnir_core.hosts import Host
 from gungnir_core.ingest import Batch
@@ -29,10 +29,12 @@ def create_app(pool: ConnectionPool | None = None) -> FastAPI:
         with app.state.pool.connection() as conn:
             migrate(conn)
             maintenance.ensure_partitions(conn, datetime.now(UTC))
-        worker = maintenance.Worker(app.state.pool)
-        worker.start()
+        workers = [maintenance.Worker(app.state.pool), pipeline.Worker(app.state.pool)]
+        for worker in workers:
+            worker.start()
         yield
-        worker.stop()
+        for worker in workers:
+            worker.stop()
         if own:
             app.state.pool.close()
 

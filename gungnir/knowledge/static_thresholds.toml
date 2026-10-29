@@ -1,0 +1,42 @@
+# Control branch (ADR 0006, 0024): fixed generic thresholds on load, as a
+# typical monitoring template sets them. Taken from the Zabbix template
+# "Linux by Zabbix agent" (user macros and trigger expressions in
+# templates/os/linux/README.md of the Zabbix repository). The template
+# judges minimum or maximum values over 5 or 15 minutes; here every branch
+# uses the same three-samples rule, so that only the criterion differs.
+# `above` or `below` holds for every entity of the signal.
+
+[[threshold]]
+signal = "cpu.idle_ratio"
+below = 0.10
+provenance = { source = "Zabbix template Linux by Zabbix agent: High CPU utilization, {$CPU.UTIL.CRIT} = 90 (%), min over 5m", grade = "documented" }
+
+[[threshold]]
+signal = "mem.used_ratio"
+above = 0.90
+provenance = { source = "Zabbix template Linux by Zabbix agent: High memory utilization, {$MEMORY.UTIL.MAX} = 90 (%), min over 5m", grade = "documented" }
+
+[[threshold]]
+signal = "mem.available_bytes"
+below = 20_000_000
+provenance = { source = "Zabbix template Linux by Zabbix agent: Lack of available memory, {$MEMORY.AVAILABLE.MIN} = 20M, max over 5m", grade = "documented" }
+
+[[threshold]]
+signal = "swap.used_ratio"
+above = 0.50
+provenance = { source = "Zabbix template Linux by Zabbix agent: High swap space usage, {$SWAP.PFREE.MIN.WARN} = 50 (% free), max over 5m", grade = "documented" }
+
+[[threshold]]
+signal = "disk.read_await_ms"
+above = 20
+provenance = { source = "Zabbix template Linux by Zabbix agent: Disk read/write request responses are too high, {$VFS.DEV.READ.AWAIT.WARN} = 20 (ms), min over 15m", grade = "documented" }
+
+[[threshold]]
+signal = "disk.write_await_ms"
+above = 20
+provenance = { source = "Zabbix template Linux by Zabbix agent: Disk read/write request responses are too high, {$VFS.DEV.WRITE.AWAIT.WARN} = 20 (ms), min over 15m", grade = "documented" }
+
+[[threshold]]
+signal = "fs.used_ratio"
+above = 0.80
+provenance = { source = "Zabbix template Linux by Zabbix agent: FS space is low, {$VFS.FS.PUSED.MAX.WARN} = 80 (%), min over 5m", grade = "documented" }

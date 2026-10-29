@@ -1,0 +1,59 @@
+# Impact (ADR 0025): absolute thresholds on waiting, not on load. Two
+# levels: noticeable and severe. A baseline would learn a harmful habit as
+# normal, so impact never uses one. `samples` is how many samples in a row
+# open a record (default 3). Host-local overrides go to local/<host>.toml
+# as [[impact]] entries with the same signal and level.
+#
+# Only severe memory pressure has a published source. The other levels are
+# initial values to be measured in the calibration run and the S9 scenarios;
+# until then they are graded unverified.
+
+[[impact]]
+signal = "mem.pressure_full_ratio"
+level = "severe"
+above = 0.60
+samples = 6
+provenance = { source = "oomd.conf(5): DefaultMemoryPressureLimit = 60 % of a 10 s window with all tasks delayed (full), held DefaultMemoryPressureDurationSec = 30 s", grade = "documented" }
+
+[[impact]]
+signal = "cgroup.mem_pressure_full_ratio"
+level = "severe"
+above = 0.60
+samples = 6
+provenance = { source = "oomd.conf(5): DefaultMemoryPressureLimit = 60 % for a unit's control group, held 30 s", grade = "documented" }
+
+[[impact]]
+signal = "mem.pressure_some_ratio"
+level = "noticeable"
+above = 0.10
+provenance = { source = "initial value, to be measured in scenarios (ADR 0025)", grade = "unverified" }
+
+[[impact]]
+signal = "io.pressure_some_ratio"
+level = "noticeable"
+above = 0.30
+provenance = { source = "initial value, to be measured in scenarios (ADR 0025)", grade = "unverified" }
+
+[[impact]]
+signal = "io.pressure_full_ratio"
+level = "severe"
+above = 0.50
+provenance = { source = "initial value, to be measured in scenarios (ADR 0025)", grade = "unverified" }
+
+[[impact]]
+signal = "cpu.pressure_some_ratio"
+level = "noticeable"
+above = 0.50
+provenance = { source = "initial value, to be measured in scenarios (ADR 0025)", grade = "unverified" }
+
+[[impact]]
+signal = "disk.read_await_ms"
+level = "noticeable"
+above = 50
+provenance = { source = "initial value, to be measured in scenarios (ADR 0025)", grade = "unverified" }
+
+[[impact]]
+signal = "disk.write_await_ms"
+level = "noticeable"
+above = 50
+provenance = { source = "initial value, to be measured in scenarios (ADR 0025)", grade = "unverified" }

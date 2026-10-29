@@ -5,10 +5,10 @@ Intelligent monitoring, diagnosis and controlled remediation for Linux hosts.
 | Directory | Contents |
 |---|---|
 | `agent/` | Rust workspace: `gungnir-agent` (signal collection, buffer, transport), `gungnir-actuator` (privileged actions, not yet built) |
-| `server/` | Python package `gungnir_core`: ingest, storage, API, CLI; detection and diagnosis to come |
+| `server/` | Python package `gungnir_core`: ingest, storage, workload classes, baselines, detection, API, CLI; diagnosis to come |
 | `web/` | Web interface |
-| `knowledge/` | Ontology, causal rules, action policy, knowledge tests |
-| `scenarios/` | Fault injection scenarios with ground truth |
+| `knowledge/` | Workload class rules, control and impact thresholds (with provenance); ontology, causal rules, action policy and knowledge tests to come |
+| `scenarios/` | Calibration and overhead runs, fault scenarios with ground truth; `runs/` holds label files and result tables |
 | `deploy/` | Docker Compose for the core, systemd unit and installer for the agent |
 
 Design lives in the workspace repository: `docs/architecture.md` and `docs/adr/`.
@@ -24,6 +24,19 @@ docker compose -f deploy/compose.yaml exec core gungnir-core host add <name> > t
 ```
 
 Check: `docker compose -f deploy/compose.yaml exec core gungnir-core status <name>` shows the agent, its signal sources and the latest value of every signal in its unit; `gungnir-agent --probe` prints what the agent itself sees. API docs: `http://127.0.0.1:8080/docs`.
+
+Detection runs inside the core. Calibrate a new host once, with the host left alone for about 17 minutes:
+
+```sh
+scenarios/calibrate.sh <name>                     # graded loads, labels, capacity, unmatched processes
+docker compose -f deploy/compose.yaml exec core gungnir-core workload show <name>
+docker compose -f deploy/compose.yaml exec core gungnir-core replay <name>      # compare the detector variants
+docker compose -f deploy/compose.yaml exec core gungnir-core evaluate <name>
+```
+
+Knowledge files (`knowledge/`) are mounted read-only into the core; commands that write files (`workload assign`, `evaluate --out`, `smd --out`) run on the host with `cd server && uv run gungnir-core ...`.
+
+Everyday commands (checks, rebuilds, runs, replays, the demo): `COMMANDS.md`.
 
 `docker compose down` keeps the database (named volume `gungnir_db`); `down -v` deletes it.
 

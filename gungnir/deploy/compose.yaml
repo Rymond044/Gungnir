@@ -24,6 +24,11 @@ services:
     build: ../server
     environment:
       GUNGNIR_DATABASE_URL: postgresql://gungnir:${GUNGNIR_DB_PASSWORD:-gungnir}@db:5432/gungnir
+      GUNGNIR_KNOWLEDGE_DIR: /app/knowledge
+    # Rules and thresholds with provenance; operator rules are added from
+    # the host (`uv run gungnir-core workload assign ...`), hence read-only.
+    volumes:
+      - ../knowledge:/app/knowledge:ro
     depends_on:
       db:
         condition: service_healthy

@@ -10,6 +10,12 @@ from gungnir_core import maintenance
 from gungnir_core.hosts import Host
 from gungnir_core.ingest import Batch, Process, Sample
 
+# Raw samples including ranges kept past retention; the two never overlap,
+# since kept rows are copied only when their partition is dropped.
+RAW_SAMPLES = (
+    "(SELECT series_id, ts, value FROM samples UNION ALL SELECT series_id, ts, value FROM samples_kept)"
+)
+
 
 def from_ms(ms: int) -> datetime:
     return datetime.fromtimestamp(ms / 1000, tz=UTC)
@@ -95,6 +101,12 @@ def store(conn: psycopg.Connection, ids: SeriesIds, host: Host, batch: Batch, no
             oldest = from_ms(min(s.ts for s in in_window)).replace(second=0, microsecond=0)
             conn.execute(
                 "UPDATE maintenance_state SET at = %s WHERE key = 'rollup_from' AND at > %s", (oldest, oldest)
+            )
+            # And their hour's histograms.
+            hour = oldest.replace(minute=0)
+            conn.execute(
+                "UPDATE histogram_state SET next_hour = %s WHERE host_id = %s AND next_hour > %s",
+                (hour, host.id, hour),
             )
         _insert_context(conn, host, batch, processes)
     return Stored(len(batch.samples), inserted, rejected)

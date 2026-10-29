@@ -1,0 +1,52 @@
+# Workload class rules (ADR 0023). A rule counts when the processes or
+# control groups it matches take a noticeable share of the host (0.5 cores,
+# or 20 % of host disk I/O for groups); the highest priority wins. Without a
+# counting rule the host is idle (low CPU, almost no I/O) or interactive.
+#
+# Matchers: `command` (process name as the kernel shows it, at most 15
+# characters), `unit` (systemd unit of a process, or the last component of a
+# control group), `group` (control group path). Globs are allowed.
+# Every rule needs provenance; the file does not load otherwise.
+# Host-local rules assigned by the operator live in local/<host>.toml.
+
+[[workload_rule]]
+class = "maintenance"
+priority = 30
+command = ["pacman", "apt", "apt-get", "dpkg", "dnf", "rpm", "packagekitd", "unattended-upgr"]
+unit = ["apt-daily.service", "apt-daily-upgrade.service", "unattended-upgrades.service", "packagekit.service"]
+provenance = { source = "Package managers: pacman(8), apt(8), apt-get(8), dpkg(1), dnf(8), rpm(8); units apt-daily*.service shipped by apt, unattended-upgrades.service by unattended-upgrades, packagekit.service by PackageKit", grade = "documented" }
+
+[[workload_rule]]
+class = "maintenance"
+priority = 30
+command = ["fstrim", "btrfs", "updatedb", "mandb", "logrotate"]
+unit = [
+    "fstrim.service",
+    "btrfs-scrub@*.service",
+    "btrfs-balance*.service",
+    "btrfs-trim*.service",
+    "plocate-updatedb.service",
+    "updatedb.service",
+    "mlocate-updatedb.service",
+    "man-db.service",
+    "logrotate.service",
+    "snapper-cleanup.service",
+]
+provenance = { source = "fstrim(8) and fstrim.service (util-linux); btrfs-scrub(8) and btrfs-scrub@.service (btrfs-progs), btrfs-balance/trim units (btrfsmaintenance); updatedb(8) with plocate-updatedb.service (plocate) or updatedb.service (mlocate); mandb(8) and man-db.service (man-db); logrotate(8) and logrotate.service; snapper-cleanup.service (snapper)", grade = "documented" }
+
+[[workload_rule]]
+class = "backup"
+priority = 40
+command = ["borg", "restic", "rsnapshot", "duplicity"]
+unit = ["borg*.service", "borgmatic*.service", "restic*.service", "snapper-timeline.service"]
+provenance = { source = "Backup programs: borg(1) (BorgBackup), restic(1), rsnapshot(1), duplicity(1); borgmatic.service (borgmatic), snapper-timeline.service (snapper)", grade = "documented" }
+
+[[workload_rule]]
+class = "build"
+priority = 20
+command = [
+    "cc1", "cc1plus", "cc1obj", "as", "collect2", "ld", "ld.bfd", "ld.gold", "ld.lld", "mold",
+    "clang", "clang++", "rustc", "cargo", "make", "gmake", "ninja", "cmake", "meson", "javac",
+    "kotlin-daemon", "gradle", "go", "tsc", "esbuild",
+]
+provenance = { source = "GCC manual, Overall Options (-v): the driver runs cc1/cc1plus, as and collect2/ld; Clang driver documentation; rustc(1) and the Cargo book; make(1), ninja(1), cmake(1), meson(1); javac(1); go(1) build; tsc and esbuild documentation", grade = "documented" }

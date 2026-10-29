@@ -43,3 +43,18 @@ def client(pool):
 def token(client, pool):
     with pool.connection() as conn:
         return hosts.add(conn, "laptop")
+
+
+@pytest.fixture
+def conn(database_url):
+    """A migrated database without the app and its background workers."""
+    from datetime import UTC, datetime
+
+    from gungnir_core import maintenance
+    from gungnir_core.db import migrate
+
+    with psycopg.connect(database_url) as conn:
+        migrate(conn)
+        maintenance.ensure_partitions(conn, datetime.now(UTC))
+        conn.commit()
+        yield conn

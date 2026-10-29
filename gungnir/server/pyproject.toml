@@ -5,9 +5,11 @@ description = "gungnIR core: ingest, storage, detection, diagnosis and the API"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.162",
+    "numpy>=2.5.4",
     "psycopg[binary]>=3.3",
     "psycopg-pool>=3.3",
     "pydantic>=2.14",
+    "scikit-learn>=1.9.1",
     "uvicorn>=0.54",
 ]
 
