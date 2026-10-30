@@ -143,15 +143,28 @@ def render_baselines(series: list, book, pattern: str | None) -> str:
         if s is None or (pattern and not fnmatchcase(s.signal, pattern)):
             continue
         rows.append((s.signal, s.entity, cls, b))
+    need, days = book.params.baseline_min_hours, book.params.baseline_days
+    with_baseline = {cls for _sid, cls in book.baselines}
+    waiting = [
+        f"{cls} {hours:.1f} of {need:g} h"
+        for cls, hours in sorted(book.collected.items())
+        if cls not in with_baseline
+    ]
+    progress = f"waiting for samples in the last {days} days: " + ", ".join(waiting)
     if not rows:
-        return "no baselines yet: a class needs a day of history in the last week"
+        text = f"no baselines yet: a class needs {need:g} h of samples in the last {days} days"
+        return text + ("\n" + progress if waiting else "")
     rows.sort(key=lambda r: (r[0], r[1], r[2]))
-    lines = [f"Baselines as of {book.version:%Y-%m-%d %H:00} UTC (median, MAD, samples, power factors)"]
+    lines = [
+        f"Baselines as of {book.version:%Y-%m-%d %H:00} UTC (class, median, MAD, samples, entity, power)"
+    ]
+    if waiting:
+        lines.append(progress)
     for signal, entity, cls, b in rows:
         factors = " ".join(f"{p} x{f:.2f}" for p, f in sorted(b.factors.items()) if abs(f - 1) > 0.005)
         lines.append(
-            f"  {signal:<32} {entity[-40:]:<40} {cls:<12} {format_value(signal, b.median):>12}"
-            f" {format_value(signal, b.mad):>12} {b.samples:>8}  {factors}"
+            f"  {signal:<32} {cls:<12} {format_value(signal, b.median):>12}"
+            f" {format_value(signal, b.mad):>12} {b.samples:>8}  {entity}  {factors}".rstrip()
         )
     return "\n".join(lines)
 

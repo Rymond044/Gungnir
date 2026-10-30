@@ -70,6 +70,9 @@ def test_ewma_catches_drift_the_sample_test_misses():
     baselines = Fixed({("mem.anon_bytes", "interactive"): (1e9, 1e7)})
     found = records(Robust(baselines), context(make_frame({"mem.anon_bytes": x})))
     assert {d for d, _ in found} == {"robust.ewma"}
+    # The same creep in a control group is no drift alarm.
+    baselines = Fixed({("cgroup.mem_bytes", "interactive"): (1e9, 1e7)})
+    assert records(Robust(baselines), context(make_frame({"cgroup.mem_bytes": x}))) == []
     s, last = ewma(np.array([1.0, np.nan, 3.0]), 0.5, None)
     assert np.isnan(s[1]) and s[2] == 2.0 and last == 2.0
 

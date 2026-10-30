@@ -262,7 +262,11 @@ class Robust:
                     f"robust.mad|{meta.id}", "robust.mad", ctx, meta, x, flags, scores, signs, basis
                 )
             )
-            drifts = any(fnmatchcase(meta.signal, pat) for pat in p.ewma_signals)
+            # A service's memory creeps up as its caches fill; on groups the
+            # EWMA would report that all day, so drift is judged on the host.
+            drifts = not is_group(meta.signal) and any(
+                fnmatchcase(meta.signal, pat) for pat in p.ewma_signals
+            )
             if self.ewma and drifts and has_baseline.any():
                 e, last = ewma(x, p.ewma_lambda, ewma_state.get(str(meta.id)))
                 ewma_state[str(meta.id)] = last

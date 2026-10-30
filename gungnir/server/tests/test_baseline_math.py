@@ -41,6 +41,18 @@ def test_a_class_needs_a_day_of_history():
     assert (1, "idle") in baselines.compute(enough, p)
 
 
+def test_collected_hours_count_every_power_profile_of_a_class():
+    p = Params()
+    rows = [
+        hist_row(1, "idle", "eco/ac", [0.1] * 720),
+        hist_row(1, "idle", "eco/battery", [0.1] * 360),
+        hist_row(2, "idle", "eco/ac", [0.1] * 100),
+        hist_row(1, "build", "eco/ac", [0.9] * 72),
+    ]
+    assert baselines.collected(rows, p) == {"idle": 1.5, "build": 0.1}
+    assert baselines.collected(rows, p, per_class=False) == {baselines.ALL_CLASSES: 1.6}
+
+
 def test_power_factor_is_the_ratio_of_medians_and_is_clamped():
     p = Params(baseline_min_hours=1, power_min_hours=1)
     rows = [
@@ -83,3 +95,10 @@ def test_floors_take_the_most_specific_pattern():
     assert by_pattern(floors, "disk.read_ops_per_s") == 5.0
     assert by_pattern(floors, "mem.major_faults_per_s") == 1.0
     assert by_pattern(floors, "unknown.thing") is None
+    assert by_pattern(floors, "cgroup.cpu_cores") == 0.1
+
+
+def test_group_memory_gets_a_wider_floor_than_host_memory():
+    book = baselines.Book(None, None, Params())
+    assert book.floor("cgroup.mem_bytes", "docker.service", 100e6) == pytest.approx(10e6)
+    assert book.floor("mem.anon_bytes", "host", 100e6) == pytest.approx(1e6)

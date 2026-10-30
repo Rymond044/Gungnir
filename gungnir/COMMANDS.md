@@ -88,7 +88,7 @@ core baselines laptop                    # every series and class with a baselin
 core baselines laptop --signal 'disk.*'
 ```
 
-Empty until a class has 24 hours of samples in the last 7 days.
+A class gets a baseline after 6 hours of samples in the last 7 days; until then the command shows how many hours each class has.
 
 ### Labeled runs and calibration
 

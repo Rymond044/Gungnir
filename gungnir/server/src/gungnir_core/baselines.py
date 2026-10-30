@@ -229,6 +229,18 @@ def compute(
     return out
 
 
+def collected(hists: list[tuple], params: Params, per_class: bool = True) -> dict[str, float]:
+    """Hours of samples each class has, from histogram rows (series, class,
+    power, keys, counts): the most any of its series has."""
+    per_series: dict[tuple[int, str], int] = defaultdict(int)
+    for sid, cls, _power, _keys, counts in hists:
+        per_series[(sid, cls if per_class else ALL_CLASSES)] += int(counts.sum())
+    hours: dict[str, float] = {}
+    for (_sid, cls), n in per_series.items():
+        hours[cls] = max(hours.get(cls, 0.0), n * params.step_s / 3600)
+    return hours
+
+
 def load_hists(conn: psycopg.Connection, host: Host, since: datetime, until: datetime) -> list[tuple]:
     rows = conn.execute(
         "SELECT h.series_id, h.class, h.power, h.hour, h.keys, h.counts FROM histograms h"
@@ -248,6 +260,8 @@ class Book:
         self.version: datetime | None = None
         self.baselines: dict[tuple[int, str], Baseline] = {}
         self.capacity: dict[tuple[str, str], float] = {}
+        # Hours of samples per class, also of classes without a baseline yet.
+        self.collected: dict[str, float] = {}
         self._hours: dict[datetime, list[tuple]] = {}
 
     def at(self, t: datetime) -> "Book":
@@ -262,6 +276,7 @@ class Book:
             self._hours.setdefault(row[3], []).append(row)
         rows = [(r[0], r[1], r[2], r[4], r[5]) for hour in self._hours.values() for r in hour]
         self.baselines = compute(rows, self.params, self.per_class)
+        self.collected = collected(rows, self.params, self.per_class)
         self.capacity = capacities(self.conn, self.host, t)
         self.version = version
         return self
@@ -275,5 +290,6 @@ class Book:
         if cap is not None and signal.endswith(("_bytes_per_s", "_ops_per_s")):
             return cap * p.capacity_floor_share
         if signal.endswith("_bytes"):
-            return max(abs(median), 1.0) * p.memory_floor_share
+            share = p.group_memory_floor_share if frame.is_group(signal) else p.memory_floor_share
+            return max(abs(median), 1.0) * share
         return by_pattern(p.floors, signal) or ZERO

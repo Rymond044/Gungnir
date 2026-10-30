@@ -19,15 +19,15 @@ from gungnir_core.labels import phases_of
 from gungnir_core.params import Params
 from gungnir_core.telemetry import RAW_SAMPLES
 
-# Signal -> calibration phases that drive it to its limit.
+# Signal -> calibration phases that drive it to its limit. Latency has no
+# such limit: a saturated sequential read answers faster than one stray read
+# that wakes an idle disk, so await stays out and waits for a baseline.
 SATURATING = {
     "cpu.user_ratio": ("cpu-100",),
     "disk.write_bytes_per_s": ("disk-seqwrite",),
     "disk.read_bytes_per_s": ("disk-seqread",),
     "disk.write_ops_per_s": ("disk-randwrite",),
     "disk.read_ops_per_s": ("disk-randread",),
-    "disk.write_await_ms": ("disk-seqwrite", "disk-randwrite", "disk-fsync"),
-    "disk.read_await_ms": ("disk-seqread", "disk-randread"),
 }
 
 

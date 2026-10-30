@@ -35,6 +35,14 @@ def test_label_files_are_validated():
         raise AssertionError("an inverted phase was accepted")
 
 
+def test_latency_gets_no_capacity():
+    samples = {
+        ("disk.read_bytes_per_s", "nvme0n1", "disk-seqread"): [1.5e9] * 10,
+        ("disk.read_await_ms", "nvme0n1", "disk-seqread"): [0.3] * 10,
+    }
+    assert [c.signal for c in capacity.derive(samples, 0.95)] == ["disk.read_bytes_per_s"]
+
+
 def test_import_keeps_the_run_and_capacity_comes_from_its_samples(conn):
     host = seed.add_host(conn)
     phases = labels.parse([phase_line()])

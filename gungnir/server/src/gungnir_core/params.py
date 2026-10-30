@@ -22,6 +22,8 @@ DEFAULT_FLOORS = {
     "*_ms": 0.5,
     "*_tasks": 1.0,
     "*_cores": 0.05,
+    # A desktop's services wake up and go back to sleep all the time.
+    "cgroup.*_cores": 0.1,
     "*_events": 1.0,
     "*.oom_kills": 1.0,
     "proc.*": 1.0,
@@ -46,11 +48,15 @@ class Params:
 
     # Baselines (ADR 0022).
     baseline_days: int = 7
-    baseline_min_hours: float = 24.0
+    # Hours of samples a class needs; a laptop is on a few hours a day and
+    # splits them between classes, so a full day would rarely be reached.
+    baseline_min_hours: float = 6.0
     power_min_hours: float = 6.0
     power_factor_clamp: tuple[float, float] = (0.5, 2.0)
-    # Memory spread floor: a share of the median.
+    # Memory spread floor: a share of the median. A group's memory moves by
+    # tens of percent as its caches fill and drain, the host's much less.
     memory_floor_share: float = 0.01
+    group_memory_floor_share: float = 0.1
     # Throughput spread floor: a share of measured capacity.
     capacity_floor_share: float = 0.01
     floors: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_FLOORS))
