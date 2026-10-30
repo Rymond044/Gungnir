@@ -3,7 +3,8 @@ from the evidence of an interval and the knowledge base.
 
 Each culprit candidate of a rule gives a hypothesis when the rule's
 conditions hold, its anchor is matched, every characteristic manifestation
-is matched, pending or unobservable, and some harm is matched. Confidence
+is matched, pending or unobservable, and some harm is matched; without its
+anchor it must also match something besides the harm. Confidence
 combines the weights of the matched manifestations as 1 - Π(1 - w) and
 lowers it by 1 - alpha * w for each missing one. The reasoner sees
 records, never samples (ADR 0001), and reads no database.
@@ -265,6 +266,10 @@ class RuleReasoner:
             return None
         harm = [f for f in found if f.manifestation.harm]
         if not any(f.status == MATCHED for f in harm) and not all(f.status == UNOBSERVABLE for f in harm):
+            return None
+        # Without its anchor a cause must still show something besides the
+        # harm, or any harm of the resource would name it.
+        if not anchored and not any(f.status == MATCHED and not f.manifestation.harm for f in found):
             return None
         support = 1 - math.prod(1 - self._weight(f) for f in found if f.status == MATCHED)
         confidence = support * math.prod(

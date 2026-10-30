@@ -173,6 +173,16 @@ def test_an_unobservable_manifestation_neither_counts_nor_weakens(reasoner):
     assert h.confidence > full.confidence
 
 
+def test_harm_alone_does_not_stand_for_an_unobservable_anchor(gate):
+    # No group has a CPU quota, so throttling is never seen; a program that
+    # waits for the CPU is not evidence of it.
+    waiting = rec("cgroup.cpu_pressure_some_ratio", READER, 0)
+    no_quota = {"cgroup.throttled_ratio"}
+    assert "cpu_quota_throttling" not in gate.diagnose(ev(waiting, unobservable=no_quota)).causes()
+    throttled = rec("cgroup.throttled_ratio", READER, 0)
+    assert "cpu_quota_throttling" in gate.diagnose(ev(throttled, waiting)).causes()
+
+
 def test_one_record_supports_one_manifestation(reasoner):
     d = reasoner.diagnose(ev(*copy()))
     for h in d.hypotheses:
