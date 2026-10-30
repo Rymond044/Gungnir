@@ -77,7 +77,7 @@ class TrainBaselines:
         median, mad = self.by_id[meta.id]
         return median, mad, {"basis": "baseline", "median": median, "mad": mad}
 
-    def cold(self, meta):
+    def cold(self, meta, ctx):
         return None
 
 

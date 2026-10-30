@@ -194,6 +194,8 @@ def against(signal: str, basis: dict) -> str:
         return (
             f"cold start: {basis['share']:.0%} of measured capacity {format_value(signal, basis['capacity'])}"
         )
+    if kind == "group cold start":
+        return f"cold start of a group: above {format_value(signal, basis['limit'])} ({basis['of']})"
     if kind == "threshold":
         if basis.get("above") is not None:
             return f"limit above {format_value(signal, basis['above'])}"

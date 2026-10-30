@@ -3,9 +3,17 @@ from datetime import UTC, datetime, timedelta
 import numpy as np
 
 from gungnir_core.detection import forest
-from gungnir_core.detection.detectors import Context, Limit, LimitDetector, Robust, ewma
+from gungnir_core.detection.detectors import (
+    Context,
+    Limit,
+    LimitDetector,
+    Robust,
+    ewma,
+    group_cold,
+    pressure_levels,
+)
 from gungnir_core.detection.records import Tracker
-from gungnir_core.frame import Frame, SeriesMeta
+from gungnir_core.frame import Frame, SeriesMeta, is_group
 from gungnir_core.params import Params
 
 P = Params()
@@ -19,14 +27,26 @@ class Fixed:
         found = self.table.get((meta.signal, cls))
         return None if found is None else (*found, {"basis": "baseline"})
 
-    def cold(self, meta):
+    def cold(self, meta, ctx):
         limit = self.cold_limits.get(meta.signal)
         return None if limit is None else (limit, {"basis": "calibration"})
 
 
-def make_frame(rows: dict[str, np.ndarray]) -> Frame:
+class GroupsOnly(Fixed):
+    """No baselines at all: every group is new."""
+
+    def __init__(self, capacity=None, pressure=None):
+        super().__init__({})
+        self.capacity, self.pressure = capacity or {}, pressure or {}
+
+    def cold(self, meta, ctx):
+        return group_cold(meta, ctx, self.capacity, self.pressure) if is_group(meta.signal) else None
+
+
+def make_frame(rows: dict[str, np.ndarray], entities: dict[str, str] | None = None) -> Frame:
     n = len(next(iter(rows.values())))
-    series = [SeriesMeta(i + 1, s, "host") for i, s in enumerate(rows)]
+    entities = entities or {}
+    series = [SeriesMeta(i + 1, s, entities.get(s, "host")) for i, s in enumerate(rows)]
     return Frame(np.arange(n, dtype=np.int64) * 5000, series, np.array(list(rows.values()), dtype=float))
 
 
@@ -63,6 +83,59 @@ def test_cold_start_judges_against_capacity():
     found = records(Robust(Fixed({}, cold={"disk.write_bytes_per_s": 1.6e9})), ctx)
     assert [d for d, _ in found] == ["robust.mad", "robust.mad"]
     assert found[0][1].records[0].baseline == {"basis": "calibration"}
+
+
+GROUP = "user.slice/user-1000.slice/user@1000.service/app.slice/app-cp.scope"
+
+
+def group_records(rows: dict[str, np.ndarray], **cold) -> list:
+    """Records of the group series in `rows`, the others being host series."""
+    entities = {s: GROUP for s in rows if s.startswith("cgroup.")}
+    found = records(Robust(GroupsOnly(**cold), ewma=False), context(make_frame(rows, entities)))
+    return [(e.records[0].baseline["of"], e.records[0].direction) for _, e in found if hasattr(e, "records")]
+
+
+def test_a_new_group_is_judged_against_noticeable_levels():
+    busy = np.full(20, 0.1)
+    busy[5:10] = 1.5
+    assert group_records({"cgroup.cpu_cores": busy}) == [("noticeable cores", "up")]
+    # A slice sums its children, which are judged themselves.
+    slice_ctx = context(make_frame({"cgroup.cpu_cores": busy}, {"cgroup.cpu_cores": "user.slice"}))
+    assert records(Robust(GroupsOnly(), ewma=False), slice_ctx) == []
+    writes = np.full(20, 1e6)
+    writes[5:10] = 9e8
+    capacity = {("disk.write_bytes_per_s", "nvme0n1"): 2e9}
+    assert group_records({"cgroup.write_bytes_per_s": writes}, capacity=capacity) == [
+        ("20% of measured disk.write_bytes_per_s", "up")
+    ]
+    # Without a calibration there is nothing to judge I/O against.
+    assert group_records({"cgroup.write_bytes_per_s": writes}) == []
+    stalled = np.full(20, 0.0)
+    stalled[5:10] = 0.4
+    levels = {"io.pressure_some_ratio": 0.3}
+    assert group_records({"cgroup.io_pressure_some_ratio": stalled}, pressure=levels) == [
+        ("noticeable impact of io.pressure_some_ratio", "up")
+    ]
+
+
+def test_a_new_group_s_memory_is_judged_against_a_share_of_host_memory():
+    n = 20
+    total, used = 16e9, 0.5
+    grows = np.full(n, 1e9)
+    grows[5:10] = 2e9
+    rows = {
+        "mem.available_bytes": np.full(n, total * (1 - used)),
+        "mem.used_ratio": np.full(n, used),
+        "cgroup.mem_bytes": grows,
+    }
+    assert group_records(rows) == [("10% of host memory", "up")]
+
+
+def test_group_pressure_follows_the_host_s_lowest_impact_level():
+    levels = pressure_levels()
+    assert levels["io.pressure_some_ratio"] == 0.30
+    assert levels["mem.pressure_full_ratio"] == 0.60
+    assert not any(name.startswith("cgroup.") for name in levels)
 
 
 def test_ewma_catches_drift_the_sample_test_misses():

@@ -59,6 +59,8 @@ class Params:
     # tens of percent as its caches fill and drain, the host's much less.
     memory_floor_share: float = 0.01
     group_memory_floor_share: float = 0.1
+    # Cold start of a group's memory (ADR 0045): a share of host memory.
+    group_cold_memory_share: float = 0.1
     # Throughput spread floor: a share of measured capacity.
     capacity_floor_share: float = 0.01
     floors: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_FLOORS))

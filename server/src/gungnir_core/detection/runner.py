@@ -17,7 +17,15 @@ from psycopg.types.json import Jsonb
 
 from gungnir_core import frame
 from gungnir_core.baselines import Book, context_on, floor_hour
-from gungnir_core.detection.detectors import BookBaselines, Context, Detector, Robust, impact, thresholds
+from gungnir_core.detection.detectors import (
+    BookBaselines,
+    Context,
+    Detector,
+    Robust,
+    impact,
+    pressure_levels,
+    thresholds,
+)
 from gungnir_core.detection.growth import Growth
 from gungnir_core.detection.records import Closed, Opened, Tracker
 from gungnir_core.hosts import Host
@@ -53,7 +61,7 @@ class Variant:
 
 def _robust(per_class: bool, ewma: bool = True):
     def build(conn, host, params):
-        return [Robust(BookBaselines(Book(conn, host, params, per_class)), ewma)]
+        return [Robust(BookBaselines(Book(conn, host, params, per_class), pressure_levels(host.name)), ewma)]
 
     return build
 
