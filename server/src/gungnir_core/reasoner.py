@@ -109,7 +109,13 @@ class RuleReasoner:
         current = [h for h in found if any(inside(f.item, ev) for f in h.with_status(MATCHED))]
         shown = sorted(
             (h for h in current if h.confidence >= self.cutoff),
-            key=lambda h: (-h.confidence, -len(h.with_status(MATCHED)), h.cause, h.binding.culprit or ""),
+            key=lambda h: (
+                -h.confidence,
+                -len(h.with_status(MATCHED)),
+                -_culprit_score(h),
+                h.cause,
+                h.binding.culprit or "",
+            ),
         )
         explained = {r.id for r in ev.records if self._explained(r, ev)}
         shown = [replace(h, expected=self._expected(h, explained)) for h in shown]
@@ -125,14 +131,22 @@ class RuleReasoner:
     def _hypotheses(self, rule: Rule, ev: Evidence) -> list[Hypothesis]:
         device = self._most_matched(rule, ev, "device")
         filesystem = self._most_matched(rule, ev, "filesystem")
+        candidates = self._culprits(rule, ev)
         out = []
-        for culprit in self._culprits(rule, ev):
-            binding = Binding(culprit, device, filesystem)
-            if self._conditions_hold(rule, ev, binding):
-                hypothesis = self._evaluate(rule, ev, binding)
-                if hypothesis:
-                    out.append(hypothesis)
+        for culprit in candidates:
+            hypothesis = self._bound(rule, ev, Binding(culprit, device, filesystem))
+            # A candidate comes from evidence anywhere in the look-back; it is
+            # named only when its own evidence fits this hypothesis.
+            if hypothesis and (culprit is None or _culprit_items(hypothesis)):
+                out.append(hypothesis)
+        if not out and None not in candidates:
+            hypothesis = self._bound(rule, ev, Binding(None, device, filesystem))
+            if hypothesis:
+                out.append(hypothesis)
         return out
+
+    def _bound(self, rule: Rule, ev: Evidence, b: Binding) -> Hypothesis | None:
+        return self._evaluate(rule, ev, b) if self._conditions_hold(rule, ev, b) else None
 
     def _culprits(self, rule: Rule, ev: Evidence) -> list[str | None]:
         """Groups that match the anchor, or any culprit manifestation when
@@ -349,6 +363,17 @@ def _hypothesis_dict(h: Hypothesis) -> dict:
             for f in h.found
         ],
     }
+
+
+def _culprit_items(h: Hypothesis) -> list[Item]:
+    return [f.item for f in h.with_status(MATCHED) if f.manifestation.role == "culprit" and f.item]
+
+
+def _culprit_score(h: Hypothesis) -> float:
+    """How unusual the culprit's matched records are: of two culprits with
+    equal evidence, the more unusual one comes first."""
+    scores = [i.score for i in _culprit_items(h) if isinstance(i, Record) and i.score is not None]
+    return max(scores, default=0.0)
 
 
 def _item_dict(item: Item) -> dict:

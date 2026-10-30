@@ -130,6 +130,34 @@ def test_two_writers_are_two_hypotheses(reasoner):
     assert sorted(culprits) == sorted([WRITER, other])
 
 
+def test_a_culprit_is_named_only_by_its_own_evidence(gate):
+    swapping = [
+        rec("swap.out_pages_per_s", HOST, 3600),
+        rec("swap.in_pages_per_s", HOST, 3610),
+        rec("mem.pressure_some_ratio", HOST, 3620),
+        rec("mem.direct_reclaims_per_s", HOST, 3620),
+    ]
+    yes = {"swap.enabled": "yes"}
+    # A group whose memory grew an hour earlier is no culprit of this swapping.
+    stale = dataclasses.replace(rec("cgroup.mem_bytes", READER, 0), end=60.0)
+    [h] = [h for h in gate.diagnose(ev(*swapping, stale, facts=yes)).hypotheses if h.cause == "swap_io"]
+    assert h.binding.culprit is None
+    grew = rec("cgroup.mem_bytes", WRITER, 3500)
+    [h] = [h for h in gate.diagnose(ev(*swapping, stale, grew, facts=yes)).hypotheses if h.cause == "swap_io"]
+    assert h.binding.culprit == WRITER
+
+
+def test_of_equal_hypotheses_the_more_unusual_culprit_comes_first(reasoner):
+    other = f"{APPS}/app-rsync.scope"
+    seen = copy()
+    seen[0] = dataclasses.replace(seen[0], score=2.0)
+    d = reasoner.diagnose(
+        ev(*seen, dataclasses.replace(rec("cgroup.write_bytes_per_s", other, 100), score=9.0))
+    )
+    writers = [h.binding.culprit for h in d.hypotheses if h.cause == "bulk_sequential_writer"]
+    assert writers == [other, WRITER]
+
+
 def test_a_process_sign_on_the_others_is_outside_the_culprits_line(reasoner):
     seen = copy()[:3]
     own = Sign("waiting_on_io", "cp", 10, "D", WRITER, 110.0)
