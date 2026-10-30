@@ -10,6 +10,9 @@ from dataclasses import dataclass
 
 from gungnir_core import cases, expected, ontology, policy, rules
 from gungnir_core.knowledge import KnowledgeError
+from gungnir_core.params import Params
+from gungnir_core.params import load as load_params
+from gungnir_core.reasoner import RuleReasoner
 
 
 @dataclass(frozen=True)
@@ -31,17 +34,25 @@ def load() -> Base:
     return Base(onto, found, expected.load(onto), policy.load(onto, found), checked)
 
 
-def run_tests(base: Base) -> tuple[int, list[str]]:
-    """Runs the knowledge tests; returns how many ran and what failed."""
+def run_tests(base: Base, params: Params | None = None) -> tuple[int, list[str]]:
+    """Runs the knowledge tests through the reasoner; returns how many ran
+    and what failed."""
+    reasoner = RuleReasoner(base, params or load_params())
     found = cases.load(base.ontology, base.rules)
     failures = cases.coverage(base.rules, found)
     for case in found:
-        firing = cases.firing(base.rules, case)
-        if case.expect is None and firing:
-            failures.append(f"{case.where}: expected no cause, got {', '.join(firing)}")
-        elif case.expect is not None and case.expect not in firing:
-            failures.append(f"{case.where}: {case.expect} does not fire (fired: {', '.join(firing) or '-'})")
-        wrong = sorted(set(case.not_) & set(firing))
+        diagnosis = reasoner.diagnose(cases.evidence_of(case))
+        ranked = diagnosis.causes()
+        shown = ", ".join(f"{h.cause} {h.confidence:.2f}" for h in diagnosis.hypotheses) or "-"
+        if case.expect is None:
+            if ranked:
+                failures.append(f"{case.where}: expected no cause, got {shown}")
+            continue
+        if case.expect not in ranked[: case.within]:
+            failures.append(f"{case.where}: {case.expect} is not within the top {case.within} (got {shown})")
+        wrong = sorted(set(case.not_) & set(ranked))
         if wrong:
-            failures.append(f"{case.where}: {', '.join(wrong)} must not fire")
+            failures.append(f"{case.where}: {', '.join(wrong)} must stay below the cut-off (got {shown})")
+        if case.expected and not (diagnosis.hypotheses and diagnosis.hypotheses[0].expected):
+            failures.append(f"{case.where}: the top hypothesis is not marked expected behavior")
     return len(found), failures

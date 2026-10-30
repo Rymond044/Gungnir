@@ -3,6 +3,7 @@
 from datetime import UTC, datetime, timedelta, timezone
 from fnmatch import fnmatchcase
 
+from gungnir_core.evidence import HOST, Event, Item, Record, Value
 from gungnir_core.hosts import HostSummary
 from gungnir_core.telemetry import FactRow, ProcessRow, SeriesInfo, SourceState
 
@@ -236,3 +237,69 @@ def render_records(rows: list, now: datetime, zone: timezone, title: str) -> str
             seen = ", ".join(f"{k} {format_value(k, v)}" for k, v in sorted(r.context.items()))
             lines.append(f"    during it: {seen}")
     return "\n".join(lines)
+
+
+MARKS = {"matched": "+", "missing": "-", "pending": "?", "unobservable": "."}
+
+
+def render_diagnosis(d, zone: timezone, title: str) -> str:
+    """Ranked hypotheses with their derivation trees, then what nothing
+    explains and the advisory; `d` is a reasoner Diagnosis."""
+
+    def when(t: float) -> str:
+        return datetime.fromtimestamp(t, zone).strftime("%H:%M:%S")
+
+    def short(entity: str | None) -> str:
+        return (entity.rsplit("/", 1)[-1] or entity) if entity else "-"
+
+    def item(i: Item) -> str:
+        if isinstance(i, Record):
+            end = when(i.end) if i.end is not None else "open"
+            where = "" if i.entity == HOST else f" {short(i.entity)}"
+            return f"record {i.id}: {i.signal}{where} {i.direction}, {i.detector}, {when(i.start)}-{end}"
+        if isinstance(i, Value):
+            return f"value {i.signal} {format_value(i.signal, i.value)} on record {i.record or '-'}"
+        if isinstance(i, Event):
+            return f"event {i.type} at {when(i.at)}: {i.message[:80]}"
+        return f"process {i.comm} [{i.pid}] state {i.state} in {short(i.group)} at {when(i.at)}"
+
+    lines = [title, ""]
+    if not d.hypotheses:
+        lines.append("No hypothesis passes the cut-off.")
+    for n, h in enumerate(d.hypotheses, 1):
+        bound = ", ".join(
+            f"{role} {short(value)}"
+            for role, value in (
+                ("culprit", h.binding.culprit),
+                ("device", h.binding.device),
+                ("filesystem", h.binding.filesystem),
+            )
+            if value
+        )
+        flag = "  [expected behavior]" if h.expected else ""
+        head = f"{n}. {h.cause}  {h.confidence:.2f} (support {h.support:.2f})"
+        lines.append("  ".join(x for x in (head, bound, flag.strip()) if x))
+        if h.binding.culprit:
+            lines.append(f"   culprit: {h.binding.culprit}")
+        lines.append(f"   rule: {h.rule.source} [{h.rule.grade}]; windows from {when(h.anchor_at)}")
+        for f in h.found:
+            m = f.manifestation
+            what = " | ".join(m.names) + (f" {m.direction}" if m.direction else "")
+            if m.kind == "value":
+                what += f" <= {m.at_most:g}" if m.at_most is not None else f" > {m.above:g}"
+            window = "anchor" if m.anchor else f"[{m.window[0]}, {m.window[1]}] s"
+            harm = ", harm" if m.harm else ""
+            seen = item(f.item) if f.item else f.status
+            lines.append(f"   {MARKS[f.status]} {m.strength:<14} {what} on {m.role}, {window}{harm}: {seen}")
+        lines.append("")
+    if d.unexplained:
+        lines.append(f"Unexplained ({len(d.unexplained)}):")
+        lines += [f"   {item(i)}" for i in d.unexplained]
+        lines.append("")
+    if d.expected:
+        lines.append(f"Explained as expected behavior: records {', '.join(d.expected)}")
+        lines.append("")
+    for a in d.advisories:
+        lines.append(f"Advisory ({a.resource}): {a.text}")
+        lines.append(f"   source: {a.source}")
+    return "\n".join(lines).rstrip()

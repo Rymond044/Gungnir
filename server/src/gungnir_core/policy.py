@@ -5,7 +5,9 @@ a parameter relative to the target's consumption, read from
 The loader uses the ontology and the causal rules to check each entry:
 the action targets the kind of entity the cause's culprit is, controls a
 resource the cause concerns, takes its parameter from a signal of that
-kind, and is not contraindicated for the cause.
+kind, and is not contraindicated for the cause. An advisory is given for a
+cause, or for a resource when harm is seen and no hypothesis explains it
+(slice S5); every resource that impact is measured on needs one.
 """
 
 from dataclasses import dataclass
@@ -19,7 +21,7 @@ from gungnir_core.rules import STRENGTHS, Rule, names_of
 FIELDS = {
     "policy": {"cause", "action", "target", "when", "parameter", "effectiveness", "side_effects"}
     | {"requires", "excludes", "provenance"},
-    "advisory": {"cause", "text", "provenance"},
+    "advisory": {"cause", "resource", "text", "provenance"},
     "contraindication": {"cause", "actions", "reason", "provenance"},
 }
 TARGETS = ("culprit",)
@@ -51,7 +53,9 @@ class Entry:
 
 @dataclass(frozen=True)
 class Advisory:
-    cause: str
+    # A cause, or a resource; never both.
+    cause: str | None
+    resource: str | None
     text: str
     source: str
 
@@ -89,7 +93,11 @@ def load(onto: Ontology, rules: dict[str, Rule], root: Path | None = None) -> Po
                     problems.append(problem)
                 elif unknown:
                     problems.append(f"{where}: unknown fields {', '.join(sorted(unknown))}")
-                elif str(item.get("cause")) not in rules:
+                elif table == "advisory" and ("cause" in item) == ("resource" in item):
+                    problems.append(f"{where}: an advisory names a cause or a resource")
+                elif "resource" in item and item["resource"] not in onto.resources:
+                    problems.append(f"{where}: unknown resource '{item['resource']}'")
+                elif "resource" not in item and str(item.get("cause")) not in rules:
                     problems.append(f"{where}: '{item.get('cause')}' is not a cause with a rule")
                 else:
                     tables[table].append((where, item))
@@ -110,7 +118,12 @@ def load(onto: Ontology, rules: dict[str, Rule], root: Path | None = None) -> Po
         if not str(item.get("text", "")).strip():
             problems.append(f"{where}: no text")
             continue
-        advisories.append(Advisory(item["cause"], item["text"], item["provenance"]["source"]))
+        advisories.append(
+            Advisory(item.get("cause"), item.get("resource"), item["text"], item["provenance"]["source"])
+        )
+    harmed = {s.resource for s in onto.signals.values() if s.impact}
+    for resource in sorted(harmed - {a.resource for a in advisories}):
+        problems.append(f"impact is measured on {resource}, which has no advisory of its own")
 
     checker = _EntryChecker(onto, rules, contraindicated, problems)
     entries = [e for where, item in tables["policy"] if (e := checker.entry(where, item))]

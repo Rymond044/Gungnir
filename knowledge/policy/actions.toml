@@ -16,7 +16,9 @@
 # which no host has so far; they enter with that condition when one does.
 #
 # [[advisory]]: what to tell the user where no action of the actuator
-# applies or helps. [[contraindication]]: actions never proposed for a
+# applies or helps; with `resource` instead of `cause`, what to tell when
+# that resource is harmed and no hypothesis explains it (scenario С-9).
+# [[contraindication]]: actions never proposed for a
 # cause; the loader refuses a policy entry that names one.
 
 #################################################################
@@ -276,6 +278,29 @@ provenance = { source = "docs/research/cpu.md C5; Gregg pp. 230-231, 245", grade
 cause = "cpu_steal"
 text = "The hypervisor gives this virtual machine's CPUs to others. Check the host's other guests or the instance's CPU limit; move or resize the machine."
 provenance = { source = "docs/research/cpu.md C6; Gregg pp. 595, 604", grade = "documented" }
+
+# Harm without a known cause: the USE method, for the resource whose impact
+# was measured. These name what the host shows and where to look next.
+
+[[advisory]]
+resource = "cpu"
+text = "The CPUs are saturated and no known cause fits. Check whether all CPUs are online, then which groups and processes take the most CPU time (top, systemd-cgtop) and whether one of them runs at its own cpu.max quota; the run queue and load average show how far work waits."
+provenance = { source = "Gregg pp. 245-246, 6.5.2 USE method: errors, utilization per CPU and against a quota, saturation", grade = "documented" }
+
+[[advisory]]
+resource = "memory"
+text = "Memory is under pressure and no known cause fits. Check available memory and swap, page scanning and swapping (vmstat 1), OOM kills (journalctl -k), and which groups use the most memory (systemd-cgtop -m); a group at its own memory limit can swap while the host has memory to spare."
+provenance = { source = "Gregg pp. 324-325, 7.4.2 USE method: utilization, saturation (scanning, paging, swapping, OOM kills, PSI), errors, limits", grade = "documented" }
+
+[[advisory]]
+resource = "disk"
+text = "Waiting on the disk grows and no known cause fits. Check the device's errors first (journalctl -k, smartctl -a), then how busy it is and how long its queue is (iostat -x 1), and which groups do the I/O (systemd-cgtop, the io.stat of each group)."
+provenance = { source = "Gregg pp. 450-451, 9.5.2 USE method: errors first, utilization, saturation as the queue", grade = "documented" }
+
+[[advisory]]
+resource = "filesystem"
+text = "The filesystem is nearly full and no known cause fits. Find what takes the space (du -xh --max-depth=2, btrfs filesystem usage on Btrfs); a nearly full filesystem also writes more slowly, as free space is scattered. Nothing is deleted automatically."
+provenance = { source = "Gregg p. 371, 8.3.16 Capacity: a filling filesystem finds free blocks slowly and does smaller, random I/O", grade = "documented" }
 
 #################################################################
 # Contraindications

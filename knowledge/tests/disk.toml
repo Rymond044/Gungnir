@@ -1,10 +1,13 @@
 # Knowledge tests of the disk domain (slice S4): what is seen, and the root
 # cause the base must return.
 #
-# [[case]]: `expect` is the cause whose rule must fire; without it no rule
-# may fire (a negative case). `within` is the rank the reasoner must give
-# it from S5 on (default 1). `not` lists causes that must not fire.
-# `facts` and `culprit_class` give the context the conditions read.
+# [[case]]: `expect` is the cause the reasoner must rank within `within`
+# (default 1); without it the reasoner may give no hypothesis at all (a
+# negative case). `not` lists causes that must stay below the cut-off.
+# `expected = true` asks that the top hypothesis be marked expected
+# behavior. `unavailable` lists signals, event types or process signs the
+# host does not provide. `facts` and `culprit_class` give the context the
+# conditions read.
 # Seen, each `at` seconds from the case's start:
 #   [[case.record]]  signal, role, direction; record = "impact" with level
 #   [[case.value]]   signal, role, value: a context value on a record
@@ -55,9 +58,50 @@ role = "others"
 direction = "up"
 at = 15
 
+# Scenario С-6: without pressure stall information the others' waiting is
+# unobservable; a process of theirs in state D still shows the harm, and
+# the hypothesis stands with less confidence.
+[[case]]
+name = "a large copy on a host without pressure stall information"
+expect = "bulk_sequential_writer"
+unavailable = ["cgroup.io_pressure_some_ratio", "cgroup.io_pressure_full_ratio", "io.pressure_some_ratio", "io.pressure_full_ratio"]
+not = ["small_random_io", "sync_write_storm", "writeback_storm"]
+provenance = { source = "docs/research/disk-io.md D1; scenario С-6 of the note, 2.2", grade = "documented" }
+
+[[case.record]]
+signal = "cgroup.write_bytes_per_s"
+role = "culprit"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "disk.write_bytes_per_s"
+role = "device"
+direction = "up"
+at = 5
+
+[[case.value]]
+signal = "disk.write_request_bytes"
+role = "device"
+value = 133_000
+at = 5
+
+[[case.record]]
+signal = "disk.read_await_ms"
+role = "device"
+direction = "up"
+at = 15
+
+[[case.sign]]
+sign = "waiting_on_io"
+role = "others"
+at = 20
+
 [[case]]
 name = "a backup of the home directory makes the others wait"
 expect = "bulk_reader"
+culprit_class = "backup"
+expected = true
 not = ["bulk_sequential_writer", "small_random_io", "filesystem_maintenance"]
 provenance = { source = "docs/research/disk-io.md D2; calibration run 20261029T114359Z seqread (others' pressure up to 0.39)", grade = "measured" }
 
@@ -346,6 +390,7 @@ at = 150
 name = "a scrub makes the others wait"
 expect = "filesystem_maintenance"
 culprit_class = "maintenance"
+expected = true
 not = ["bulk_reader", "small_random_io"]
 provenance = { source = "docs/research/disk-io.md D9; Btrfs Scrub: about 80 % of the device bandwidth", grade = "documented" }
 

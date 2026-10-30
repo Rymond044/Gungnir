@@ -1,8 +1,6 @@
-import dataclasses
-
 import pytest
 
-from gungnir_core import base, cases, expected, ontology, policy, rules
+from gungnir_core import base, expected, ontology, policy, rules
 from gungnir_core.knowledge import KnowledgeError
 
 
@@ -118,6 +116,26 @@ cause = "swap_io"
 actions = ["io_max_rbps"]
 reason = "test"
 provenance = { source = "test", grade = "unverified" }
+
+[[advisory]]
+resource = "cpu"
+text = "test"
+provenance = { source = "test", grade = "documented" }
+
+[[advisory]]
+resource = "memory"
+text = "test"
+provenance = { source = "test", grade = "documented" }
+
+[[advisory]]
+resource = "disk"
+text = "test"
+provenance = { source = "test", grade = "documented" }
+
+[[advisory]]
+resource = "filesystem"
+text = "test"
+provenance = { source = "test", grade = "documented" }
 """
 
 
@@ -159,6 +177,18 @@ def test_a_broken_policy_entry_is_refused(onto, shipped, tmp_path, old, new, com
         load_policy(onto, shipped, tmp_path, GOOD_POLICY.replace(old, new, 1))
 
 
+def test_advisories_name_a_cause_or_a_resource_and_cover_every_harmed_resource(onto, shipped, tmp_path):
+    p = load_policy(onto, shipped, tmp_path, GOOD_POLICY)
+    assert {a.resource for a in p.advisories} == {"cpu", "memory", "disk", "filesystem"}
+    both = GOOD_POLICY.replace('resource = "cpu"', 'resource = "cpu"\ncause = "cpu_hog"')
+    with pytest.raises(KnowledgeError, match="a cause or a resource"):
+        load_policy(onto, shipped, tmp_path, both)
+    with pytest.raises(KnowledgeError, match="unknown resource"):
+        load_policy(onto, shipped, tmp_path, GOOD_POLICY.replace('resource = "cpu"', 'resource = "gpu"'))
+    with pytest.raises(KnowledgeError, match="impact is measured on cpu"):
+        load_policy(onto, shipped, tmp_path, GOOD_POLICY.replace('resource = "cpu"', 'cause = "cpu_hog"'))
+
+
 def test_a_contraindicated_action_is_refused(onto, shipped, tmp_path):
     text = GOOD_POLICY.replace('"bulk_sequential_writer"', '"swap_io"').replace(
         '"io_max_wbps"', '"io_max_rbps"'
@@ -183,59 +213,6 @@ def test_expected_behavior_is_checked(onto, tmp_path, entry, complaint):
     )
     with pytest.raises(KnowledgeError, match=complaint):
         expected.load(onto, file)
-
-
-def case(*items, **context) -> cases.Case:
-    return cases.Case(
-        "t", None, 1, (), context.get("facts", {}), context.get("cls"), tuple(items), "t", "disk"
-    )
-
-
-def rec(signal, role, at, direction="up", record="anomaly", level=None):
-    return cases.Item("record", signal, role, at, direction, record, level)
-
-
-def test_a_rule_fires_only_with_its_manifestations_in_their_windows(shipped):
-    rule = shipped["bulk_sequential_writer"]
-    seen = [
-        rec("cgroup.write_bytes_per_s", "culprit", 100),
-        rec("disk.write_bytes_per_s", "device", 105),
-        cases.Item("value", "disk.write_request_bytes", "device", 105, value=131072),
-        rec("cgroup.io_pressure_some_ratio", "others", 110),
-    ]
-    assert cases.fires(rule, case(*seen))
-    # The harm long after the writes is not this cause.
-    late = dataclasses.replace(seen[3], at=300)
-    assert not cases.fires(rule, case(*seen[:3], late))
-    # Small requests are not a sequential writer.
-    small = dataclasses.replace(seen[2], value=4096)
-    assert not cases.fires(rule, case(seen[0], seen[1], small, seen[3]))
-    # A maintenance culprit makes it D9 instead.
-    assert not cases.fires(rule, case(*seen, cls="maintenance"))
-    assert cases.fires(shipped["filesystem_maintenance"], case(*seen, cls="maintenance"))
-
-
-def test_conditions_on_facts(shipped):
-    rule = shipped["swap_io"]
-    seen = [
-        rec("swap.out_pages_per_s", "host", 0),
-        rec("swap.in_pages_per_s", "host", 10),
-        rec("mem.pressure_some_ratio", "host", 20),
-        rec("mem.direct_reclaims_per_s", "host", 20),
-    ]
-    assert cases.fires(rule, case(*seen, facts={"swap.enabled": "yes"}))
-    assert not cases.fires(rule, case(*seen, facts={"swap.enabled": "no"}))
-    # A fact the host did not report does not satisfy a requirement.
-    assert not cases.fires(rule, case(*seen))
-
-
-def test_an_impact_manifestation_needs_an_impact_record(shipped):
-    rule = shipped["filesystem_full"]
-    assert cases.fires(rule, case(rec("fs.used_ratio", "filesystem", 0, record="impact", level="severe")))
-    assert not cases.fires(rule, case(rec("fs.used_ratio", "filesystem", 0)))
-    assert not cases.fires(
-        rule, case(rec("fs.used_ratio", "filesystem", 0, record="impact", level="noticeable"))
-    )
 
 
 CPU_RULE = """
@@ -279,12 +256,7 @@ def test_an_anomaly_may_name_its_detector(onto, tmp_path, shipped):
         load_rule(
             onto, tmp_path, GOOD_RULE.replace('direction = "up"', 'direction = "up"\ndetector = "magic"', 1)
         )
-    leak = shipped["memory_leak"]
-    assert leak.anchor.detectors == ("growth",)
-    harm = rec("mem.direct_reclaims_per_s", "host", 3600)
-    assert cases.fires(leak, case(rec("cgroup.mem_bytes", "culprit", 0), harm)) is False
-    growth = dataclasses.replace(rec("cgroup.mem_bytes", "culprit", 0), detector="growth")
-    assert cases.fires(leak, case(growth, harm))
+    assert shipped["memory_leak"].anchor.detectors == ("growth",)
 
 
 def test_a_weight_takes_a_share_of_its_own_setting(onto, shipped, tmp_path):

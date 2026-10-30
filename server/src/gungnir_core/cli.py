@@ -2,10 +2,11 @@
 
 `serve | migrate | maintain | process | status | host add|list|rotate-token |
 runs import|list|quiet | calibrate | workload show|unmatched|assign | baselines |
-anomalies | replay | evaluate | smd | knowledge check`.
+anomalies | replay | evaluate | smd | knowledge check | diagnose`.
 """
 
 import argparse
+import json
 import logging
 import sys
 from datetime import UTC, date, datetime, timedelta
@@ -18,6 +19,7 @@ from gungnir_core import (
     base,
     baselines,
     capacity,
+    gather,
     hosts,
     labels,
     maintenance,
@@ -29,9 +31,17 @@ from gungnir_core import (
 )
 from gungnir_core.db import database_url, migrate
 from gungnir_core.detection import evaluation, replay, smd
-from gungnir_core.display import host_zone, render_baselines, render_records, render_status, stamp
+from gungnir_core.display import (
+    host_zone,
+    render_baselines,
+    render_diagnosis,
+    render_records,
+    render_status,
+    stamp,
+)
 from gungnir_core.frame import fact_spans, host_series
 from gungnir_core.knowledge import KnowledgeError
+from gungnir_core.reasoner import RuleReasoner, as_dict
 
 
 def main() -> None:
@@ -110,6 +120,15 @@ def main() -> None:
     sm.add_argument("--machine", action="append", help="only these machines")
     sm.add_argument("--out", type=Path)
 
+    dg = commands.add_parser("diagnose", help="ranked hypotheses of an interval, with their derivation trees")
+    dg.add_argument("name")
+    dg.add_argument("--minutes", type=float, default=30, help="the last minutes (30)")
+    dg.add_argument("--since", type=datetime.fromisoformat, help="UTC unless an offset is given")
+    dg.add_argument("--until", type=datetime.fromisoformat)
+    dg.add_argument("--run", help="each phase of this labeled run that is not normal, with its tail")
+    dg.add_argument("--replay", type=int, help="records of this replay instead of live ones")
+    dg.add_argument("--json", action="store_true")
+
     kn = commands.add_parser("knowledge", help="knowledge base").add_subparsers(dest="action", required=True)
     kc = kn.add_parser("check", help="check the ontology and the names the knowledge files use")
     kc.add_argument("--no-reasoner", action="store_true", help="skip HermiT, which needs Java and owlready2")
@@ -162,6 +181,8 @@ def main() -> None:
             run_evaluation(conn, args)
         elif args.command == "anomalies":
             show_anomalies(conn, args)
+        elif args.command == "diagnose":
+            run_diagnosis(conn, args)
         elif args.command == "baselines":
             host = need_host(conn, args.name)
             book = baselines.Book(conn, host, params.load()).at(datetime.now(UTC))
@@ -322,6 +343,39 @@ def show_anomalies(conn: psycopg.Connection, args) -> None:
     source = f"replay {args.replay}" if args.replay else "live"
     title = f"Records on {host.name} ({source}, last {args.hours:g} h, host local time)"
     print(render_records(rows, now, zone, title))
+
+
+def run_diagnosis(conn: psycopg.Connection, args) -> None:
+    host = need_host(conn, args.name)
+    kb, p = base.load(), params.load()
+    reasoner = RuleReasoner(kb, p)
+    zone = host_zone(hosts.summary(conn, host.name))
+    if args.run:
+        phases = [ph for ph in labels.phases_of(conn, host, run=args.run) if not ph.normal]
+        if not phases:
+            sys.exit(f"run '{args.run}' has no phase that is not normal")
+        spans = [(f"phase {ph.phase} ({ph.kind})", ph.since, ph.until + p.label_tail) for ph in phases]
+    else:
+        until = _utc(args.until) if args.until else datetime.now(UTC)
+        since = _utc(args.since) if args.since else until - timedelta(minutes=args.minutes)
+        spans = [("", since, until)]
+    found = []
+    for label, since, until in spans:
+        d = reasoner.diagnose(gather.evidence(conn, host, kb, since, until, args.replay))
+        if args.json:
+            found.append(
+                {"label": label, "since": since.isoformat(), "until": until.isoformat(), **as_dict(d)}
+            )
+            continue
+        source = f", replay {args.replay}" if args.replay else ""
+        title = f"{host.name}, {stamp(since, zone)} - {stamp(until, zone)}{source} {label}".rstrip()
+        print(render_diagnosis(d, zone, title) + "\n")
+    if args.json:
+        print(json.dumps(found, indent=2, ensure_ascii=False))
+
+
+def _utc(ts: datetime) -> datetime:
+    return ts if ts.tzinfo else ts.replace(tzinfo=UTC)
 
 
 def show_status(conn: psycopg.Connection, name: str, groups: bool) -> None:

@@ -3,24 +3,42 @@ events, process signs and facts, with the root cause the base must
 return. Read from `knowledge/tests/*.toml`; the format is described at the
 top of `knowledge/tests/disk.toml`.
 
-Until the reasoner ranks hypotheses (S5), a case checks what the rules
-alone decide: the expected cause's rule fires, and the causes listed in
-`not` do not. A rule fires when its conditions hold, its anchor is
-present, every characteristic manifestation is matched within its window
-from the anchor, and some harm is matched. A case without `expect` is a
-negative one: no rule may fire.
+A case runs through the reasoner (slice S5): the expected cause must rank
+within `within`, the causes listed in `not` must stay below the cut-off,
+and a case without `expect` is a negative one, with no hypothesis at all.
+Roles become fixed entities, so a case needs no group names.
 """
 
 from dataclasses import dataclass
 from pathlib import Path
 
 from gungnir_core import knowledge
+from gungnir_core.evidence import HOST, Event, Evidence, Record, Sign, Value
 from gungnir_core.knowledge import KnowledgeError
 from gungnir_core.ontology import Ontology
-from gungnir_core.rules import CULPRIT_CLASS, DETECTORS, DIRECTIONS, LEVELS, Manifestation, Rule
+from gungnir_core.rules import CULPRIT_CLASS, DETECTORS, DIRECTIONS, LEVELS, Rule
 
 ITEMS = ("record", "value", "event", "sign")
-FIELDS = {"name", "expect", "within", "not", "facts", CULPRIT_CLASS, "provenance", *ITEMS}
+FIELDS = {
+    "name",
+    "expect",
+    "within",
+    "not",
+    "expected",
+    "unavailable",
+    "facts",
+    CULPRIT_CLASS,
+    "provenance",
+    *ITEMS,
+}
+# The entities the roles of a case stand for.
+ENTITIES = {
+    "culprit": "case.slice/culprit.service",
+    "others": "case.slice/other.service",
+    "device": "sda",
+    "filesystem": "/",
+    "host": HOST,
+}
 
 
 @dataclass(frozen=True)
@@ -52,6 +70,10 @@ class Case:
     where: str
     # The test file's stem: disk, memory, cpu, cross.
     domain: str
+    # The top hypothesis must be marked expected behavior.
+    expected: bool = False
+    # Signals, event types and process signs the host does not provide.
+    unavailable: frozenset[str] = frozenset()
 
 
 def directory() -> Path:
@@ -101,6 +123,13 @@ def _read(
     for fact, value in facts.items():
         if fact not in onto.facts or value not in onto.facts[fact].values:
             fail(f"{where}: fact {fact} = {value!r} is not in the ontology")
+    expected = item.get("expected", False)
+    if not isinstance(expected, bool) or (expected and expect is None):
+        fail(f"{where}: expected is true or false, and needs an expected cause")
+    unavailable = item.get("unavailable", [])
+    for unseen in unavailable if isinstance(unavailable, list) else [None]:
+        if not any(unseen in onto.names(c) for c in ("signal", "event", "sign")):
+            fail(f"{where}: unavailable: '{unseen}' is not a signal, event type or process sign")
     culprit_class = item.get(CULPRIT_CLASS)
     if culprit_class is not None and culprit_class not in onto.classes:
         fail(f"{where}: unknown class '{culprit_class}'")
@@ -124,6 +153,8 @@ def _read(
         tuple(items),
         where,
         domain,
+        expected,
+        frozenset(unavailable),
     )
 
 
@@ -163,51 +194,43 @@ def _item(onto: Ontology, kind: str, raw: dict, where: str, problems: list[str])
     return None if len(problems) > before else out
 
 
-def fires(rule: Rule, case: Case) -> bool:
-    if not _conditions_hold(rule, case):
-        return False
-    anchor = rule.anchor
-    characteristic = [m for m in rule.manifestations if m.strength == "characteristic" and not m.anchor]
-    harm = [m for m in rule.manifestations if m.harm]
-    for t0 in (it.at for it in case.items if _matches(anchor, it)):
-
-        def seen(m: Manifestation, t0=t0) -> bool:
-            if m.anchor:
-                return True
-            lo, hi = m.window
-            return any(_matches(m, it) and lo <= it.at - t0 <= hi for it in case.items)
-
-        if all(seen(m) for m in characteristic) and any(seen(m) for m in harm):
-            return True
-    return False
-
-
-def firing(rules: dict[str, Rule], case: Case) -> list[str]:
-    return sorted(cause for cause, rule in rules.items() if fires(rule, case))
-
-
-def _conditions_hold(rule: Rule, case: Case) -> bool:
-    def value(name: str) -> str | None:
-        return case.culprit_class if name == CULPRIT_CLASS else case.facts.get(name)
-
-    if any(value(name) not in allowed for name, allowed in rule.requires.items()):
-        return False
-    return not any(value(name) in banned for name, banned in rule.excludes.items())
-
-
-def _matches(m: Manifestation, it: Item) -> bool:
-    kind = "record" if m.kind == "anomaly" else m.kind
-    if it.kind != kind or it.name not in m.names or it.role != m.role:
-        return False
-    if m.kind == "anomaly":
-        if it.direction != m.direction or m.record not in ("any", it.record):
-            return False
-        if m.detectors and it.detector.split(".")[0] not in m.detectors:
-            return False
-        return m.level is None or it.level == m.level
-    if m.kind == "value":
-        return it.value <= m.at_most if m.at_most is not None else it.value > m.above
-    return True
+def evidence_of(case: Case) -> Evidence:
+    """The case as the reasoner sees it: each role is one entity, and every
+    window has closed."""
+    records, values, events, signs = [], [], [], []
+    for n, it in enumerate(case.items):
+        entity = ENTITIES[it.role]
+        if it.kind == "record":
+            records.append(
+                Record(
+                    f"r{n}",
+                    it.name,
+                    entity,
+                    it.record,
+                    it.detector,
+                    it.direction,
+                    float(it.at),
+                    level=it.level,
+                    workload_class=case.culprit_class,
+                )
+            )
+        elif it.kind == "value":
+            values.append(Value(it.name, entity, it.value, float(it.at)))
+        elif it.kind == "event":
+            events.append(Event(f"e{n}", it.name, float(it.at)))
+        else:
+            group = None if it.role == "host" else entity
+            signs.append(Sign(it.name, it.name, n, "R", group, float(it.at)))
+    classes = {ENTITIES["culprit"]: case.culprit_class} if case.culprit_class else {}
+    return Evidence(
+        tuple(records),
+        tuple(values),
+        tuple(events),
+        tuple(signs),
+        dict(case.facts),
+        classes,
+        unobservable=case.unavailable,
+    )
 
 
 def coverage(rules: dict[str, Rule], cases: list[Case]) -> list[str]:

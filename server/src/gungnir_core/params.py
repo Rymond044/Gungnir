@@ -99,6 +99,15 @@ class Params:
     growth_min_share: float = 0.1
     growth_min_bytes: float = 100 * 1024 * 1024
 
+    # Reasoner (ADRs 0005, 0043): the weights of the words of ADR 0034, the
+    # penalty of a missing manifestation, and the confidence a hypothesis
+    # needs to be shown. Initial values, to be calibrated on the S9 scenarios.
+    strength_weights: dict[str, float] = field(
+        default_factory=lambda: {"characteristic": 0.6, "typical": 0.4, "possible": 0.2}
+    )
+    penalty_alpha: float = 0.5
+    hypothesis_cutoff: float = 0.3
+
     # Detection loop.
     detect_every: timedelta = timedelta(seconds=10)
     # Batches arrive every 10 s; ticks younger than this may be incomplete.
