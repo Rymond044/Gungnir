@@ -104,8 +104,10 @@ class RuleReasoner:
 
     def diagnose(self, ev: Evidence) -> Diagnosis:
         found = [h for rule in self.base.rules.values() for h in self._hypotheses(rule, ev)]
+        # Evidence before the interval only supports what reaches into it.
+        current = [h for h in found if any(inside(f.item, ev) for f in h.with_status(MATCHED))]
         shown = sorted(
-            (h for h in found if h.confidence >= self.cutoff),
+            (h for h in current if h.confidence >= self.cutoff),
             key=lambda h: (-h.confidence, -len(h.with_status(MATCHED)), h.cause, h.binding.culprit or ""),
         )
         explained = {r.id for r in ev.records if self._explained(r, ev)}

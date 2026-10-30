@@ -218,3 +218,9 @@ def test_evidence_a_hypothesis_uses_is_not_unexplained(reasoner):
     before = dataclasses.replace(stray, end=60.0)
     d = reasoner.diagnose(dataclasses.replace(ev(*copy(), before), since=90.0))
     assert d.unexplained == ()
+
+
+def test_a_hypothesis_must_reach_into_the_interval(reasoner):
+    ended = [dataclasses.replace(r, end=r.start + 20) if isinstance(r, Record) else r for r in copy()]
+    assert reasoner.diagnose(dataclasses.replace(ev(*ended), since=110.0)).causes()
+    assert reasoner.diagnose(dataclasses.replace(ev(*ended), since=200.0)).causes() == []
