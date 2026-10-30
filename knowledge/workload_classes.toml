@@ -50,3 +50,20 @@ command = [
     "kotlin-daemon", "gradle", "go", "tsc", "esbuild",
 ]
 provenance = { source = "GCC manual, Overall Options (-v): the driver runs cc1/cc1plus, as and collect2/ld; Clang driver documentation; rustc(1) and the Cargo book; make(1), ninja(1), cmake(1), meson(1); javac(1); go(1) build; tsc and esbuild documentation", grade = "documented" }
+
+[[workload_rule]]
+class = "build"
+priority = 20
+command = ["uv", "pip", "pip3"]
+provenance = { source = "uv documentation (docs.astral.sh/uv): resolves, builds and installs Python packages; pip documentation (pip.pypa.io), pip install: builds wheels from source distributions", grade = "documented" }
+
+# Image builds run inside the Docker daemon (BuildKit); its build steps are
+# transient docker-<id>.scope groups that cannot be told from long-running
+# containers, so the daemon is matched. An idle daemon takes no noticeable
+# share; image pulls are counted as build too.
+[[workload_rule]]
+class = "build"
+priority = 20
+command = ["dockerd", "containerd", "buildkitd"]
+unit = ["docker.service", "containerd.service"]
+provenance = { source = "Docker documentation, BuildKit (docs.docker.com/build/buildkit/): the default builder of Docker Engine since 23.0, run by dockerd; on the laptop on 2026-10-30 a core image build loaded docker.service to 34 % and containerd.service to 33 % of disk I/O", grade = "unverified" }
