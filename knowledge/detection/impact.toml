@@ -43,8 +43,8 @@ provenance = { source = "initial value, to be measured in scenarios (ADR 0025)",
 [[impact]]
 signal = "cpu.pressure_some_ratio"
 level = "noticeable"
-above = 0.50
-provenance = { source = "initial value, to be measured in scenarios (ADR 0025)", grade = "unverified" }
+above = 0.10
+provenance = { source = "culprit run 20261030T191333Z cpu_hog: 18 busy workers on 18 CPUs, a 0.3-core program waited 0.13 on average (0.07-0.21), the host 0.045; idle median 0.001", grade = "measured" }
 
 [[impact]]
 signal = "disk.read_await_ms"
