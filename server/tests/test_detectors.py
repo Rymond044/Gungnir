@@ -237,3 +237,27 @@ def test_growth_needs_rising_hourly_minima_by_a_noticeable_share():
     assert opened[0].records[0].baseline["rise"] == 300 * mib
     # State keeps a few hours per group, as JSON.
     assert set(ctx.state["minima"]) == {"1", "2"}
+
+
+def test_dirty_pages_count_from_the_background_writeback_threshold():
+    n = 20
+    baseline = Fixed({("mem.dirty_bytes", "interactive"): (1e6, 1e4)})
+
+    def dirty_records(peak, **rows):
+        dirty = np.full(n, 1e6)
+        dirty[5:10] = peak
+        f = make_frame({"mem.dirty_bytes": dirty, "mem.available_bytes": np.full(n, 9e9), **rows})
+        return records(Robust(baseline, ewma=False), context(f))
+
+    # A few megabytes come and go with every write.
+    assert dirty_records(13e6) == []
+    # Above the threshold the flusher threads start writing.
+    [(_, opened), _] = dirty_records(1.3e9, **{"mem.dirty_background_bytes": np.full(n, 0.93e9)})
+    assert opened.records[0].baseline["floor"] == "background writeback threshold"
+    assert dirty_records(0.8e9, **{"mem.dirty_background_bytes": np.full(n, 0.93e9)}) == []
+    # Without the agent's threshold, the kernel's default share of available memory.
+    assert dirty_records(0.8e9) == []
+    assert len(dirty_records(1.3e9)) == 2
+    # The threshold itself is never judged.
+    f = make_frame({"mem.dirty_background_bytes": np.r_[np.full(10, 1e9), np.full(10, 1e7)]})
+    assert records(Robust(Fixed({}, cold={"mem.dirty_background_bytes": 1.0})), context(f)) == []

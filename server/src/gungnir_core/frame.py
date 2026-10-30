@@ -29,6 +29,9 @@ CARRIED = ("cgroup.mem_bytes",)
 # every small write, so as series of their own they would only add noise.
 CONTEXT_PREFIXES = ("agent.", "power.")
 CONTEXT_SIGNALS = ("disk.read_request_bytes", "disk.write_request_bytes")
+# Loaded into the frame for detectors to judge other series by, never
+# checked themselves or put into baselines (ADR 0047).
+REFERENCE_SIGNALS = ("mem.dirty_background_bytes",)
 # Group signals that get baselines and may be checked once they have one.
 KEY_GROUP_SIGNALS = (
     "cgroup.cpu_cores",
@@ -56,7 +59,7 @@ def is_group(signal: str) -> bool:
 def is_checked_kind(signal: str) -> bool:
     """Series that get histograms: dense series except context, and the key
     group signals."""
-    if signal.startswith(CONTEXT_PREFIXES) or signal in CONTEXT_SIGNALS:
+    if signal.startswith(CONTEXT_PREFIXES) or signal in CONTEXT_SIGNALS + REFERENCE_SIGNALS:
         return False
     return not is_group(signal) or signal in KEY_GROUP_SIGNALS
 
@@ -155,7 +158,8 @@ def load(
     """The frame of ticks in [since, until). Group samples are read from a
     full period earlier, so that the first ticks know which groups live."""
     every = host_series(conn, host, checked_only=False)
-    series = [s for s in every if is_checked_kind(s.signal)] if series is None else series
+    if series is None:
+        series = [s for s in every if is_checked_kind(s.signal) or s.signal in REFERENCE_SIGNALS]
     wanted = {s.id for s in series}
     # Dense series mark the ticks, whether checked or not.
     dense = {s.id for s in every if not is_group(s.signal)}

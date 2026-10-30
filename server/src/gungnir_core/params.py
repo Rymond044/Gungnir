@@ -64,6 +64,10 @@ class Params:
     # Cold start of the host's available memory (ADR 0047): short below this
     # share of host memory, the default minimum of earlyoom(1), -m 10.
     cold_available_share: float = 0.1
+    # Background writeback threshold as a share of available memory where the
+    # agent does not report it: the kernel's default vm.dirty_background_ratio
+    # (admin-guide/sysctl/vm; mm/page-writeback.c).
+    dirty_background_default: float = 0.1
     # Throughput spread floor: a share of measured capacity.
     capacity_floor_share: float = 0.01
     floors: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_FLOORS))

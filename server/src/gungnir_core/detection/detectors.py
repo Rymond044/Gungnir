@@ -16,7 +16,7 @@ import numpy as np
 from gungnir_core import knowledge
 from gungnir_core.baselines import Book
 from gungnir_core.detection.records import Evaluation, RecordSpec
-from gungnir_core.frame import Frame, SeriesMeta, is_group
+from gungnir_core.frame import REFERENCE_SIGNALS, Frame, SeriesMeta, is_group
 from gungnir_core.params import Params, by_pattern
 
 # MAD of a normal distribution times this is its standard deviation.
@@ -334,9 +334,19 @@ class Robust:
         ewma_state = ctx.state.setdefault("ewma", {})
         out = []
         for i, meta in enumerate(f.series):
+            if meta.signal in REFERENCE_SIGNALS:
+                continue
             x = f.values[i, ctx.start :]
             median, mad, basis = per_tick(self.baselines, meta, classes, powers)
             has_baseline = ~np.isnan(median)
+            floor = dirty_floor(meta, ctx)
+            if floor is not None:
+                raised = has_baseline & (floor > mad)
+                mad = np.where(raised, floor, mad)
+                basis = [
+                    {**b, "mad": float(mad[j]), "floor": "background writeback threshold"} if raised[j] else b
+                    for j, b in enumerate(basis)
+                ]
             cold = self.baselines.cold(meta, ctx)
             if not has_baseline.any() and cold is None:
                 ewma_state.pop(str(meta.id), None)
@@ -398,6 +408,29 @@ class Robust:
             scores,
             lambda j: [RecordSpec(meta.id, direction(signs[j]), basis[j] or {}, float(x[j]))],
         )
+
+
+def dirty_floor(meta: SeriesMeta, ctx: Context) -> np.ndarray | None:
+    """Spread floor of the host's dirty page cache (ADR 0047): a record
+    needs a rise by the background writeback threshold, where the flusher
+    threads start writing (Love pp. 331-332). Below it dirty pages come and
+    go with every write and say nothing about writeback. Without the
+    agent's threshold, the kernel's default ratio of available memory."""
+    if meta.signal != "mem.dirty_bytes":
+        return None
+    f, p = ctx.frame, ctx.params
+    available = f.row("mem.available_bytes")
+    reported = f.row("mem.dirty_background_bytes")
+    default = None if available is None else p.dirty_background_default * available
+    if reported is None and default is None:
+        return None
+    if reported is None:
+        threshold = default
+    elif default is None:
+        threshold = reported
+    else:
+        threshold = np.where(np.isnan(reported), default, reported)
+    return threshold[ctx.start :] / (p.robust_k * MAD_TO_SIGMA)
 
 
 def ewma(x: np.ndarray, lam: float, start: float | None) -> tuple[np.ndarray, float | None]:
