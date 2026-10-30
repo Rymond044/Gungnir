@@ -1,18 +1,19 @@
-//! Paging, reclaim and OOM activity from `/proc/vmstat`.
+//! Paging, reclaim and OOM activity from `/proc/vmstat`, and the kernel's
+//! threshold for background writeback.
 
 use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use super::{Collected, Reading, Roots, Source, rate, read};
+use super::{Collected, Reading, Roots, Source, page_bytes, rate, read};
 
 /// Counters this source turns into signals. Direct reclaim is the sum of the
 /// per-zone `allocstall_*` counters.
 #[derive(Debug, Clone, Default)]
 struct Counters(HashMap<&'static str, u64>);
 
-const KEYS: &[&str] = &["pswpin", "pswpout", "pgmajfault", "oom_kill"];
+const KEYS: &[&str] = &["pswpin", "pswpout", "pgmajfault", "oom_kill", "nr_dirty_background_threshold"];
 
 fn parse(text: &str) -> Counters {
     let mut counters = HashMap::new();
@@ -50,6 +51,12 @@ impl Source for ProcVmstat {
 
     fn collect(&mut self, now: Instant, out: &mut Collected) -> io::Result<()> {
         let cur = parse(&read(&self.path)?);
+        // Dirty pages above this make the flusher threads start writing; the
+        // kernel derives it from vm.dirty_background_ratio or _bytes and the
+        // memory that can be dirtied (admin-guide/sysctl/vm).
+        if let Some(&pages) = cur.0.get("nr_dirty_background_threshold") {
+            out.readings.push(Reading::host("mem.dirty_background_bytes", (pages * page_bytes()) as f64));
+        }
         if let Some((then, prev)) = &self.prev {
             let seconds = now.duration_since(*then).as_secs_f64();
             // Older kernels lack some counters; their signals are skipped.
@@ -92,5 +99,16 @@ mod tests {
         let text = std::fs::read_to_string(fixture_roots().proc.join("vmstat")).unwrap();
         let c = parse(&text);
         assert!(KEYS.iter().all(|k| c.0.contains_key(k)));
+    }
+
+    #[test]
+    fn reports_the_background_writeback_threshold_in_bytes() {
+        let roots = fixture_roots();
+        let mut source = ProcVmstat { path: roots.proc.join("vmstat"), prev: None };
+        let mut out = Collected::default();
+        source.collect(Instant::now(), &mut out).unwrap();
+        // Fixture: nr_dirty_background_threshold 215383 pages.
+        let r = out.readings.iter().find(|r| r.signal == "mem.dirty_background_bytes").unwrap();
+        assert_eq!(r.value, (215383 * page_bytes()) as f64);
     }
 }

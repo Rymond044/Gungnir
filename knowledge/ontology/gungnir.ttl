@@ -449,6 +449,11 @@ signal:mem.dirty_bytes a g:Signal , owl:NamedIndividual ;
     g:measures res:memory ; g:observedOn kind:host ; g:unit "bytes" ; g:signalKind "level" ;
     g:source "proc_meminfo(5) Dirty; Love p. 331" ; g:grade "documented" .
 
+signal:mem.dirty_background_bytes a g:Signal , owl:NamedIndividual ;
+    rdfs:comment "Dirty page cache above which the flusher threads start writing back; a reference for judging mem.dirty_bytes, never checked itself."@en ;
+    g:measures res:memory ; g:observedOn kind:host ; g:unit "bytes" ; g:signalKind "level" ;
+    g:source "/proc/vmstat nr_dirty_background_threshold; admin-guide/sysctl/vm dirty_background_ratio; Love pp. 331-332" ; g:grade "documented" .
+
 signal:mem.writeback_bytes a g:Signal , owl:NamedIndividual ;
     rdfs:comment "Page cache being written back now."@en ;
     g:measures res:memory ; g:observedOn kind:host ; g:unit "bytes" ; g:signalKind "level" ;
