@@ -1,0 +1,279 @@
+# Knowledge tests of the memory domain: format as in disk.toml. A record
+# may name its `detector` (robust unless given; impact for impact records).
+
+# The leak harms hours after the growth record opened. Swap I/O does not
+# fire: no swap-in, and the facts say nothing of swap.
+[[case]]
+name = "a service leaks for hours until the others are short of memory"
+expect = "memory_leak"
+not = ["memory_hog", "memory_exhaustion", "swap_io"]
+provenance = { source = "docs/research/memory.md M1; Gregg pp. 316, 326", grade = "documented" }
+
+[[case.record]]
+signal = "cgroup.mem_bytes"
+role = "culprit"
+direction = "up"
+detector = "growth"
+at = 0
+
+[[case.record]]
+signal = "mem.available_bytes"
+role = "host"
+direction = "down"
+at = 7_200
+
+[[case.record]]
+signal = "swap.out_pages_per_s"
+role = "host"
+direction = "up"
+at = 10_800
+
+[[case.record]]
+signal = "mem.direct_reclaims_per_s"
+role = "host"
+direction = "up"
+at = 10_810
+
+[[case.record]]
+signal = "cgroup.mem_pressure_some_ratio"
+role = "others"
+direction = "up"
+at = 10_820
+
+[[case]]
+name = "a program allocates gigabytes at once"
+expect = "memory_hog"
+not = ["memory_leak", "memory_exhaustion", "tmpfs_growth"]
+facts = { "swap.enabled" = "yes" }
+provenance = { source = "docs/research/memory.md M2; overhead run 20261028T195813Z phase memory (direct reclaims 1.8 k/s, swap out 527 pages/s, others' pressure up to 0.048)", grade = "measured" }
+
+[[case.record]]
+signal = "cgroup.mem_bytes"
+role = "culprit"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "mem.available_bytes"
+role = "host"
+direction = "down"
+at = 5
+
+[[case.record]]
+signal = "mem.cached_bytes"
+role = "host"
+direction = "down"
+at = 10
+
+[[case.sign]]
+sign = "kswapd"
+role = "host"
+at = 10
+
+[[case.record]]
+signal = "swap.out_pages_per_s"
+role = "host"
+direction = "up"
+at = 15
+
+[[case.record]]
+signal = "mem.direct_reclaims_per_s"
+role = "host"
+direction = "up"
+at = 15
+
+[[case.record]]
+signal = "cgroup.mem_pressure_some_ratio"
+role = "others"
+direction = "up"
+at = 20
+
+[[case]]
+name = "the kernel kills the largest process"
+expect = "memory_exhaustion"
+not = ["group_memory_limit"]
+provenance = { source = "docs/research/memory.md M3; Bovet p. 710", grade = "documented" }
+
+[[case.record]]
+signal = "cgroup.mem_bytes"
+role = "culprit"
+direction = "up"
+at = -900
+
+[[case.record]]
+signal = "mem.available_bytes"
+role = "host"
+direction = "down"
+at = -300
+
+[[case.record]]
+signal = "mem.pressure_full_ratio"
+role = "host"
+direction = "up"
+at = -120
+
+[[case.record]]
+signal = "mem.oom_kills"
+role = "host"
+direction = "up"
+record = "impact"
+level = "severe"
+at = 0
+
+[[case.event]]
+event = "oom_kill"
+at = 0
+
+[[case.event]]
+event = "unit_out_of_memory"
+at = 2
+
+# The global counter counts kills in groups too, but the kernel prints a
+# different message, so M3 does not fire.
+[[case]]
+name = "a container is killed at its own memory limit"
+expect = "group_memory_limit"
+not = ["memory_exhaustion", "memory_hog"]
+provenance = { source = "docs/research/memory.md M4; admin-guide/cgroup-v2 memory.max; Gregg p. 317", grade = "documented" }
+
+[[case.record]]
+signal = "cgroup.mem_max_events"
+role = "others"
+direction = "up"
+record = "impact"
+level = "noticeable"
+at = 0
+
+[[case.record]]
+signal = "cgroup.mem_pressure_some_ratio"
+role = "others"
+direction = "up"
+at = 5
+
+[[case.record]]
+signal = "cgroup.oom_kills"
+role = "others"
+direction = "up"
+record = "impact"
+level = "severe"
+at = 30
+
+[[case.record]]
+signal = "mem.oom_kills"
+role = "host"
+direction = "up"
+record = "impact"
+level = "severe"
+at = 30
+
+[[case.event]]
+event = "memcg_oom_kill"
+at = 30
+
+[[case]]
+name = "a unit stalls at its MemoryHigh"
+expect = "group_memory_throttled"
+not = ["group_memory_limit"]
+provenance = { source = "docs/research/memory.md M5; admin-guide/cgroup-v2 memory.events high", grade = "documented" }
+
+[[case.record]]
+signal = "cgroup.mem_high_events"
+role = "others"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "cgroup.mem_pressure_some_ratio"
+role = "others"
+direction = "up"
+at = 10
+
+[[case]]
+name = "an archive unpacked into /tmp fills memory"
+expect = "tmpfs_growth"
+not = ["memory_hog", "kernel_memory_growth"]
+provenance = { source = "docs/research/memory.md M6; filesystems/proc meminfo Shmem", grade = "documented" }
+
+[[case.record]]
+signal = "mem.shmem_bytes"
+role = "host"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "mem.available_bytes"
+role = "host"
+direction = "down"
+at = 10
+
+[[case.record]]
+signal = "mem.direct_reclaims_per_s"
+role = "host"
+direction = "up"
+at = 120
+
+[[case.record]]
+signal = "mem.pressure_some_ratio"
+role = "host"
+direction = "up"
+at = 125
+
+[[case]]
+name = "a driver leaks kernel memory"
+expect = "kernel_memory_growth"
+not = ["memory_leak", "tmpfs_growth"]
+provenance = { source = "docs/research/memory.md M7; Gregg p. 325", grade = "documented" }
+
+[[case.record]]
+signal = "mem.slab_unreclaimable_bytes"
+role = "host"
+direction = "up"
+detector = "robust"
+at = 0
+
+[[case.record]]
+signal = "mem.available_bytes"
+role = "host"
+direction = "down"
+at = 3_600
+
+[[case.record]]
+signal = "mem.pressure_some_ratio"
+role = "host"
+direction = "up"
+at = 20_000
+
+# Negative cases: memory used, nobody harmed.
+
+[[case]]
+name = "a large allocation that fits"
+facts = { "swap.enabled" = "yes" }
+provenance = { source = "calibration run 20261029T114359Z mem-50: 4.4 GiB kept, no direct reclaim at the median, others' pressure under 0.02", grade = "measured" }
+
+[[case.record]]
+signal = "cgroup.mem_bytes"
+role = "culprit"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "mem.available_bytes"
+role = "host"
+direction = "down"
+at = 5
+
+[[case]]
+name = "a cache warms up for an hour"
+provenance = { source = "Gregg p. 327: cache warm-up is growth, not a leak; it stops, and no growth record opens", grade = "documented" }
+
+[[case.record]]
+signal = "cgroup.mem_bytes"
+role = "culprit"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "mem.cached_bytes"
+role = "host"
+direction = "up"
+at = 0

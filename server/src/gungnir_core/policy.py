@@ -38,7 +38,9 @@ class Entry:
     target: str
     # The culprit manifestation's alternative that must have matched.
     when: str | None
-    signal: str
+    # The parameter is `share` of the target's current value of `signal`,
+    # or of the action's own current setting (a weight) when there is none.
+    signal: str | None
     share: float
     effectiveness: str
     side_effects: tuple[SideEffect, ...]
@@ -161,12 +163,14 @@ class _EntryChecker:
 
         param = item.get("parameter")
         signal, share = None, None
-        if not isinstance(param, dict) or set(param) != {"signal", "share"}:
-            fail(f"{where}: parameter must be {{ signal = ..., share = ... }}")
+        if not isinstance(param, dict) or set(param) not in ({"signal", "share"}, {"share"}):
+            fail(f"{where}: parameter must be {{ signal = ..., share = ... }} or {{ share = ... }}")
         else:
-            signal, share = param["signal"], param["share"]
-            problem = self.onto.missing("signal", str(signal), where)
-            if problem:
+            signal, share = param.get("signal"), param["share"]
+            if signal is None:
+                if not action.proportional:
+                    fail(f"{where}: only a weight takes a share of its own setting; name a signal")
+            elif problem := self.onto.missing("signal", str(signal), where):
                 fail(problem)
             elif self.onto.signals[signal].entity != action.target:
                 fail(f"{where}: the parameter's signal {signal} is not observed on a {action.target}")

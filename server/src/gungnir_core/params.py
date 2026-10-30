@@ -21,6 +21,8 @@ DEFAULT_FLOORS = {
     "*_per_s": 1.0,
     "*_ms": 0.5,
     "*_tasks": 1.0,
+    "*_c": 2.0,
+    "cpu.thermal_throttles": 1.0,
     "*_cores": 0.05,
     # A desktop's services wake up and go back to sleep all the time.
     "cgroup.*_cores": 0.1,
@@ -89,6 +91,13 @@ class Params:
     iforest_quantile: float = 0.999
     iforest_min_minutes: int = 1440
     iforest_named: int = 3
+
+    # Growth of group memory (docs/research/memory.md MG3): hours in a row
+    # whose minima rose, and the smallest total rise that counts. Initial
+    # values, to be calibrated on the S9 scenarios.
+    growth_hours: int = 3
+    growth_min_share: float = 0.1
+    growth_min_bytes: float = 100 * 1024 * 1024
 
     # Detection loop.
     detect_every: timedelta = timedelta(seconds=10)

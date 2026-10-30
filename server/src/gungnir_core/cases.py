@@ -17,7 +17,7 @@ from pathlib import Path
 from gungnir_core import knowledge
 from gungnir_core.knowledge import KnowledgeError
 from gungnir_core.ontology import Ontology
-from gungnir_core.rules import CULPRIT_CLASS, DIRECTIONS, LEVELS, Manifestation, Rule
+from gungnir_core.rules import CULPRIT_CLASS, DETECTORS, DIRECTIONS, LEVELS, Manifestation, Rule
 
 ITEMS = ("record", "value", "event", "sign")
 FIELDS = {"name", "expect", "within", "not", "facts", CULPRIT_CLASS, "provenance", *ITEMS}
@@ -35,6 +35,8 @@ class Item:
     record: str = "anomaly"
     level: str | None = None
     value: float | None = None
+    # The detector of a record: robust unless given.
+    detector: str = "robust"
 
 
 @dataclass(frozen=True)
@@ -145,11 +147,14 @@ def _item(onto: Ontology, kind: str, raw: dict, where: str, problems: list[str])
     out = Item(kind, name, role, at)
     if kind == "record":
         direction, record, level = raw.get("direction"), raw.get("record", "anomaly"), raw.get("level")
+        detector = raw.get("detector", "impact" if record == "impact" else "robust")
         if direction not in DIRECTIONS:
             fail(f"{where}: direction must be up or down")
         if record not in ("anomaly", "impact") or (level is not None and level not in LEVELS):
             fail(f"{where}: record is anomaly or impact, level noticeable or severe")
-        out = Item(kind, name, role, at, direction, record, level)
+        if record == "anomaly" and detector not in DETECTORS:
+            fail(f"{where}: detector must be one of {', '.join(DETECTORS)}")
+        out = Item(kind, name, role, at, direction, record, level, detector=detector)
     elif kind == "value":
         value = raw.get("value")
         if not isinstance(value, int | float) or isinstance(value, bool):
@@ -196,6 +201,8 @@ def _matches(m: Manifestation, it: Item) -> bool:
         return False
     if m.kind == "anomaly":
         if it.direction != m.direction or m.record not in ("any", it.record):
+            return False
+        if m.detectors and it.detector.split(".")[0] not in m.detectors:
             return False
         return m.level is None or it.level == m.level
     if m.kind == "value":

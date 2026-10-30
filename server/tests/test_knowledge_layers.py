@@ -221,6 +221,7 @@ def test_conditions_on_facts(shipped):
         rec("swap.out_pages_per_s", "host", 0),
         rec("swap.in_pages_per_s", "host", 10),
         rec("mem.pressure_some_ratio", "host", 20),
+        rec("mem.direct_reclaims_per_s", "host", 20),
     ]
     assert cases.fires(rule, case(*seen, facts={"swap.enabled": "yes"}))
     assert not cases.fires(rule, case(*seen, facts={"swap.enabled": "no"}))
@@ -235,3 +236,65 @@ def test_an_impact_manifestation_needs_an_impact_record(shipped):
     assert not cases.fires(
         rule, case(rec("fs.used_ratio", "filesystem", 0, record="impact", level="noticeable"))
     )
+
+
+CPU_RULE = """
+[[rule]]
+cause = "cpu_hog"
+provenance = { source = "test", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "cgroup.cpu_cores"
+direction = "up"
+role = "culprit"
+anchor = true
+strength = "characteristic"
+provenance = { source = "test", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "cpu.iowait_ratio"
+direction = "up"
+role = "host"
+window = [0, 30]
+strength = "typical"
+harm = true
+provenance = { source = "test", grade = "documented" }
+"""
+
+
+def test_a_signal_that_reflects_the_disk_is_no_evidence_for_the_cpu(onto, tmp_path):
+    with pytest.raises(KnowledgeError, match="reflects waiting on disk"):
+        load_rule(onto, tmp_path, CPU_RULE)
+    # The disk's own rules may use it.
+    [rule] = load_rule(
+        onto,
+        tmp_path,
+        CPU_RULE.replace("cpu_hog", "bulk_reader").replace("cgroup.cpu_cores", "cgroup.read_bytes_per_s"),
+    ).values()
+    assert rule.manifestations[1].names == ("cpu.iowait_ratio",)
+
+
+def test_an_anomaly_may_name_its_detector(onto, tmp_path, shipped):
+    with pytest.raises(KnowledgeError, match="detector must name"):
+        load_rule(
+            onto, tmp_path, GOOD_RULE.replace('direction = "up"', 'direction = "up"\ndetector = "magic"', 1)
+        )
+    leak = shipped["memory_leak"]
+    assert leak.anchor.detectors == ("growth",)
+    harm = rec("mem.direct_reclaims_per_s", "host", 3600)
+    assert cases.fires(leak, case(rec("cgroup.mem_bytes", "culprit", 0), harm)) is False
+    growth = dataclasses.replace(rec("cgroup.mem_bytes", "culprit", 0), detector="growth")
+    assert cases.fires(leak, case(growth, harm))
+
+
+def test_a_weight_takes_a_share_of_its_own_setting(onto, shipped, tmp_path):
+    text = GOOD_POLICY.replace(
+        'cause = "bulk_sequential_writer"\naction = "io_max_wbps"', 'cause = "cpu_hog"\naction = "cpu_weight"'
+    )
+    text = text.replace(
+        'parameter = { signal = "cgroup.write_bytes_per_s", share = 0.5 }', "parameter = { share = 0.25 }"
+    )
+    [entry] = load_policy(onto, shipped, tmp_path, text).for_cause("cpu_hog")
+    assert (entry.signal, entry.share) == (None, 0.25)
+    with pytest.raises(KnowledgeError, match="only a weight"):
+        load_policy(onto, shipped, tmp_path, GOOD_POLICY.replace('signal = "cgroup.write_bytes_per_s", ', ""))

@@ -1,11 +1,13 @@
-# Action policy (ADR 0035), disk domain first: which action treats which
-# root cause, from docs/research/disk-io.md.
+# Action policy (ADR 0035): which action treats which root cause, from the
+# research dossiers docs/research/{disk-io,memory,cpu,cross-effects}.md.
 #
 # [[policy]]: an action type of the ontology on the entity of `target` (a
 # role; the culprit for now). `parameter` is relative to what the target
 # consumes now: `share` of the current value of `signal` on it. `when`
 # names the alternative of the rule's culprit manifestation that must have
-# matched, where a rule allows reads or writes. `requires`/`excludes` name
+# matched, where a rule allows reads or writes. A weight (an action the
+# ontology marks proportional) takes `parameter = { share = ... }`, a share
+# of its current weight. `requires`/`excludes` name
 # context facts as in the rules. Effectiveness and the likelihood of each
 # side effect are in the words of strength (ADR 0034).
 #
@@ -100,6 +102,87 @@ effectiveness = "typical"
 side_effects = [{ effect = "the maintenance job takes longer", likelihood = "characteristic" }]
 provenance = { source = "docs/research/disk-io.md D9; btrfs-balance(8) Performance implications; admin-guide/cgroup-v2 io.max", grade = "documented" }
 
+# Memory. memory.high throttles and reclaims above it and never OOM-kills
+# (admin-guide/cgroup-v2); the share keeps a leak 10 % of room and stops a
+# fast grower where it stands.
+
+[[policy]]
+cause = "memory_leak"
+action = "memory_high"
+target = "culprit"
+parameter = { signal = "cgroup.mem_bytes", share = 1.1 }
+effectiveness = "typical"
+side_effects = [{ effect = "the culprit runs slower and its own pages are reclaimed or swapped", likelihood = "characteristic" }]
+provenance = { source = "docs/research/memory.md M1; admin-guide/cgroup-v2 memory.high: the main mechanism to control memory usage", grade = "documented" }
+
+[[policy]]
+cause = "memory_hog"
+action = "memory_high"
+target = "culprit"
+parameter = { signal = "cgroup.mem_bytes", share = 1.0 }
+effectiveness = "typical"
+side_effects = [{ effect = "the culprit runs slower and its own pages are reclaimed or swapped", likelihood = "characteristic" }]
+provenance = { source = "docs/research/memory.md M2; admin-guide/cgroup-v2 memory.high", grade = "documented" }
+
+# The grower may already be the victim of the kill.
+[[policy]]
+cause = "memory_exhaustion"
+action = "memory_high"
+target = "culprit"
+parameter = { signal = "cgroup.mem_bytes", share = 1.0 }
+effectiveness = "possible"
+side_effects = [{ effect = "the culprit runs slower and its own pages are reclaimed or swapped", likelihood = "characteristic" }]
+provenance = { source = "docs/research/memory.md M3; admin-guide/cgroup-v2 memory.high", grade = "documented" }
+
+# Throttling the grower makes it reclaim its own pages instead of the others'.
+[[policy]]
+cause = "swap_io"
+action = "memory_high"
+target = "culprit"
+parameter = { signal = "cgroup.mem_bytes", share = 1.0 }
+effectiveness = "typical"
+side_effects = [{ effect = "the culprit swaps harder and slows down", likelihood = "characteristic" }]
+provenance = { source = "docs/research/cross-effects.md X1; admin-guide/cgroup-v2 memory.high", grade = "documented" }
+
+# CPU. The weight acts only under contention, so it is proposed first; the
+# bandwidth limit holds whatever the others do.
+
+[[policy]]
+cause = "cpu_hog"
+action = "cpu_weight"
+target = "culprit"
+parameter = { share = 0.25 }
+effectiveness = "typical"
+side_effects = [{ effect = "the culprit runs slower while others want the CPU", likelihood = "characteristic" }]
+provenance = { source = "docs/research/cpu.md C1; admin-guide/cgroup-v2 cpu.weight (default 100); Gregg p. 253 (shares)", grade = "documented" }
+
+[[policy]]
+cause = "cpu_hog"
+action = "cpu_max"
+target = "culprit"
+parameter = { signal = "cgroup.cpu_cores", share = 0.5 }
+effectiveness = "typical"
+side_effects = [{ effect = "the culprit runs slower even when CPUs are idle", likelihood = "characteristic" }]
+provenance = { source = "docs/research/cpu.md C1; admin-guide/cgroup-v2 cpu.max", grade = "documented" }
+
+[[policy]]
+cause = "process_churn"
+action = "cpu_weight"
+target = "culprit"
+parameter = { share = 0.25 }
+effectiveness = "typical"
+side_effects = [{ effect = "the culprit runs slower while others want the CPU", likelihood = "characteristic" }]
+provenance = { source = "docs/research/cpu.md C2; admin-guide/cgroup-v2 cpu.weight", grade = "documented" }
+
+[[policy]]
+cause = "process_churn"
+action = "cpu_max"
+target = "culprit"
+parameter = { signal = "cgroup.cpu_cores", share = 0.5 }
+effectiveness = "typical"
+side_effects = [{ effect = "the culprit runs slower even when CPUs are idle", likelihood = "characteristic" }]
+provenance = { source = "docs/research/cpu.md C2; admin-guide/cgroup-v2 cpu.max", grade = "documented" }
+
 #################################################################
 # Advisories
 #################################################################
@@ -124,6 +207,76 @@ cause = "device_errors"
 text = "The device reports errors. Copy important data off it now, read its SMART data (smartctl -a), and check the cable and the firmware. Limiting I/O does not help."
 provenance = { source = "docs/research/disk-io.md D8; Gregg p. 451 (errors first in the USE method; smartctl)", grade = "documented" }
 
+[[advisory]]
+cause = "memory_leak"
+text = "The group named as culprit has grown for hours. Restart its service at a convenient time and report the leak: the fix is in the program. Check first whether it is a cache warming up, which stops growing."
+provenance = { source = "docs/research/memory.md M1; Gregg p. 327", grade = "documented" }
+
+[[advisory]]
+cause = "memory_hog"
+text = "The group named as culprit allocated much memory at once. If this is its normal work, give it MemoryHigh= in its unit or run it when the host is free; add memory or swap if it must run alongside the others."
+provenance = { source = "docs/research/memory.md M2; systemd.resource-control(5) MemoryHigh=", grade = "documented" }
+
+[[advisory]]
+cause = "memory_exhaustion"
+text = "The kernel killed a process to free memory. The journal names the victim; the group that grew before it is the likely cause. Set MemoryHigh= on that unit, and add swap or memory if the host's work does not fit."
+provenance = { source = "docs/research/memory.md M3; Gregg p. 324; Bovet p. 710", grade = "documented" }
+
+[[advisory]]
+cause = "group_memory_limit"
+text = "A group reached its own MemoryMax= and was reclaimed or OOM-killed inside it while the host had memory. Raise the limit in its unit or find why it grows; gungnIR does not change configured limits."
+provenance = { source = "docs/research/memory.md M4; admin-guide/cgroup-v2 memory.max; Gregg p. 317", grade = "documented" }
+
+[[advisory]]
+cause = "group_memory_throttled"
+text = "A group is held at its MemoryHigh= and its processes are throttled. If gungnIR set the limit, it is rolled back by its timer; otherwise raise MemoryHigh= in the unit or reduce what the program keeps in memory."
+provenance = { source = "docs/research/memory.md M5; admin-guide/cgroup-v2 memory.high", grade = "documented" }
+
+[[advisory]]
+cause = "tmpfs_growth"
+text = "Files in tmpfs hold memory. Check df -h /tmp /dev/shm /run and remove what is no longer needed; nothing is deleted automatically."
+provenance = { source = "docs/research/memory.md M6; filesystems/proc meminfo Shmem", grade = "documented" }
+
+[[advisory]]
+cause = "kernel_memory_growth"
+text = "Kernel memory that cannot be reclaimed keeps growing. slabtop names the cache; a kernel or driver update usually fixes it, and a reboot frees it."
+provenance = { source = "docs/research/memory.md M7; Gregg pp. 318, 325", grade = "documented" }
+
+[[advisory]]
+cause = "page_cache_thrashing"
+text = "The programs' working data no longer fits in memory and is read from disk again and again. Reduce what runs at once or add memory; limiting their I/O only makes every re-read slower."
+provenance = { source = "docs/research/cross-effects.md X2; Gregg pp. 310, 390", grade = "documented" }
+
+[[advisory]]
+cause = "swap_io"
+text = "Memory is short and pages move to and from swap. Set MemoryHigh= on the group that grew, or add memory."
+provenance = { source = "docs/research/cross-effects.md X1; Gregg pp. 306-307", grade = "documented" }
+
+[[advisory]]
+cause = "process_churn"
+text = "Many short-lived processes are being started. Replace external commands in loops with shell built-ins; for a service that keeps restarting, read its unit's log."
+provenance = { source = "docs/research/cpu.md C2; Gregg pp. 207, 250", grade = "documented" }
+
+[[advisory]]
+cause = "interrupt_storm"
+text = "Interrupt handling takes the CPU. /proc/interrupts shows which line rises; check that device, its driver and its firmware."
+provenance = { source = "docs/research/cpu.md C3; Gregg pp. 259, 281", grade = "documented" }
+
+[[advisory]]
+cause = "cpu_quota_throttling"
+text = "A group is held at its own CPUQuota=. Raise the quota in its unit or reduce its work; tightening it further makes it worse."
+provenance = { source = "docs/research/cpu.md C4; admin-guide/cgroup-v2 cpu.max; Gregg p. 246", grade = "documented" }
+
+[[advisory]]
+cause = "thermal_throttling"
+text = "The processor overheats and lowers its clock. Check the fan and the vents for dust, keep the laptop on a hard surface, and choose a quieter power profile; reducing sustained load helps too."
+provenance = { source = "docs/research/cpu.md C5; Gregg pp. 230-231, 245", grade = "documented" }
+
+[[advisory]]
+cause = "cpu_steal"
+text = "The hypervisor gives this virtual machine's CPUs to others. Check the host's other guests or the instance's CPU limit; move or resize the machine."
+provenance = { source = "docs/research/cpu.md C6; Gregg pp. 595, 604", grade = "documented" }
+
 #################################################################
 # Contraindications
 #################################################################
@@ -133,3 +286,15 @@ cause = "swap_io"
 actions = ["io_max_rbps", "io_max_wbps", "io_max_riops", "io_max_wiops"]
 reason = "throttling swap I/O lengthens every page-in of the victims"
 provenance = { source = "docs/research/disk-io.md D10, inferred", grade = "unverified" }
+
+[[contraindication]]
+cause = "page_cache_thrashing"
+actions = ["io_max_rbps", "io_max_wbps", "io_max_riops", "io_max_wiops"]
+reason = "throttling the re-reads lengthens every page fault of the victims"
+provenance = { source = "docs/research/cross-effects.md X2, inferred as for D10", grade = "unverified" }
+
+[[contraindication]]
+cause = "cpu_quota_throttling"
+actions = ["cpu_max"]
+reason = "the group already waits at its own quota"
+provenance = { source = "docs/research/cpu.md C4; Gregg p. 246", grade = "documented" }

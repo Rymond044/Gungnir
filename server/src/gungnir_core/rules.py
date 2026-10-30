@@ -18,6 +18,9 @@ KINDS = ("anomaly", "value", "event", "sign")
 STRENGTHS = ("characteristic", "typical", "possible")
 DIRECTIONS = ("up", "down")
 RECORDS = ("any", "anomaly", "impact")
+# Detectors an anomaly manifestation may name; a record of "robust.mad" or
+# "robust.ewma" counts as "robust".
+DETECTORS = ("threshold", "robust", "iforest", "growth")
 LEVELS = ("noticeable", "severe")
 # The workload class of the culprit's group, a condition beside the facts.
 CULPRIT_CLASS = "culprit_class"
@@ -25,7 +28,7 @@ SIGN_ROLES = ("culprit", "others", "host")
 # Where each kind looks its names up in the ontology.
 CATEGORY = {"anomaly": "signal", "value": "signal", "event": "event", "sign": "sign"}
 FIELDS = {
-    "anomaly": {"direction", "record", "level"},
+    "anomaly": {"direction", "record", "level", "detector"},
     "value": {"at_most", "above"},
     "event": set(),
     "sign": set(),
@@ -47,6 +50,8 @@ class Manifestation:
     direction: str | None = None
     record: str = "any"
     level: str | None = None
+    # Detectors whose records count; empty means any.
+    detectors: tuple[str, ...] = ()
     at_most: float | None = None
     above: float | None = None
     source: str = ""
@@ -136,6 +141,7 @@ class _Checker:
         excludes = self.conditions(item.get("excludes", {}), "excludes")
         if len(manifestations) == len(items):
             self.whole(manifestations, cause.culprit, requires | excludes)
+            self.reflected(manifestations, cause.resources)
         if len(self.problems) > before:
             return None
         return Rule(
@@ -234,7 +240,12 @@ class _Checker:
                 self.fail(f"{where}: detection never checks {name}, so it has no records")
             if record == "impact" and not self.onto.signals[name].impact:
                 self.fail(f"{where}: {name} is not an impact signal")
-        return replace(out, direction=direction, record=record, level=level)
+        detectors = names_of(m["detector"]) if "detector" in m else ()
+        if "detector" in m and (not detectors or not set(detectors) <= set(DETECTORS)):
+            self.fail(f"{where}: detector must name some of {', '.join(DETECTORS)}")
+        if detectors and record == "impact":
+            self.fail(f"{where}: impact records come from the impact detector only")
+        return replace(out, direction=direction, record=record, level=level, detectors=detectors)
 
     def _value(self, m: dict, out: Manifestation, where: str) -> Manifestation:
         self._signals(out, where)
@@ -278,6 +289,18 @@ class _Checker:
                 continue
             out[name] = frozenset(values)
         return out
+
+    def reflected(self, ms: tuple[Manifestation, ...], resources: frozenset[str]) -> None:
+        """A signal driven by waiting on another resource is evidence only
+        for a cause that concerns that resource (cross-effects dossier)."""
+        for m in ms:
+            if m.kind not in ("anomaly", "value"):
+                continue
+            for name in m.names:
+                reflects = self.onto.signals[name].reflects
+                if reflects and not reflects & resources:
+                    waits = ", ".join(sorted(reflects))
+                    self.fail(f"{name} reflects waiting on {waits}, which this cause does not concern")
 
     def whole(self, ms: tuple[Manifestation, ...], culprit: str | None, conditions: dict) -> None:
         """What ADR 0034 asks of a rule as a whole."""

@@ -18,6 +18,7 @@ from psycopg.types.json import Jsonb
 from gungnir_core import frame
 from gungnir_core.baselines import Book, context_on, floor_hour
 from gungnir_core.detection.detectors import BookBaselines, Context, Detector, Robust, impact, thresholds
+from gungnir_core.detection.growth import Growth
 from gungnir_core.detection.records import Closed, Opened, Tracker
 from gungnir_core.hosts import Host
 from gungnir_core.params import Params
@@ -79,18 +80,20 @@ VARIANTS = {
         Variant("iforest", _forest),
         Variant("robust-classes+iforest", _with_forest(_robust(per_class=True))),
         Variant("impact", lambda conn, host, params: [impact(host.name)]),
+        Variant("growth", lambda conn, host, params: [Growth()]),
     )
 }
 
 
 def live_detectors(conn: psycopg.Connection, host: Host, params: Params) -> list[Detector]:
     """Every branch at once: the control thresholds, robust statistics with
-    workload classes, the forest, and impact."""
+    workload classes, the forest, impact, and the growth of group memory."""
     return [
         thresholds(host.name),
         *_robust(per_class=True)(conn, host, params),
         *_forest(conn, host, params, store=True),
         impact(host.name),
+        Growth(),
     ]
 
 

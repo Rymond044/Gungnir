@@ -197,6 +197,12 @@ def against(signal: str, basis: dict) -> str:
         if basis.get("above") is not None:
             return f"limit above {format_value(signal, basis['above'])}"
         return f"limit below {format_value(signal, basis['below'])}"
+    if kind == "growth":
+        hours = len(basis.get("hourly_minima", [])) - 1
+        return (
+            f"growth: hourly minima rose {hours} hours in a row by {format_value(signal, basis['rise'])}"
+            f" (at least {format_value(signal, basis['needed'])})"
+        )
     if kind == "forest":
         return f"forest of {basis.get('class')}: feature {basis.get('feature')}, z {basis.get('z', 0):.1f}"
     return "-"

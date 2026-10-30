@@ -67,3 +67,28 @@ level = "severe"
 above = 0.90
 samples = 60
 provenance = { source = "Zabbix template Linux by Zabbix agent: Space is critically low, {$VFS.FS.PUSED.MAX.CRIT} = 90 (%), min over 5m", grade = "documented" }
+
+# A killed process is harm whatever else happens, so one sample opens the
+# record (docs/research/memory.md MG2). Reaching memory.max means reclaim
+# and stalls inside the group; memory.high events are not impact, since
+# gungnIR's own action sets memory.high.
+[[impact]]
+signal = "mem.oom_kills"
+level = "severe"
+above = 0
+samples = 1
+provenance = { source = "Gregg p. 324: OOM killer sacrifices are memory saturation; Bovet p. 710", grade = "documented" }
+
+[[impact]]
+signal = "cgroup.oom_kills"
+level = "severe"
+above = 0
+samples = 1
+provenance = { source = "admin-guide/cgroup-v2 memory.events oom_kill: processes of the group killed by any OOM killer", grade = "documented" }
+
+[[impact]]
+signal = "cgroup.mem_max_events"
+level = "noticeable"
+above = 0
+samples = 1
+provenance = { source = "admin-guide/cgroup-v2 memory.max: at the limit the group is reclaimed, then OOM-killed; memory.events max", grade = "documented" }

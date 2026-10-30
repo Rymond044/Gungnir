@@ -1,5 +1,5 @@
-# Knowledge tests of the causes across resources: for now D10 and D11 as
-# the disk sees them. Format as in disk.toml.
+# Knowledge tests of the causes across resources (docs/research/
+# cross-effects.md): format as in disk.toml.
 
 # Swapped-in pages are read from the device as well, so D11 fires too;
 # the swap traffic makes D10 the better explanation (S5).
@@ -7,7 +7,7 @@
 name = "a growing program pushes the others into swap"
 expect = "swap_io"
 facts = { "swap.enabled" = "yes" }
-provenance = { source = "docs/research/disk-io.md D10; Gregg pp. 306-308; Bovet p. 711", grade = "documented" }
+provenance = { source = "docs/research/disk-io.md D10; docs/research/cross-effects.md X1; Gregg pp. 306-308, 333; Bovet p. 711", grade = "documented" }
 
 [[case.record]]
 signal = "cgroup.mem_bytes"
@@ -50,6 +50,18 @@ role = "host"
 direction = "up"
 at = 25
 
+[[case.record]]
+signal = "mem.direct_reclaims_per_s"
+role = "host"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "cgroup.mem_pressure_some_ratio"
+role = "others"
+direction = "up"
+at = 25
+
 [[case]]
 name = "without swap, file pages are dropped and read back"
 expect = "page_cache_thrashing"
@@ -85,6 +97,51 @@ signal = "mem.pressure_some_ratio"
 role = "host"
 direction = "up"
 at = 20
+
+# X5: each rule fires on its part of the chain; the growth record, which
+# comes first, makes the leak the root cause (S5).
+[[case]]
+name = "a leak ends in swapping that slows everyone"
+expect = "memory_leak"
+facts = { "swap.enabled" = "yes" }
+provenance = { source = "docs/research/cross-effects.md X5; Gregg p. 316", grade = "documented" }
+
+[[case.record]]
+signal = "cgroup.mem_bytes"
+role = "culprit"
+direction = "up"
+detector = "growth"
+at = 0
+
+[[case.record]]
+signal = "swap.out_pages_per_s"
+role = "host"
+direction = "up"
+at = 14_400
+
+[[case.record]]
+signal = "swap.in_pages_per_s"
+role = "host"
+direction = "up"
+at = 14_420
+
+[[case.record]]
+signal = "mem.pressure_some_ratio"
+role = "host"
+direction = "up"
+at = 14_430
+
+[[case.record]]
+signal = "mem.direct_reclaims_per_s"
+role = "host"
+direction = "up"
+at = 14_430
+
+[[case.record]]
+signal = "cgroup.mem_pressure_some_ratio"
+role = "others"
+direction = "up"
+at = 14_440
 
 [[case]]
 name = "idle pages go to swap and nobody waits"

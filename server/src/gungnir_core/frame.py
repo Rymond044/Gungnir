@@ -40,6 +40,12 @@ KEY_GROUP_SIGNALS = (
     "cgroup.mem_pressure_full_ratio",
     "cgroup.io_pressure_some_ratio",
     "cgroup.io_pressure_full_ratio",
+    # Counts of memory events and the share of periods throttled by cpu.max:
+    # zero almost always, so any rise is unusual (memory and CPU dossiers).
+    "cgroup.mem_high_events",
+    "cgroup.mem_max_events",
+    "cgroup.oom_kills",
+    "cgroup.throttled_ratio",
 )
 
 

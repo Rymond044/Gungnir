@@ -117,3 +117,33 @@ def test_forest_names_three_signals_of_an_odd_window():
     assert opened.started_ms >= 150_000
     assert not forest.train(train[:100], "idle", datetime(2026, 10, 29, tzinfo=UTC), P)
     assert timedelta(seconds=P.iforest_window * P.step_s) == timedelta(minutes=1)
+
+
+def test_growth_needs_rising_hourly_minima_by_a_noticeable_share():
+    from gungnir_core.detection.growth import Growth
+
+    # Five hours at one sample a minute; caches swing by 200 MiB within the
+    # hour, while the floor under them rises by 100 MiB an hour from 1 GiB.
+    mib = 1024 * 1024
+    minutes = np.arange(5 * 60)
+    swing = np.where(minutes % 7 == 0, 0, 200 * mib)
+    leak = 1024 * mib + (minutes // 60) * 100 * mib + swing
+    flat = 1024 * mib + swing
+    f = Frame(
+        minutes.astype(np.int64) * 60_000,
+        [
+            SeriesMeta(1, "cgroup.mem_bytes", "app.slice/leaky.service"),
+            SeriesMeta(2, "cgroup.mem_bytes", "app.slice/steady.service"),
+        ],
+        np.array([leak, flat], dtype=float),
+    )
+    ctx = context(f)
+    found = records(Growth(), ctx)
+    opened = [e for _, e in found if hasattr(e, "records")]
+    # Hour 4 is the first with four completed hours, minima rising three
+    # times by 300 MiB in all, over 10 % of 1 GiB.
+    assert [e.records[0].series_id for e in opened] == [1]
+    assert opened[0].started_ms == 4 * 3_600_000
+    assert opened[0].records[0].baseline["rise"] == 300 * mib
+    # State keeps a few hours per group, as JSON.
+    assert set(ctx.state["minima"]) == {"1", "2"}

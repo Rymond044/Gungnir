@@ -1,0 +1,387 @@
+# Causal rules of the memory domain (ADR 0034, 0040), formalised from the
+# research dossier docs/research/memory.md, causes M1-M7. Format as in
+# disk.toml; an anomaly may name the `detector` whose records count
+# (threshold, robust, iforest, growth).
+#
+# Host memory pressure includes the culprit's own stall, so it is evidence
+# but not harm; harm is the others' pressure, direct reclaim (an allocation
+# that blocks) and OOM kills. Causes without a culprit (M4-M7) read their
+# harm on the host or on `others`, which then stands for any group.
+
+#################################################################
+# M1. Memory leak
+#################################################################
+
+# The growth record opens after hours of growth, and the harm may come
+# hours later: windows of 12 h (our choice, dossier M1).
+[[rule]]
+cause = "memory_leak"
+provenance = { source = "docs/research/memory.md M1; Gregg pp. 316, 326-327", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "cgroup.mem_bytes"
+direction = "up"
+detector = "growth"
+role = "culprit"
+anchor = true
+strength = "characteristic"
+provenance = { source = "Gregg p. 326: monitoring memory over time by process shows a leak; docs/research/memory.md MG3", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "mem.available_bytes"
+direction = "down"
+role = "host"
+window = [-3600, 43200]
+strength = "typical"
+provenance = { source = "Gregg p. 326: the leak consumes the free lists, then the file system cache", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "swap.out_pages_per_s"
+direction = "up"
+role = "host"
+window = [0, 43200]
+strength = "typical"
+provenance = { source = "Gregg pp. 316, 326: with swap, endless growth first shows as paging", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "mem.pressure_some_ratio"
+direction = "up"
+role = "host"
+window = [0, 43200]
+strength = "typical"
+provenance = { source = "accounting/psi", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "mem.direct_reclaims_per_s"
+direction = "up"
+role = "host"
+window = [0, 43200]
+strength = "typical"
+harm = true
+provenance = { source = "Gregg p. 333: direct reclaim is applications blocking on memory allocations", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "cgroup.mem_pressure_some_ratio"
+direction = "up"
+role = "others"
+window = [0, 43200]
+strength = "typical"
+harm = true
+provenance = { source = "accounting/psi", grade = "documented" }
+
+[[rule.manifestation]]
+event = ["oom_kill", "memcg_oom_kill", "unit_out_of_memory", "unit_oomd_kill"]
+window = [0, 43200]
+strength = "possible"
+harm = true
+provenance = { source = "Gregg p. 326: a leak may first be noticed as an OOM kill; systemd-oomd.service(8)", grade = "documented" }
+
+#################################################################
+# M2. Memory hog
+#################################################################
+
+[[rule]]
+cause = "memory_hog"
+provenance = { source = "docs/research/memory.md M2; Gregg pp. 315-318, 333", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "cgroup.mem_bytes"
+direction = "up"
+detector = ["robust", "iforest"]
+role = "culprit"
+anchor = true
+strength = "characteristic"
+provenance = { source = "admin-guide/cgroup-v2 memory.current", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "mem.available_bytes"
+direction = "down"
+role = "host"
+window = [-15, 60]
+strength = "characteristic"
+provenance = { source = "filesystems/proc MemAvailable", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "mem.cached_bytes"
+direction = "down"
+role = "host"
+window = [0, 120]
+strength = "typical"
+provenance = { source = "Gregg p. 315: the page cache is freed first, in the balance swappiness sets", grade = "documented" }
+
+[[rule.manifestation]]
+sign = "kswapd"
+role = "host"
+window = [0, 120]
+strength = "typical"
+provenance = { source = "Gregg p. 318: kswapd scans when free memory drops below the low threshold", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "swap.out_pages_per_s"
+direction = "up"
+role = "host"
+window = [0, 120]
+strength = "typical"
+provenance = { source = "Gregg p. 316; overhead run 20261028T195813Z memory: 527 pages/s", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "mem.pressure_some_ratio"
+direction = "up"
+role = "host"
+window = [0, 120]
+strength = "typical"
+provenance = { source = "overhead run 20261028T195813Z memory: up to 0.109", grade = "measured" }
+
+[[rule.manifestation]]
+anomaly = "mem.direct_reclaims_per_s"
+direction = "up"
+role = "host"
+window = [0, 120]
+strength = "typical"
+harm = true
+provenance = { source = "Gregg p. 333; overhead run 20261028T195813Z memory: 1.8 k/s", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "cgroup.mem_pressure_some_ratio"
+direction = "up"
+role = "others"
+window = [0, 120]
+strength = "characteristic"
+harm = true
+provenance = { source = "accounting/psi; overhead run 20261028T195813Z memory: others up to 0.048", grade = "documented" }
+
+[[rule.manifestation]]
+event = ["oom_kill", "unit_out_of_memory", "unit_oomd_kill"]
+window = [0, 600]
+strength = "possible"
+harm = true
+provenance = { source = "Bovet p. 710; systemd-oomd.service(8)", grade = "documented" }
+
+#################################################################
+# M3. Memory exhaustion and the OOM killer
+#################################################################
+
+# The kill is the harm and the anchor; the grower comes before it and may
+# not be the victim (the badness heuristic, filesystems/proc oom_score_adj).
+[[rule]]
+cause = "memory_exhaustion"
+provenance = { source = "docs/research/memory.md M3; Bovet p. 710; Gregg pp. 308, 316", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "mem.oom_kills"
+direction = "up"
+record = "impact"
+level = "severe"
+role = "host"
+anchor = true
+strength = "characteristic"
+harm = true
+provenance = { source = "/proc/vmstat oom_kill; Gregg p. 324", grade = "documented" }
+
+# The host-wide killer only: a kill inside a group at its limit prints
+# "Memory cgroup out of memory" instead (M4).
+[[rule.manifestation]]
+event = "oom_kill"
+window = [-30, 30]
+strength = "characteristic"
+provenance = { source = "mm/oom_kill.c: \"Out of memory: Killed process\"", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "mem.available_bytes"
+direction = "down"
+role = "host"
+window = [-600, 0]
+strength = "typical"
+provenance = { source = "Bovet p. 710: all available memory exhausted", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "cgroup.mem_bytes"
+direction = "up"
+role = "culprit"
+window = [-1800, 0]
+strength = "typical"
+provenance = { source = "docs/research/memory.md M3, inferred", grade = "unverified" }
+
+[[rule.manifestation]]
+anomaly = "swap.used_ratio"
+direction = "up"
+role = "host"
+window = [-1800, 0]
+strength = "possible"
+provenance = { source = "Bovet p. 710: the swap areas are full", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "mem.pressure_full_ratio"
+direction = "up"
+role = "host"
+window = [-600, 0]
+strength = "typical"
+harm = true
+provenance = { source = "accounting/psi: all non-idle tasks stalled at once", grade = "documented" }
+
+[[rule.manifestation]]
+event = "unit_out_of_memory"
+window = [-30, 60]
+strength = "typical"
+provenance = { source = "systemd sd-messages.h SD_MESSAGE_UNIT_OUT_OF_MEMORY", grade = "documented" }
+
+#################################################################
+# M4. Group at its memory limit
+#################################################################
+
+[[rule]]
+cause = "group_memory_limit"
+provenance = { source = "docs/research/memory.md M4; admin-guide/cgroup-v2 memory.max; Gregg pp. 317, 325", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "cgroup.mem_max_events"
+direction = "up"
+record = "impact"
+role = "others"
+anchor = true
+strength = "characteristic"
+harm = true
+provenance = { source = "admin-guide/cgroup-v2 memory.events max", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "cgroup.mem_pressure_some_ratio"
+direction = "up"
+role = "others"
+window = [-60, 120]
+strength = "typical"
+harm = true
+provenance = { source = "admin-guide/cgroup-v2 memory.max: reclaim at the limit; accounting/psi", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "cgroup.oom_kills"
+direction = "up"
+record = "impact"
+level = "severe"
+role = "others"
+window = [0, 300]
+strength = "possible"
+harm = true
+provenance = { source = "admin-guide/cgroup-v2 memory.max: the OOM killer is invoked in the cgroup", grade = "documented" }
+
+[[rule.manifestation]]
+event = ["memcg_oom_kill", "unit_out_of_memory"]
+window = [0, 300]
+strength = "possible"
+provenance = { source = "mm/oom_kill.c \"Memory cgroup out of memory\"; systemd SD_MESSAGE_UNIT_OUT_OF_MEMORY", grade = "documented" }
+
+#################################################################
+# M5. Group throttled at its memory.high
+#################################################################
+
+[[rule]]
+cause = "group_memory_throttled"
+provenance = { source = "docs/research/memory.md M5; admin-guide/cgroup-v2 memory.high", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "cgroup.mem_high_events"
+direction = "up"
+role = "others"
+anchor = true
+strength = "characteristic"
+provenance = { source = "admin-guide/cgroup-v2 memory.events high: throttled and routed to direct reclaim", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "cgroup.mem_pressure_some_ratio"
+direction = "up"
+role = "others"
+window = [-30, 60]
+strength = "characteristic"
+harm = true
+provenance = { source = "admin-guide/cgroup-v2 memory.high: the processes of the cgroup are throttled", grade = "documented" }
+
+#################################################################
+# M6. tmpfs filling memory
+#################################################################
+
+[[rule]]
+cause = "tmpfs_growth"
+provenance = { source = "docs/research/memory.md M6; filesystems/proc meminfo Shmem", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "mem.shmem_bytes"
+direction = "up"
+role = "host"
+anchor = true
+strength = "characteristic"
+provenance = { source = "filesystems/proc meminfo Shmem: shared memory and tmpfs", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "mem.available_bytes"
+direction = "down"
+role = "host"
+window = [-15, 300]
+strength = "characteristic"
+provenance = { source = "filesystems/proc MemAvailable", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "swap.out_pages_per_s"
+direction = "up"
+role = "host"
+window = [0, 600]
+strength = "possible"
+provenance = { source = "docs/research/memory.md M6, inferred: only swap moves tmpfs pages", grade = "unverified" }
+
+[[rule.manifestation]]
+anomaly = "mem.pressure_some_ratio"
+direction = "up"
+role = "host"
+window = [0, 600]
+strength = "typical"
+harm = true
+provenance = { source = "accounting/psi (no culprit, so the host's stall is the others')", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "mem.direct_reclaims_per_s"
+direction = "up"
+role = "host"
+window = [0, 600]
+strength = "typical"
+harm = true
+provenance = { source = "Gregg p. 333", grade = "documented" }
+
+#################################################################
+# M7. Kernel memory growth
+#################################################################
+
+[[rule]]
+cause = "kernel_memory_growth"
+provenance = { source = "docs/research/memory.md M7; Gregg pp. 318, 325", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "mem.slab_unreclaimable_bytes"
+direction = "up"
+role = "host"
+anchor = true
+strength = "characteristic"
+provenance = { source = "filesystems/proc meminfo SUnreclaim; Gregg p. 325: kernel memory may grow continually", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "mem.available_bytes"
+direction = "down"
+role = "host"
+window = [-3600, 43200]
+strength = "typical"
+provenance = { source = "filesystems/proc MemAvailable", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "mem.pressure_some_ratio"
+direction = "up"
+role = "host"
+window = [0, 43200]
+strength = "typical"
+harm = true
+provenance = { source = "accounting/psi (no culprit, so the host's stall is the others')", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "mem.direct_reclaims_per_s"
+direction = "up"
+role = "host"
+window = [0, 43200]
+strength = "typical"
+harm = true
+provenance = { source = "Gregg p. 333", grade = "documented" }

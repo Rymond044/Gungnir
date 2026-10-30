@@ -15,6 +15,7 @@ mod power;
 mod pressure;
 mod processes;
 mod selfstat;
+mod thermal;
 mod vmstat;
 
 pub use journal::Event;
@@ -160,6 +161,7 @@ const MODULES: &[Module] = &[
     Module { name: "pressure", candidates: &[pressure::open_proc_pressure] },
     Module { name: "cgroup", candidates: &[cgroup::open_cgroup2] },
     Module { name: "processes", candidates: &[processes::open_proc_pids] },
+    Module { name: "thermal", candidates: &[thermal::open_throttle_counters, thermal::open_thermal_zone] },
     Module { name: "power_supply", candidates: &[power::open_power_supply] },
     Module { name: "power_profile", candidates: &[power::open_platform_profile, power::open_cpufreq_epp] },
     Module { name: "journal", candidates: &[journal::open_journalctl, journal::open_kmsg] },

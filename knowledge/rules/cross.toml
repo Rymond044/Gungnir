@@ -1,6 +1,7 @@
-# Causal rules across resources (ADR 0034). For now the two memory causes
-# as the disk sees them, D10 and D11 of docs/research/disk-io.md; the
-# cross-effects dossier completes them. Format as in disk.toml.
+# Causal rules across resources (ADR 0034): the memory causes the disk
+# sees, D10 and D11 of docs/research/disk-io.md, completed as X1 and X2 in
+# docs/research/cross-effects.md. Format as in disk.toml. As in
+# memory.toml, host memory pressure is harm only where there is no culprit.
 
 #################################################################
 # D10. Swap I/O
@@ -9,7 +10,7 @@
 [[rule]]
 cause = "swap_io"
 requires = { "swap.enabled" = "yes" }
-provenance = { source = "docs/research/disk-io.md D10; Gregg pp. 306-307; Bovet p. 711", grade = "documented" }
+provenance = { source = "docs/research/disk-io.md D10; docs/research/cross-effects.md X1; Gregg pp. 306-307; Bovet p. 711", grade = "documented" }
 
 [[rule.manifestation]]
 anomaly = "swap.out_pages_per_s"
@@ -50,15 +51,15 @@ window = [0, 120]
 strength = "typical"
 provenance = { source = "docs/research/disk-io.md D10, inferred: swap traffic is small random I/O", grade = "unverified" }
 
-# The culprit is the group whose memory grows (ontology, ADR 0039 item 8);
-# its window and strength are revisited in the cross-effects dossier.
+# The culprit is the group whose memory grew before the swapping; typical,
+# since swapping may also follow a sum of small growths (X1).
 [[rule.manifestation]]
 anomaly = "cgroup.mem_bytes"
 direction = "up"
 role = "culprit"
 window = [-300, 60]
 strength = "typical"
-provenance = { source = "docs/research/disk-io.md D10, inferred", grade = "unverified" }
+provenance = { source = "docs/research/disk-io.md D10; docs/research/cross-effects.md X1, inferred", grade = "unverified" }
 
 [[rule.manifestation]]
 anomaly = "mem.pressure_some_ratio"
@@ -66,8 +67,34 @@ direction = "up"
 role = "host"
 window = [0, 120]
 strength = "characteristic"
-harm = true
 provenance = { source = "accounting/psi", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "mem.direct_reclaims_per_s"
+direction = "up"
+role = "host"
+window = [-30, 120]
+strength = "typical"
+harm = true
+provenance = { source = "Gregg p. 333; overhead run 20261028T195813Z memory: 1.8 k/s", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "cgroup.mem_pressure_some_ratio"
+direction = "up"
+role = "others"
+window = [0, 120]
+strength = "typical"
+harm = true
+provenance = { source = "accounting/psi; overhead run 20261028T195813Z memory: others up to 0.048", grade = "documented" }
+
+# A page-in blocks the application in state D (cross-effects dossier).
+[[rule.manifestation]]
+anomaly = "cpu.blocked_tasks"
+direction = "up"
+role = "host"
+window = [0, 120]
+strength = "possible"
+provenance = { source = "Gregg p. 306: the page-in blocks on disk I/O", grade = "documented" }
 
 #################################################################
 # D11. Page cache thrashing
@@ -75,7 +102,7 @@ provenance = { source = "accounting/psi", grade = "documented" }
 
 [[rule]]
 cause = "page_cache_thrashing"
-provenance = { source = "docs/research/disk-io.md D11; Gregg pp. 310, 390; Bovet p. 713", grade = "documented" }
+provenance = { source = "docs/research/disk-io.md D11; docs/research/cross-effects.md X2; Gregg pp. 310, 390; Bovet p. 713", grade = "documented" }
 
 [[rule.manifestation]]
 anomaly = "mem.major_faults_per_s"
@@ -114,5 +141,23 @@ direction = "up"
 role = "host"
 window = [0, 120]
 strength = "characteristic"
+harm = true
+provenance = { source = "accounting/psi", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "mem.direct_reclaims_per_s"
+direction = "up"
+role = "host"
+window = [-30, 120]
+strength = "typical"
+harm = true
+provenance = { source = "Gregg p. 333", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "cgroup.mem_pressure_some_ratio"
+direction = "up"
+role = "others"
+window = [0, 120]
+strength = "typical"
 harm = true
 provenance = { source = "accounting/psi", grade = "documented" }

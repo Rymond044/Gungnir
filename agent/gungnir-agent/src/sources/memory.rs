@@ -61,6 +61,15 @@ impl Source for Meminfo {
         out.readings.push(Reading::host("mem.anon_bytes", get("AnonPages")? as f64));
         out.readings.push(Reading::host("mem.dirty_bytes", get("Dirty")? as f64));
         out.readings.push(Reading::host("mem.writeback_bytes", get("Writeback")? as f64));
+        // Older kernels lack these; they only add evidence, so their absence is no error.
+        // Shmem holds tmpfs and shared memory, which no reclaim can free without swap.
+        if let Some(&v) = m.get("Shmem") {
+            out.readings.push(Reading::host("mem.shmem_bytes", v as f64));
+        }
+        // Kernel slab memory that cannot be reclaimed: where a kernel leak shows.
+        if let Some(&v) = m.get("SUnreclaim") {
+            out.readings.push(Reading::host("mem.slab_unreclaimable_bytes", v as f64));
+        }
         push_swap(get("SwapTotal")?, get("SwapFree")?, out);
         push_swap_fact(&mut self.facts, now, get("SwapTotal")?, out);
         Ok(())
@@ -124,6 +133,11 @@ mod tests {
         let used = find(&out.readings, "mem.used_ratio", "host").unwrap().value;
         assert!((used - (1.0 - 8914408.0 / 15860504.0)).abs() < 1e-12);
         assert_eq!(out.facts[0].name, "swap.enabled");
+        assert_eq!(find(&out.readings, "mem.shmem_bytes", "host").unwrap().value, 228440.0 * 1024.0);
+        assert_eq!(
+            find(&out.readings, "mem.slab_unreclaimable_bytes", "host").unwrap().value,
+            338236.0 * 1024.0
+        );
     }
 
     #[test]

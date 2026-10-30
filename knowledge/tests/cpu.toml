@@ -1,0 +1,205 @@
+# Knowledge tests of the CPU domain: format as in disk.toml.
+
+[[case]]
+name = "a build with too many jobs makes the desktop wait"
+expect = "cpu_hog"
+not = ["process_churn", "thermal_throttling", "interrupt_storm"]
+provenance = { source = "docs/research/cpu.md C1; calibration run 20261029T114359Z cpu-100 (19 runnable, others' pressure up to 0.029)", grade = "measured" }
+
+[[case.record]]
+signal = "cgroup.cpu_cores"
+role = "culprit"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "cpu.idle_ratio"
+role = "host"
+direction = "down"
+at = 0
+
+[[case.record]]
+signal = "cpu.runnable_tasks"
+role = "host"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "cpu.pressure_some_ratio"
+role = "host"
+direction = "up"
+at = 10
+
+[[case.record]]
+signal = "cgroup.cpu_pressure_some_ratio"
+role = "others"
+direction = "up"
+at = 10
+
+# The forking group's CPU rises and the idle share falls, so C1 fires as
+# well; forks and system time make C2 the better explanation (S5).
+[[case]]
+name = "a shell loop forks thousands of processes a second"
+expect = "process_churn"
+not = ["interrupt_storm"]
+provenance = { source = "docs/research/cpu.md C2; overhead run 20261028T195813Z fork (12 k forks/s, system 0.22, 62 k context switches/s)", grade = "measured" }
+
+[[case.record]]
+signal = "cpu.forks_per_s"
+role = "host"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "cpu.system_ratio"
+role = "host"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "cpu.context_switches_per_s"
+role = "host"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "cgroup.cpu_cores"
+role = "culprit"
+direction = "up"
+at = 5
+
+[[case.record]]
+signal = "cpu.idle_ratio"
+role = "host"
+direction = "down"
+at = 5
+
+[[case.record]]
+signal = "cgroup.cpu_pressure_some_ratio"
+role = "others"
+direction = "up"
+at = 10
+
+[[case]]
+name = "a device floods the CPUs with interrupts"
+expect = "interrupt_storm"
+not = ["cpu_hog", "process_churn"]
+provenance = { source = "docs/research/cpu.md C3; Gregg pp. 259, 261", grade = "documented" }
+
+[[case.record]]
+signal = "cpu.irq_ratio"
+role = "host"
+direction = "up"
+at = 0
+
+[[case.sign]]
+sign = "ksoftirqd"
+role = "host"
+at = 5
+
+[[case.record]]
+signal = "cpu.pressure_some_ratio"
+role = "host"
+direction = "up"
+at = 10
+
+[[case]]
+name = "a container waits at its CPU quota"
+expect = "cpu_quota_throttling"
+not = ["cpu_hog"]
+provenance = { source = "docs/research/cpu.md C4; admin-guide/cgroup-v2 cpu.stat; Gregg p. 622", grade = "documented" }
+
+[[case.record]]
+signal = "cgroup.throttled_ratio"
+role = "others"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "cgroup.cpu_pressure_some_ratio"
+role = "others"
+direction = "up"
+at = 5
+
+[[case]]
+name = "a laptop with dusty vents slows down"
+expect = "thermal_throttling"
+not = ["interrupt_storm", "cpu_steal"]
+provenance = { source = "docs/research/cpu.md C5; drivers/thermal/intel/therm_throt.c; Gregg p. 230", grade = "documented" }
+
+[[case.record]]
+signal = "cpu.temperature_c"
+role = "host"
+direction = "up"
+at = -60
+
+[[case.record]]
+signal = "cpu.thermal_throttles"
+role = "host"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "cpu.pressure_some_ratio"
+role = "host"
+direction = "up"
+at = 20
+
+[[case]]
+name = "a virtual machine loses its CPUs to a neighbor"
+expect = "cpu_steal"
+not = ["cpu_hog", "thermal_throttling"]
+provenance = { source = "docs/research/cpu.md C6; Gregg p. 604", grade = "documented" }
+
+[[case.record]]
+signal = "cpu.steal_ratio"
+role = "host"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "cpu.pressure_some_ratio"
+role = "host"
+direction = "up"
+at = 10
+
+# Negative cases.
+
+[[case]]
+name = "half the CPUs busy and nobody waits"
+provenance = { source = "calibration run 20261029T114359Z cpu-50: 9 workers on 18 CPUs, pressure under 0.002; Gregg p. 257 table 6.10", grade = "measured" }
+
+[[case.record]]
+signal = "cgroup.cpu_cores"
+role = "culprit"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "cpu.idle_ratio"
+role = "host"
+direction = "down"
+at = 0
+
+[[case.record]]
+signal = "cpu.runnable_tasks"
+role = "host"
+direction = "up"
+at = 0
+
+# iowait is the disk's: CPU rules may not use it, so it explains nothing here.
+[[case]]
+name = "the CPUs idle while the disk is slow"
+provenance = { source = "Gregg p. 258: wa is CPU idle while threads are blocked on disk I/O; docs/research/cross-effects.md", grade = "documented" }
+
+[[case.record]]
+signal = "cpu.iowait_ratio"
+role = "host"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "cpu.blocked_tasks"
+role = "host"
+direction = "up"
+at = 0

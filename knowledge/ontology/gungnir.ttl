@@ -116,6 +116,11 @@ g:measures a owl:ObjectProperty , owl:FunctionalProperty ;
     rdfs:domain g:Signal ;
     rdfs:range g:Resource .
 
+g:reflects a owl:ObjectProperty ;
+    rdfs:comment "A resource whose waiting drives the signal although it is observed on another; such a signal is evidence only for causes that concern a resource it reflects (docs/research/cross-effects.md)."@en ;
+    rdfs:domain g:Signal ;
+    rdfs:range g:Resource .
+
 g:observedOn a owl:ObjectProperty , owl:FunctionalProperty ;
     rdfs:label "observed on"@en ;
     rdfs:comment "The kind of entity whose series or facts carry this signal or fact."@en ;
@@ -187,6 +192,11 @@ g:signalKind a owl:DatatypeProperty , owl:FunctionalProperty ;
 g:isImpact a owl:DatatypeProperty , owl:FunctionalProperty ;
     rdfs:comment "The signal measures waiting, so detection may judge it against impact thresholds (ADR 0025)."@en ;
     rdfs:domain g:Signal ;
+    rdfs:range xsd:boolean .
+
+g:proportional a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:comment "The action sets a weight that acts only under contention; its parameter is a share of the current weight."@en ;
+    rdfs:domain g:ActionType ;
     rdfs:range xsd:boolean .
 
 g:emittedBy a owl:DatatypeProperty , owl:FunctionalProperty ;
@@ -358,6 +368,7 @@ signal:cpu.idle_ratio a g:Signal , owl:NamedIndividual ;
     g:source "proc_stat(5) cpu line, idle" ; g:grade "documented" .
 
 signal:cpu.iowait_ratio a g:Signal , owl:NamedIndividual ;
+    g:reflects res:disk ;
     rdfs:comment "CPU idle while tasks wait on disk; falls when other work uses the CPU, so weak evidence of disk waiting."@en ;
     g:measures res:cpu ; g:observedOn kind:host ; g:unit "1" ; g:signalKind "ratio" ;
     g:source "proc_stat(5) cpu line, iowait; Gregg p. 434" ; g:grade "documented" .
@@ -375,7 +386,8 @@ signal:cpu.runnable_tasks a g:Signal , owl:NamedIndividual ;
     g:source "proc_stat(5) procs_running" ; g:grade "documented" .
 
 signal:cpu.blocked_tasks a g:Signal , owl:NamedIndividual ;
-    rdfs:comment "Tasks in uninterruptible sleep (state D). Seen in the CPU statistics, it usually points to waiting on storage; rules of the disk domain use it as evidence."@en ;
+    rdfs:comment "Tasks in uninterruptible sleep (state D). Seen in the CPU statistics, it points to waiting on storage, including swap-in; rules of the disk and memory domains use it as evidence."@en ;
+    g:reflects res:disk , res:memory ;
     g:measures res:cpu ; g:observedOn kind:host ; g:unit "tasks" ; g:signalKind "level" ;
     g:source "proc_stat(5) procs_blocked; Gregg p. 195" ; g:grade "documented" .
 
@@ -386,6 +398,15 @@ signal:cpu.context_switches_per_s a g:Signal , owl:NamedIndividual ;
 signal:cpu.forks_per_s a g:Signal , owl:NamedIndividual ;
     g:measures res:pids ; g:observedOn kind:host ; g:unit "1/s" ; g:signalKind "rate" ;
     g:source "proc_stat(5) processes" ; g:grade "documented" .
+
+signal:cpu.thermal_throttles a g:Signal , owl:NamedIndividual ;
+    rdfs:comment "Thermal or power-limit throttle events of the cores and packages per interval."@en ;
+    g:measures res:cpu ; g:observedOn kind:host ; g:unit "events" ; g:signalKind "count" ;
+    g:source "drivers/thermal/intel/therm_throt.c (core_throttle_count, package_throttle_count); docs/research/cpu.md CG1" ; g:grade "documented" .
+
+signal:cpu.temperature_c a g:Signal , owl:NamedIndividual ;
+    g:measures res:cpu ; g:observedOn kind:host ; g:unit "degC" ; g:signalKind "level" ;
+    g:source "sysfs class/thermal, zone x86_pkg_temp or the ACPI CPU zone; Gregg p. 230" ; g:grade "documented" .
 
 signal:cpu.pressure_some_ratio a g:Signal , owl:NamedIndividual ;
     g:measures res:cpu ; g:observedOn kind:host ; g:unit "1" ; g:signalKind "ratio" ; g:isImpact true ;
@@ -413,6 +434,16 @@ signal:mem.anon_bytes a g:Signal , owl:NamedIndividual ;
     g:measures res:memory ; g:observedOn kind:host ; g:unit "bytes" ; g:signalKind "level" ;
     g:source "proc_meminfo(5) AnonPages" ; g:grade "documented" .
 
+signal:mem.shmem_bytes a g:Signal , owl:NamedIndividual ;
+    rdfs:comment "Shared memory and tmpfs: files in memory that only swap can move."@en ;
+    g:measures res:memory ; g:observedOn kind:host ; g:unit "bytes" ; g:signalKind "level" ;
+    g:source "filesystems/proc meminfo Shmem; docs/research/memory.md MG1" ; g:grade "documented" .
+
+signal:mem.slab_unreclaimable_bytes a g:Signal , owl:NamedIndividual ;
+    rdfs:comment "Kernel slab memory that cannot be reclaimed on memory pressure."@en ;
+    g:measures res:memory ; g:observedOn kind:host ; g:unit "bytes" ; g:signalKind "level" ;
+    g:source "filesystems/proc meminfo SUnreclaim; Gregg p. 325" ; g:grade "documented" .
+
 signal:mem.dirty_bytes a g:Signal , owl:NamedIndividual ;
     rdfs:comment "Page cache waiting to be written back."@en ;
     g:measures res:memory ; g:observedOn kind:host ; g:unit "bytes" ; g:signalKind "level" ;
@@ -433,7 +464,7 @@ signal:mem.direct_reclaims_per_s a g:Signal , owl:NamedIndividual ;
     g:source "/proc/vmstat allocstall" ; g:grade "documented" .
 
 signal:mem.oom_kills a g:Signal , owl:NamedIndividual ;
-    g:measures res:memory ; g:observedOn kind:host ; g:unit "kills" ; g:signalKind "count" ;
+    g:measures res:memory ; g:observedOn kind:host ; g:unit "kills" ; g:signalKind "count" ; g:isImpact true ;
     g:source "/proc/vmstat oom_kill" ; g:grade "documented" .
 
 signal:mem.pressure_some_ratio a g:Signal , owl:NamedIndividual ;
@@ -556,11 +587,11 @@ signal:cgroup.mem_high_events a g:Signal , owl:NamedIndividual ;
     g:source "admin-guide/cgroup-v2 memory.events high" ; g:grade "documented" .
 
 signal:cgroup.mem_max_events a g:Signal , owl:NamedIndividual ;
-    g:measures res:memory ; g:observedOn kind:control_group ; g:unit "events" ; g:signalKind "count" ;
+    g:measures res:memory ; g:observedOn kind:control_group ; g:unit "events" ; g:signalKind "count" ; g:isImpact true ;
     g:source "admin-guide/cgroup-v2 memory.events max" ; g:grade "documented" .
 
 signal:cgroup.oom_kills a g:Signal , owl:NamedIndividual ;
-    g:measures res:memory ; g:observedOn kind:control_group ; g:unit "kills" ; g:signalKind "count" ;
+    g:measures res:memory ; g:observedOn kind:control_group ; g:unit "kills" ; g:signalKind "count" ; g:isImpact true ;
     g:source "admin-guide/cgroup-v2 memory.events oom_kill" ; g:grade "documented" .
 
 signal:cgroup.mem_pressure_some_ratio a g:Signal , owl:NamedIndividual ;
@@ -667,6 +698,13 @@ event:oom_kill a g:EventType , owl:NamedIndividual ;
     g:source "mm/oom_kill.c __oom_kill_process (pr_err \"%s: Killed process %d (%s) ...\")" ;
     g:grade "documented" .
 
+event:memcg_oom_kill a g:EventType , owl:NamedIndividual ;
+    rdfs:label "OOM kill inside a control group"@en , "Завершение процесса при нехватке памяти в группе"@ru ;
+    g:about res:memory ; g:emittedBy "kernel" ;
+    g:messagePattern "^Memory cgroup out of memory: Killed process \\d+" ;
+    g:source "mm/oom_kill.c __oom_kill_process (pr_err \"%s: Killed process ...\" with \"Memory cgroup out of memory\" from mem_cgroup_out_of_memory)" ;
+    g:grade "documented" .
+
 event:unit_out_of_memory a g:EventType , owl:NamedIndividual ;
     rdfs:label "Unit hit by the OOM killer"@en , "Служба затронута завершением при нехватке памяти"@ru ;
     g:about res:memory ; g:emittedBy "systemd" ;
@@ -723,9 +761,15 @@ sign:waiting_on_io a g:ProcessSign , owl:NamedIndividual ;
     g:indicates res:disk ; g:namePattern "*" ; g:state "D" ;
     g:source "proc_pid_stat(5): D = waiting in uninterruptible disk sleep; ADR 0038" ; g:grade "documented" .
 
+sign:ksoftirqd a g:ProcessSign , owl:NamedIndividual ;
+    rdfs:label "Soft interrupt thread"@en , "Поток программных прерываний"@ru ;
+    rdfs:comment "Soft interrupts that overflow the interrupt context run in these per-CPU threads."@en ;
+    g:indicates res:cpu ; g:namePattern "ksoftirqd/*" ;
+    g:source "Gregg pp. 261, 281; kernel/softirq.c (ksoftirqd/%u)" ; g:grade "documented" .
+
 [] a owl:AllDifferent ;
     owl:distinctMembers ( sign:kswapd sign:writeback_flusher sign:jbd2 sign:btrfs_transaction sign:btrfs_cleaner
-                          sign:waiting_on_io ) .
+                          sign:waiting_on_io sign:ksoftirqd ) .
 
 #################################################################
 # Context facts (ADR 0036)
@@ -849,13 +893,95 @@ cause:swap_io a g:RootCause , owl:NamedIndividual ;
     rdfs:label "Swap I/O"@en , "Ввод-вывод подкачки"@ru ;
     rdfs:comment "Memory runs short and anonymous pages move to and from swap. The culprit is the group whose memory grows."@en ;
     g:concerns res:memory , res:disk ; g:culpritKind kind:control_group ;
-    g:source "docs/research/disk-io.md D10; Gregg pp. 306-307; Bovet p. 711" ; g:grade "documented" .
+    g:source "docs/research/disk-io.md D10; docs/research/cross-effects.md X1; Gregg pp. 306-307; Bovet p. 711" ; g:grade "documented" .
 
 cause:page_cache_thrashing a g:RootCause , owl:NamedIndividual ;
     rdfs:label "Page cache thrashing"@en , "Пробуксовка страничного кэша"@ru ;
     rdfs:comment "The data in use does not fit the memory left for the page cache; file pages are dropped and read back."@en ;
     g:concerns res:memory , res:disk ;
-    g:source "docs/research/disk-io.md D11; Gregg pp. 310, 390; Bovet p. 713" ; g:grade "documented" .
+    g:source "docs/research/disk-io.md D11; docs/research/cross-effects.md X2; Gregg pp. 310, 390; Bovet p. 713" ; g:grade "documented" .
+
+#################################################################
+# Root causes of the memory domain (docs/research/memory.md)
+#################################################################
+
+cause:memory_leak a g:RootCause , owl:NamedIndividual ;
+    rdfs:label "Memory leak"@en , "Утечка памяти"@ru ;
+    rdfs:comment "One group's memory grows hour after hour until the others are short of it."@en ;
+    g:concerns res:memory ; g:culpritKind kind:control_group ;
+    g:source "docs/research/memory.md M1; Gregg pp. 316, 326-327" ; g:grade "documented" .
+
+cause:memory_hog a g:RootCause , owl:NamedIndividual ;
+    rdfs:label "Memory hog"@en , "Захват памяти"@ru ;
+    rdfs:comment "One group allocates a large amount quickly; reclaim takes the others' cache and pages."@en ;
+    g:concerns res:memory ; g:culpritKind kind:control_group ;
+    g:source "docs/research/memory.md M2; Gregg pp. 315-318, 333" ; g:grade "documented" .
+
+cause:memory_exhaustion a g:RootCause , owl:NamedIndividual ;
+    rdfs:label "Memory exhaustion"@en , "Исчерпание памяти"@ru ;
+    rdfs:comment "Reclaim cannot keep up and the kernel OOM killer ends a process."@en ;
+    g:concerns res:memory ; g:culpritKind kind:control_group ;
+    g:source "docs/research/memory.md M3; Bovet p. 710; Gregg pp. 308, 316" ; g:grade "documented" .
+
+cause:group_memory_limit a g:RootCause , owl:NamedIndividual ;
+    rdfs:label "Group at its memory limit"@en , "Группа на пределе памяти"@ru ;
+    rdfs:comment "A group reaches its own memory.max: reclaim and OOM kills inside it while the host has memory."@en ;
+    g:concerns res:memory ;
+    g:source "docs/research/memory.md M4; admin-guide/cgroup-v2 memory.max; Gregg pp. 317, 325" ; g:grade "documented" .
+
+cause:group_memory_throttled a g:RootCause , owl:NamedIndividual ;
+    rdfs:label "Group throttled at its memory.high"@en , "Сдерживание группы по memory.high"@ru ;
+    g:concerns res:memory ;
+    g:source "docs/research/memory.md M5; admin-guide/cgroup-v2 memory.high, memory.events high" ; g:grade "documented" .
+
+cause:tmpfs_growth a g:RootCause , owl:NamedIndividual ;
+    rdfs:label "tmpfs filling memory"@en , "Заполнение памяти файлами tmpfs"@ru ;
+    rdfs:comment "Files in tmpfs or shared memory hold memory after their writer exits."@en ;
+    g:concerns res:memory ;
+    g:source "docs/research/memory.md M6; filesystems/proc meminfo Shmem" ; g:grade "documented" .
+
+cause:kernel_memory_growth a g:RootCause , owl:NamedIndividual ;
+    rdfs:label "Kernel memory growth"@en , "Рост памяти ядра"@ru ;
+    g:concerns res:memory ;
+    g:source "docs/research/memory.md M7; Gregg pp. 318, 325; filesystems/proc meminfo SUnreclaim" ; g:grade "documented" .
+
+#################################################################
+# Root causes of the CPU domain (docs/research/cpu.md)
+#################################################################
+
+cause:cpu_hog a g:RootCause , owl:NamedIndividual ;
+    rdfs:label "CPU hog"@en , "Захват процессора"@ru ;
+    rdfs:comment "A group runs more busy threads than there are free CPUs and the others wait on the run queue."@en ;
+    g:concerns res:cpu ; g:culpritKind kind:control_group ;
+    g:source "docs/research/cpu.md C1; Gregg pp. 222, 226, 257; Love p. 45" ; g:grade "documented" .
+
+cause:process_churn a g:RootCause , owl:NamedIndividual ;
+    rdfs:label "Process churn"@en , "Лавина короткоживущих процессов"@ru ;
+    rdfs:comment "A group starts short-lived processes at a high rate; fork and exec cost kernel time."@en ;
+    g:concerns res:cpu , res:pids ; g:culpritKind kind:control_group ;
+    g:source "docs/research/cpu.md C2; Gregg pp. 207, 250, 262" ; g:grade "documented" .
+
+cause:interrupt_storm a g:RootCause , owl:NamedIndividual ;
+    rdfs:label "Interrupt storm"@en , "Шторм прерываний"@ru ;
+    g:concerns res:cpu ;
+    g:source "docs/research/cpu.md C3; Gregg pp. 259, 261, 281" ; g:grade "documented" .
+
+cause:cpu_quota_throttling a g:RootCause , owl:NamedIndividual ;
+    rdfs:label "Group at its CPU quota"@en , "Группа на пределе квоты процессора"@ru ;
+    g:concerns res:cpu ;
+    g:source "docs/research/cpu.md C4; admin-guide/cgroup-v2 cpu.max, cpu.stat; Gregg pp. 226, 246, 622" ; g:grade "documented" .
+
+cause:thermal_throttling a g:RootCause , owl:NamedIndividual ;
+    rdfs:label "Thermal throttling"@en , "Тепловое снижение частоты"@ru ;
+    rdfs:comment "The package overheats and the hardware lowers the clock: the same work takes longer."@en ;
+    g:concerns res:cpu , res:power ;
+    g:source "docs/research/cpu.md C5; Gregg pp. 230-231, 245; drivers/thermal/intel/therm_throt.c" ; g:grade "documented" .
+
+cause:cpu_steal a g:RootCause , owl:NamedIndividual ;
+    rdfs:label "CPU steal"@en , "Отъём процессорного времени гипервизором"@ru ;
+    rdfs:comment "In a virtual machine the hypervisor gives the physical CPUs to other tenants."@en ;
+    g:concerns res:cpu ;
+    g:source "docs/research/cpu.md C6; Gregg pp. 258, 585, 595, 604" ; g:grade "documented" .
 
 #################################################################
 # Action types (ADR 0007, 0035)
@@ -884,6 +1010,7 @@ action:io_max_wiops a g:ActionType , owl:NamedIndividual ;
 action:io_weight a g:ActionType , owl:NamedIndividual ;
     rdfs:label "Lower I/O weight"@en , "Снижение веса ввода-вывода"@ru ;
     rdfs:comment "Takes effect only with the BFQ scheduler or the iocost controller."@en ;
+    g:proportional true ;
     g:targets kind:control_group ; g:controls res:disk ;
     g:source "admin-guide/cgroup-v2 io.weight, \"IO\"" ; g:grade "documented" .
 
@@ -905,6 +1032,7 @@ action:cpu_max a g:ActionType , owl:NamedIndividual ;
 
 action:cpu_weight a g:ActionType , owl:NamedIndividual ;
     rdfs:label "Lower CPU weight"@en , "Снижение веса процессора"@ru ;
+    g:proportional true ;
     g:targets kind:control_group ; g:controls res:cpu ;
     g:source "admin-guide/cgroup-v2 cpu.weight" ; g:grade "documented" .
 

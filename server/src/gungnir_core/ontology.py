@@ -66,6 +66,8 @@ class Signal:
     unit: str
     kind: str
     impact: bool
+    # Resources whose waiting drives the signal (cross-effects dossier).
+    reflects: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -115,6 +117,8 @@ class ActionType:
     name: str
     target: str
     resource: str
+    # A weight: its parameter is a share of the current weight.
+    proportional: bool = False
 
 
 @dataclass(frozen=True)
@@ -303,6 +307,7 @@ class _Reader:
             unit=self.one(node, "unit"),
             kind=self._choice(node, "signalKind", SIGNAL_KINDS),
             impact=bool(self.one(node, "isImpact", required=False)),
+            reflects=frozenset(self.many(node, "reflects", "resource")),
         )
 
     def _event(self, name: str, node: URIRef) -> EventType:
@@ -350,7 +355,12 @@ class _Reader:
         return RootCause(name, resources, self.one(node, "culpritKind", "kind", required=False))
 
     def _action(self, name: str, node: URIRef) -> ActionType:
-        return ActionType(name, self.one(node, "targets", "kind"), self.one(node, "controls", "resource"))
+        return ActionType(
+            name,
+            self.one(node, "targets", "kind"),
+            self.one(node, "controls", "resource"),
+            bool(self.one(node, "proportional", required=False)),
+        )
 
     def _protected(self, name: str, node: URIRef) -> ProtectedEntity:
         units = tuple(self.many(node, "unitPattern"))
