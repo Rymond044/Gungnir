@@ -158,6 +158,26 @@ def test_of_equal_hypotheses_the_more_unusual_culprit_comes_first(reasoner):
     assert writers == [other, WRITER]
 
 
+def test_contradicting_evidence_rules_a_cause_out(reasoner):
+    # A writer that waits on its own writes: forced syncs, or buffered
+    # writes throttled at the dirty limit. Dirty pages tell them apart.
+    seen = [
+        rec("cgroup.write_bytes_per_s", WRITER, 100),
+        rec("cgroup.io_pressure_some_ratio", WRITER, 100),
+        rec("disk.write_ops_per_s", DISK, 100),
+        rec("cgroup.io_pressure_some_ratio", READER, 105),
+    ]
+    d = reasoner.diagnose(ev(*seen))
+    [h] = [h for h in d.hypotheses if h.cause == "sync_write_storm"]
+    [against] = [f for f in h.found if f.manifestation.strength == "contradicting"]
+    assert against.status == "absent"
+    assert "sync_write_storm" not in reasoner.diagnose(ev(*seen, rec("mem.dirty_bytes", HOST, 110))).causes()
+    # Not yet seen while its window is open.
+    open_window = reasoner.diagnose(ev(*seen, until=120.0))
+    [h] = [h for h in open_window.hypotheses if h.cause == "sync_write_storm"]
+    assert [f.status for f in h.found if f.manifestation.strength == "contradicting"] == [PENDING]
+
+
 def test_a_process_sign_on_the_others_is_outside_the_culprits_line(reasoner):
     seen = copy()[:3]
     own = Sign("waiting_on_io", "cp", 10, "D", WRITER, 110.0)

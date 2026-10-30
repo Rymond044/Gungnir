@@ -16,7 +16,8 @@
 # filesystem, host. One manifestation is the `anchor`; the `window` of every
 # other one is [min, max] seconds from the anchor's start. `strength` is
 # characteristic, typical or possible; `harm = true` marks the harm the
-# cause does. Rule conditions: `requires` and `excludes` name context facts
+# cause does. `strength = "contradicting"` marks evidence against the cause:
+# seen in its window, it rules the cause out (ADR 0049). Rule conditions: `requires` and `excludes` name context facts
 # or `culprit_class`, the workload class whose rules match the culprit's
 # group. Grades follow the dossier: documented, measured (seen in a labeled
 # run), unverified (inferred there; to be confirmed by an S9 scenario).
@@ -305,12 +306,25 @@ strength = "possible"
 harm = true
 provenance = { source = "ADR 0038; proc_pid_stat(5) state D", grade = "documented" }
 
+# A buffered writer throttled at the dirty limit also waits on its own
+# writes; its dirty pages give it away (ADR 0049).
+[[rule.manifestation]]
+anomaly = "mem.dirty_bytes"
+direction = "up"
+role = "host"
+window = [-15, 60]
+strength = "contradicting"
+provenance = { source = "docs/research/disk-io.md D4 tell it from D5: dirty stays low because every write is flushed at once; culprit run 20261030T202141Z writeback_storm: the buffered writer's own I/O pressure rose too", grade = "documented" }
+
 #################################################################
 # D5. Writeback storm
 #################################################################
 
 # Windows of 35 s: dirty_expire_centisecs 30 s plus one flusher wakeup,
 # dirty_writeback_centisecs 5 s (the laptop's values, the kernel defaults).
+# They open 15 s before the anchor: the flushers drain dirty pages as they
+# fill, so a record of three samples above the threshold can open after the
+# flush and the waiting have begun (culprit run 20261030T202141Z).
 [[rule]]
 cause = "writeback_storm"
 excludes = { culprit_class = "maintenance" }
@@ -328,7 +342,7 @@ provenance = { source = "Love p. 331; overhead run 20261028T195813Z: dirty up to
 anomaly = "disk.write_bytes_per_s"
 direction = "up"
 role = "device"
-window = [0, 35]
+window = [-15, 35]
 strength = "characteristic"
 provenance = { source = "admin-guide/sysctl/vm dirty_expire_centisecs, dirty_writeback_centisecs", grade = "documented" }
 
@@ -336,14 +350,14 @@ provenance = { source = "admin-guide/sysctl/vm dirty_expire_centisecs, dirty_wri
 anomaly = "mem.writeback_bytes"
 direction = "up"
 role = "host"
-window = [0, 35]
+window = [-15, 35]
 strength = "typical"
 provenance = { source = "Love p. 332", grade = "documented" }
 
 [[rule.manifestation]]
 sign = "writeback_flusher"
 role = "host"
-window = [0, 60]
+window = [-15, 60]
 strength = "typical"
 provenance = { source = "Gregg p. 374; fs/fs-writeback.c flush-%s; overhead run 20261028T195813Z: +flush-btrfs-1 in state D", grade = "documented" }
 
@@ -360,7 +374,7 @@ provenance = { source = "admin-guide/cgroup-v2 Writeback", grade = "documented" 
 anomaly = "disk.queue_depth"
 direction = "up"
 role = "device"
-window = [0, 60]
+window = [-15, 60]
 strength = "typical"
 provenance = { source = "overhead run 20261028T195813Z: queue depth 78", grade = "measured" }
 
@@ -368,7 +382,7 @@ provenance = { source = "overhead run 20261028T195813Z: queue depth 78", grade =
 anomaly = "cgroup.io_pressure_some_ratio"
 direction = "up"
 role = "others"
-window = [0, 90]
+window = [-15, 90]
 strength = "characteristic"
 harm = true
 provenance = { source = "accounting/psi; Love p. 300", grade = "documented" }
@@ -376,7 +390,7 @@ provenance = { source = "accounting/psi; Love p. 300", grade = "documented" }
 [[rule.manifestation]]
 sign = "waiting_on_io"
 role = "others"
-window = [0, 90]
+window = [-15, 90]
 strength = "possible"
 harm = true
 provenance = { source = "ADR 0038; proc_pid_stat(5) state D", grade = "documented" }
@@ -385,7 +399,7 @@ provenance = { source = "ADR 0038; proc_pid_stat(5) state D", grade = "documente
 anomaly = "cpu.blocked_tasks"
 direction = "up"
 role = "host"
-window = [0, 90]
+window = [-15, 90]
 strength = "possible"
 provenance = { source = "overhead run 20261028T195813Z: up to 5 blocked tasks", grade = "measured" }
 

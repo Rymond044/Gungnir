@@ -304,6 +304,56 @@ role = "host"
 direction = "up"
 at = 40
 
+# Seen live: the flushers drained dirty pages as they filled, so their
+# record opened 15 s after the writes, and the writer, throttled at the
+# dirty limit, waited on its own writes as a syncing program does.
+[[case]]
+name = "a buffered writer floods the page cache and a syncing program waits"
+expect = "writeback_storm"
+not = ["sync_write_storm"]
+provenance = { source = "culprit run 20261030T202141Z writeback_storm: 1.8-2.4 GB/s, dirty 0.1-2.0 GB, writer's pressure 0.13, victim's 0.12-0.17", grade = "measured" }
+
+[[case.record]]
+signal = "cgroup.write_bytes_per_s"
+role = "culprit"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "cgroup.io_pressure_some_ratio"
+role = "culprit"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "disk.write_bytes_per_s"
+role = "device"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "disk.write_ops_per_s"
+role = "device"
+direction = "up"
+at = 0
+
+[[case.sign]]
+sign = "writeback_flusher"
+role = "host"
+at = 5
+
+[[case.record]]
+signal = "cgroup.io_pressure_some_ratio"
+role = "others"
+direction = "up"
+at = 10
+
+[[case.record]]
+signal = "mem.dirty_bytes"
+role = "host"
+direction = "up"
+at = 15
+
 # D7 fires as well: a full filesystem is its whole rule. The writer makes
 # D6 the better explanation, which is the reasoner's ranking (S5).
 [[case]]
