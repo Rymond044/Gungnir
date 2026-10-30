@@ -16,6 +16,9 @@ from gungnir_core.ontology import Ontology
 KINDS = ("anomaly", "value", "event", "sign")
 # The words of ADR 0034; the reasoner maps them to numbers.
 STRENGTHS = ("characteristic", "typical", "possible")
+# Evidence against the cause (ADR 0049): when it is seen in its window, the
+# cause is ruled out, as the dossiers' "tell it from" says.
+CONTRADICTING = "contradicting"
 DIRECTIONS = ("up", "down")
 RECORDS = ("any", "anomaly", "impact")
 # Detectors an anomaly manifestation may name; a record of "robust.mad" or
@@ -179,11 +182,13 @@ class _Checker:
         if role not in self.onto.roles:
             self.fail(f"{where}: role must be one of {', '.join(sorted(self.onto.roles))}")
         strength = m.get("strength")
-        if strength not in STRENGTHS:
-            self.fail(f"{where}: strength must be one of {', '.join(STRENGTHS)}")
+        if strength not in (*STRENGTHS, CONTRADICTING):
+            self.fail(f"{where}: strength must be one of {', '.join((*STRENGTHS, CONTRADICTING))}")
         anchor, harm = m.get("anchor", False), m.get("harm", False)
         if not isinstance(anchor, bool) or not isinstance(harm, bool):
             self.fail(f"{where}: anchor and harm are true or false")
+        if strength == CONTRADICTING and (anchor or harm):
+            self.fail(f"{where}: a contradicting manifestation is neither the anchor nor harm")
         window = self.window(m.get("window"), anchor, where)
         if len(self.problems) > before:
             return None

@@ -241,7 +241,7 @@ def render_records(rows: list, now: datetime, zone: timezone, title: str) -> str
     return "\n".join(lines)
 
 
-MARKS = {"matched": "+", "missing": "-", "pending": "?", "unobservable": "."}
+MARKS = {"matched": "+", "missing": "-", "pending": "?", "unobservable": ".", "absent": "x"}
 
 
 def render_diagnosis(d, zone: timezone, title: str) -> str:

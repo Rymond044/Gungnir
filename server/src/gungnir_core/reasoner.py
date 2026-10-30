@@ -3,8 +3,9 @@ from the evidence of an interval and the knowledge base.
 
 Each culprit candidate of a rule gives a hypothesis when the rule's
 conditions hold, its anchor is matched, every characteristic manifestation
-is matched, pending or unobservable, and some harm is matched; without its
-anchor it must also match something besides the harm. Confidence
+is matched, pending or unobservable, some harm is matched and no
+contradicting manifestation is; without its anchor it must also match
+something besides the harm. Confidence
 combines the weights of the matched manifestations as 1 - Π(1 - w) and
 lowers it by 1 - alpha * w for each missing one. The reasoner sees
 records, never samples (ADR 0001), and reads no database.
@@ -29,12 +30,16 @@ from gungnir_core.evidence import (
 )
 from gungnir_core.params import Params
 from gungnir_core.policy import Advisory
-from gungnir_core.rules import CULPRIT_CLASS, STRENGTHS, Manifestation, Rule
+from gungnir_core.rules import CONTRADICTING, CULPRIT_CLASS, STRENGTHS, Manifestation, Rule
 
 if TYPE_CHECKING:
     from gungnir_core.base import Base
 
 MATCHED, MISSING, PENDING, UNOBSERVABLE = "matched", "missing", "pending", "unobservable"
+# A contradicting manifestation that was looked for and not seen.
+ABSENT = "absent"
+# Order in which manifestations take evidence: the anchor, then by strength.
+ORDER = (*STRENGTHS, CONTRADICTING)
 
 
 @dataclass(frozen=True)
@@ -248,7 +253,7 @@ class RuleReasoner:
             range(len(rule.manifestations)),
             key=lambda i: (
                 not rule.manifestations[i].anchor,
-                STRENGTHS.index(rule.manifestations[i].strength),
+                ORDER.index(rule.manifestations[i].strength),
             ),
         )
         for i in order:
@@ -265,6 +270,8 @@ class RuleReasoner:
                 ),
                 key=at,
             )
+            if fits and m.strength == CONTRADICTING:
+                return None
             if fits:
                 used.add(fits[0])
                 outcome[i] = Found(m, MATCHED, fits[0])
@@ -273,7 +280,7 @@ class RuleReasoner:
             elif t0 + hi > ev.until:
                 outcome[i] = Found(m, PENDING)
             else:
-                outcome[i] = Found(m, MISSING)
+                outcome[i] = Found(m, ABSENT if m.strength == CONTRADICTING else MISSING)
         found = tuple(outcome[i] for i in range(len(rule.manifestations)))
 
         if any(f.status == MISSING and f.manifestation.strength == "characteristic" for f in found):

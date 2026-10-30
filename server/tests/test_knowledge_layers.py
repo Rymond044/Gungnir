@@ -96,6 +96,28 @@ def test_a_broken_rule_is_refused(onto, tmp_path, old, new, complaint):
         load_rule(onto, tmp_path, GOOD_RULE.replace(old, new, 1))
 
 
+AGAINST = """
+[[rule.manifestation]]
+anomaly = "mem.dirty_bytes"
+direction = "up"
+role = "host"
+window = [-15, 60]
+strength = "contradicting"
+provenance = { source = "test", grade = "documented" }
+"""
+
+
+def test_a_contradicting_manifestation_is_neither_anchor_nor_harm(onto, tmp_path):
+    [rule] = load_rule(onto, tmp_path, GOOD_RULE + AGAINST).values()
+    assert rule.manifestations[2].strength == "contradicting"
+    for old, new in (
+        ("window = [-15, 60]", "anchor = true"),
+        ('role = "host"', 'role = "host"\nharm = true'),
+    ):
+        with pytest.raises(KnowledgeError, match="contradicting manifestation"):
+            load_rule(onto, tmp_path, GOOD_RULE + AGAINST.replace(old, new))
+
+
 def test_a_rule_without_provenance_on_a_manifestation_is_refused(onto, tmp_path):
     head = GOOD_RULE.rsplit("provenance", 1)[0]
     with pytest.raises(KnowledgeError, match="manifestation #2 has no provenance"):
