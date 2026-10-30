@@ -128,6 +128,15 @@ cd server && GUNGNIR_PARAMS=/tmp/p.toml uv run gungnir-core replay laptop robust
 
 The live core uses the defaults.
 
+## Knowledge base
+
+```sh
+cd server && uv run gungnir-core knowledge check    # ontology, names used by the knowledge files, HermiT
+core knowledge check --no-reasoner                  # in the container: no Java there, so no HermiT
+```
+
+The ontology is `knowledge/ontology/gungnir.ttl`; open it in Protégé (File → Open) to browse it and run HermiT there (Reasoner → HermiT). Saving from Protégé rewrites the file in its own order and drops the `#` comments, so edits are made in the text and checked with the command above. HermiT reports how it classified the root causes (disk, filesystem, memory, CPU).
+
 ## Showing it (about 7 minutes)
 
 Before: core up, calibration run done, a day of data collected.

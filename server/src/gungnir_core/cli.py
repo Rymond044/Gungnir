@@ -2,7 +2,7 @@
 
 `serve | migrate | maintain | process | status | host add|list|rotate-token |
 runs import|list|quiet | calibrate | workload show|unmatched|assign | baselines |
-anomalies | replay | evaluate | smd`.
+anomalies | replay | evaluate | smd | knowledge check`.
 """
 
 import argparse
@@ -20,6 +20,7 @@ from gungnir_core import (
     hosts,
     labels,
     maintenance,
+    ontology,
     params,
     pipeline,
     telemetry,
@@ -29,6 +30,7 @@ from gungnir_core.db import database_url, migrate
 from gungnir_core.detection import evaluation, replay, smd
 from gungnir_core.display import host_zone, render_baselines, render_records, render_status, stamp
 from gungnir_core.frame import fact_spans, host_series
+from gungnir_core.knowledge import KnowledgeError
 
 
 def main() -> None:
@@ -107,6 +109,10 @@ def main() -> None:
     sm.add_argument("--machine", action="append", help="only these machines")
     sm.add_argument("--out", type=Path)
 
+    kn = commands.add_parser("knowledge", help="knowledge base").add_subparsers(dest="action", required=True)
+    kc = kn.add_parser("check", help="check the ontology and the names the knowledge files use")
+    kc.add_argument("--no-reasoner", action="store_true", help="skip HermiT, which needs Java and owlready2")
+
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
@@ -117,6 +123,9 @@ def main() -> None:
 
         uvicorn.run(create_app(), host=args.host, port=args.port)
         return
+
+    if args.command == "knowledge":
+        sys.exit(check_knowledge(not args.no_reasoner))
 
     if args.command == "smd":
         report, _ = smd.run(args.root, params.load(), args.machine)
@@ -173,6 +182,26 @@ def main() -> None:
             for h in hosts.summaries(conn):
                 seen = h.last_seen_at.isoformat(timespec="seconds") if h.last_seen_at else "never"
                 print(f"{h.name}\tlast seen {seen}\tagent {h.agent_version or '-'}")
+
+
+def check_knowledge(reasoner: bool) -> int:
+    try:
+        onto = ontology.load()
+        counts = ", ".join(f"{category} {len(onto.names(category))}" for category in ontology.CATEGORIES)
+        print(f"{ontology.path()}: {counts}")
+        checked, problems = ontology.references(onto)
+        if problems:
+            raise KnowledgeError("\n".join(problems))
+        print(f"knowledge files: {checked} entries name only what the ontology has")
+        if reasoner:
+            classified = ontology.consistency()
+            print("HermiT: consistent")
+            for cls, causes in classified.items():
+                print(f"  {cls}: {', '.join(causes) or '-'}")
+    except KnowledgeError as err:
+        print(err, file=sys.stderr)
+        return 1
+    return 0
 
 
 def need_host(conn: psycopg.Connection, name: str) -> hosts.Host:

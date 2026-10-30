@@ -1,0 +1,954 @@
+# gungnIR ontology (ADR 0033): what exists in the domain and how it relates.
+#
+# It holds kinds, never the concrete groups and processes of a host, which
+# exist only at run time. Classes are the categories; individuals are what
+# causal rules, expected behavior, the action policy, knowledge tests and
+# detection configuration name in their TOML files. Each category has its
+# own namespace, and a TOML field resolves a name in the namespace of its
+# category: `signal = "disk.write_bytes_per_s"`, `role = "host"`.
+#
+# Every individual carries provenance (g:source, g:grade), like every entry
+# of the TOML layers. Edit in Protégé or by hand; check with
+# `gungnir-core knowledge check`.
+
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:    <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix g:      <https://gungnir.local/ontology#> .
+@prefix res:    <https://gungnir.local/ontology/resource#> .
+@prefix kind:   <https://gungnir.local/ontology/kind#> .
+@prefix role:   <https://gungnir.local/ontology/role#> .
+@prefix signal: <https://gungnir.local/ontology/signal#> .
+@prefix event:  <https://gungnir.local/ontology/event#> .
+@prefix sign:   <https://gungnir.local/ontology/sign#> .
+@prefix fact:   <https://gungnir.local/ontology/fact#> .
+@prefix cause:  <https://gungnir.local/ontology/cause#> .
+@prefix action: <https://gungnir.local/ontology/action#> .
+@prefix prot:   <https://gungnir.local/ontology/protected#> .
+@prefix class:  <https://gungnir.local/ontology/class#> .
+
+<https://gungnir.local/ontology>
+    a owl:Ontology ;
+    rdfs:label "gungnIR knowledge base: ontology"@en , "База знаний gungnIR: онтология"@ru ;
+    owl:versionInfo "0.1" .
+
+#################################################################
+# Classes
+#################################################################
+
+g:Resource a owl:Class ;
+    rdfs:label "Resource"@en , "Ресурс"@ru ;
+    rdfs:comment "A resource of a host that can be used up or contended: CPU, memory, swap, disk, filesystem."@en .
+
+g:EntityKind a owl:Class ;
+    rdfs:label "Kind of entity"@en , "Вид сущности"@ru ;
+    rdfs:comment "What a series, a fact or an action is about: the host, a block device, a mount point, a control group, a process."@en .
+
+g:Role a owl:Class ;
+    rdfs:label "Role"@en , "Роль"@ru ;
+    rdfs:comment "The entity a manifestation is expected on, bound by the reasoner to a concrete one (ADR 0034)."@en .
+
+g:Signal a owl:Class ;
+    rdfs:label "Signal"@en , "Сигнал"@ru ;
+    rdfs:comment "A named measurable quantity the agent reports, observed on one kind of entity."@en .
+
+g:EventType a owl:Class ;
+    rdfs:label "Event type"@en , "Тип события"@ru ;
+    rdfs:comment "A kind of kernel or service manager message, recognised by its message id or its text."@en .
+
+g:ProcessSign a owl:Class ;
+    rdfs:label "Process sign"@en , "Процесс-признак"@ru ;
+    rdfs:comment "A process or kernel thread whose presence in the process snapshot is a manifestation: a name pattern and optionally a state (ADR 0038)."@en .
+
+g:ContextFact a owl:Class ;
+    rdfs:label "Context fact"@en , "Факт контекста"@ru ;
+    rdfs:comment "A property of the host that rules require or exclude and the action policy depends on; not evidence."@en .
+
+g:WorkloadClass a owl:Class ;
+    rdfs:label "Workload class"@en , "Класс нагрузки"@ru .
+
+g:RootCause a owl:Class ;
+    rdfs:label "Root cause"@en , "Первопричина"@ru ;
+    rdfs:comment "A cause class that explains an incident: the culprit's activity together with the impact it has on the others (ADR 0034)."@en .
+
+g:ActionType a owl:Class ;
+    rdfs:label "Action type"@en , "Тип корректирующего действия"@ru ;
+    rdfs:comment "A typed, reversible change the actuator may make; what it is applied to and which resource it controls."@en .
+
+g:ProtectedEntity a owl:Class ;
+    rdfs:label "Protected entity"@en , "Защищённая сущность"@ru ;
+    rdfs:comment "A service or process no action may target, recognised by its systemd unit or its command."@en .
+
+[] a owl:AllDisjointClasses ;
+    owl:members ( g:Resource g:EntityKind g:Role g:Signal g:EventType g:ProcessSign g:ContextFact
+                  g:WorkloadClass g:RootCause g:ActionType g:ProtectedEntity ) .
+
+# Causes by resource. The reasoner classifies each cause from the resources
+# it concerns; a cause across resources falls into several classes.
+
+g:DiskCause a owl:Class ;
+    rdfs:label "Disk cause"@en , "Причина в подсистеме дисков"@ru ;
+    owl:equivalentClass [ a owl:Class ;
+        owl:intersectionOf ( g:RootCause [ a owl:Restriction ; owl:onProperty g:concerns ; owl:hasValue res:disk ] ) ] .
+
+g:FilesystemCause a owl:Class ;
+    rdfs:label "Filesystem cause"@en , "Причина в файловой системе"@ru ;
+    owl:equivalentClass [ a owl:Class ;
+        owl:intersectionOf ( g:RootCause [ a owl:Restriction ; owl:onProperty g:concerns ; owl:hasValue res:filesystem ] ) ] .
+
+g:MemoryCause a owl:Class ;
+    rdfs:label "Memory cause"@en , "Причина в подсистеме памяти"@ru ;
+    owl:equivalentClass [ a owl:Class ;
+        owl:intersectionOf ( g:RootCause [ a owl:Restriction ; owl:onProperty g:concerns ; owl:hasValue res:memory ] ) ] .
+
+g:CpuCause a owl:Class ;
+    rdfs:label "CPU cause"@en , "Причина в подсистеме процессора"@ru ;
+    owl:equivalentClass [ a owl:Class ;
+        owl:intersectionOf ( g:RootCause [ a owl:Restriction ; owl:onProperty g:concerns ; owl:hasValue res:cpu ] ) ] .
+
+#################################################################
+# Object properties
+#################################################################
+
+g:measures a owl:ObjectProperty , owl:FunctionalProperty ;
+    rdfs:label "measures"@en ;
+    rdfs:domain g:Signal ;
+    rdfs:range g:Resource .
+
+g:observedOn a owl:ObjectProperty , owl:FunctionalProperty ;
+    rdfs:label "observed on"@en ;
+    rdfs:comment "The kind of entity whose series or facts carry this signal or fact."@en ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( g:Signal g:ContextFact ) ] ;
+    rdfs:range g:EntityKind .
+
+g:about a owl:ObjectProperty , owl:FunctionalProperty ;
+    rdfs:label "about"@en ;
+    rdfs:domain g:EventType ;
+    rdfs:range g:Resource .
+
+g:indicates a owl:ObjectProperty , owl:FunctionalProperty ;
+    rdfs:label "indicates"@en ;
+    rdfs:domain g:ProcessSign ;
+    rdfs:range g:Resource .
+
+g:concerns a owl:ObjectProperty ;
+    rdfs:label "concerns"@en ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( g:RootCause g:ContextFact ) ] ;
+    rdfs:range g:Resource .
+
+g:culpritKind a owl:ObjectProperty , owl:FunctionalProperty ;
+    rdfs:label "culprit kind"@en ;
+    rdfs:comment "The kind of entity the reasoner binds the culprit to. A cause without it has no culprit and no activity manifestations, only impact (ADR 0034)."@en ;
+    rdfs:domain g:RootCause ;
+    rdfs:range g:EntityKind .
+
+g:bindsTo a owl:ObjectProperty ;
+    rdfs:label "binds to"@en ;
+    rdfs:comment "The kinds of entity a role may be bound to; a manifestation's signal must be observed on one of them."@en ;
+    rdfs:domain g:Role ;
+    rdfs:range g:EntityKind .
+
+g:targets a owl:ObjectProperty , owl:FunctionalProperty ;
+    rdfs:label "targets"@en ;
+    rdfs:domain g:ActionType ;
+    rdfs:range g:EntityKind .
+
+g:controls a owl:ObjectProperty , owl:FunctionalProperty ;
+    rdfs:label "controls"@en ;
+    rdfs:domain g:ActionType ;
+    rdfs:range g:Resource .
+
+g:runsIn a owl:ObjectProperty ;
+    rdfs:label "runs in"@en ;
+    rdfs:comment "Between kinds: a process runs in a control group, a control group in its parent."@en ;
+    rdfs:domain g:EntityKind ;
+    rdfs:range g:EntityKind .
+
+g:onDevice a owl:ObjectProperty ;
+    rdfs:label "on device"@en ;
+    rdfs:comment "Between kinds: a mount point's filesystem lives on a block device."@en ;
+    rdfs:domain g:EntityKind ;
+    rdfs:range g:EntityKind .
+
+#################################################################
+# Data properties
+#################################################################
+
+g:unit a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:domain g:Signal ;
+    rdfs:range xsd:string .
+
+g:signalKind a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:comment "level: a value at the sample; rate: a counter per second; ratio: a share from 0 to 1; count: increments in the sampling interval."@en ;
+    rdfs:domain g:Signal ;
+    rdfs:range [ a rdfs:Datatype ; owl:oneOf ( "level" "rate" "ratio" "count" ) ] .
+
+g:isImpact a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:comment "The signal measures waiting, so detection may judge it against impact thresholds (ADR 0025)."@en ;
+    rdfs:domain g:Signal ;
+    rdfs:range xsd:boolean .
+
+g:emittedBy a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:domain g:EventType ;
+    rdfs:range [ a rdfs:Datatype ; owl:oneOf ( "kernel" "systemd" ) ] .
+
+g:messageId a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:comment "systemd MESSAGE_ID of the journal entry (sd-messages.h)."@en ;
+    rdfs:domain g:EventType ;
+    rdfs:range xsd:string .
+
+g:messagePattern a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:comment "Regular expression (Python syntax) searched in the message text."@en ;
+    rdfs:domain g:EventType ;
+    rdfs:range xsd:string .
+
+g:namePattern a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:comment "Glob pattern on the process name as the kernel shows it (/proc/<pid>/stat)."@en ;
+    rdfs:domain g:ProcessSign ;
+    rdfs:range xsd:string .
+
+g:state a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:comment "Process state letter of proc_pid_stat(5)."@en ;
+    rdfs:domain g:ProcessSign ;
+    rdfs:range [ a rdfs:Datatype ; owl:oneOf ( "R" "S" "D" "I" "Z" "T" ) ] .
+
+g:allowedValue a owl:DatatypeProperty ;
+    rdfs:comment "A value the fact may take; a fact without any is open-ended."@en ;
+    rdfs:domain g:ContextFact ;
+    rdfs:range xsd:string .
+
+g:unitPattern a owl:DatatypeProperty ;
+    rdfs:comment "Glob pattern on a systemd unit name."@en ;
+    rdfs:domain g:ProtectedEntity ;
+    rdfs:range xsd:string .
+
+g:commandPattern a owl:DatatypeProperty ;
+    rdfs:comment "Glob pattern on a process name."@en ;
+    rdfs:domain g:ProtectedEntity ;
+    rdfs:range xsd:string .
+
+# Provenance, as in the TOML layers: where the knowledge comes from and how
+# well it is supported (documented, measured, operator, unverified).
+
+g:source a owl:AnnotationProperty ;
+    rdfs:label "provenance source"@en .
+
+g:grade a owl:AnnotationProperty ;
+    rdfs:label "provenance grade"@en .
+
+#################################################################
+# Resources
+#################################################################
+
+res:cpu a g:Resource , owl:NamedIndividual ;
+    rdfs:label "CPU"@en , "Процессор"@ru ;
+    g:source "Gregg, Systems Performance, 2nd ed., ch. 6 CPUs (p. 219)" ; g:grade "documented" .
+
+res:memory a g:Resource , owl:NamedIndividual ;
+    rdfs:label "Memory"@en , "Оперативная память"@ru ;
+    g:source "Gregg, Systems Performance, 2nd ed., ch. 7 Memory (p. 303)" ; g:grade "documented" .
+
+res:swap a g:Resource , owl:NamedIndividual ;
+    rdfs:label "Swap"@en , "Область подкачки"@ru ;
+    g:source "Gregg, Systems Performance, 2nd ed., 7.2.2 Paging (p. 306)" ; g:grade "documented" .
+
+res:disk a g:Resource , owl:NamedIndividual ;
+    rdfs:label "Disk"@en , "Дисковая подсистема"@ru ;
+    g:source "Gregg, Systems Performance, 2nd ed., ch. 9 Disks (p. 423)" ; g:grade "documented" .
+
+res:filesystem a g:Resource , owl:NamedIndividual ;
+    rdfs:label "Filesystem"@en , "Файловая система"@ru ;
+    g:source "Gregg, Systems Performance, 2nd ed., ch. 8 File Systems (p. 359)" ; g:grade "documented" .
+
+res:pids a g:Resource , owl:NamedIndividual ;
+    rdfs:label "Process table"@en , "Таблица процессов"@ru ;
+    g:source "admin-guide/cgroup-v2, \"PID\": the number of tasks is a resource of its own" ; g:grade "documented" .
+
+res:power a g:Resource , owl:NamedIndividual ;
+    rdfs:label "Power"@en , "Электропитание"@ru ;
+    g:source "sysfs power_supply class (ABI testing/sysfs-class-power)" ; g:grade "documented" .
+
+[] a owl:AllDifferent ;
+    owl:distinctMembers ( res:cpu res:memory res:swap res:disk res:filesystem res:pids res:power ) .
+
+#################################################################
+# Kinds of entity and roles
+#################################################################
+
+kind:host a g:EntityKind , owl:NamedIndividual ;
+    rdfs:label "Host"@en , "Узел"@ru ;
+    g:source "CONTEXT.md, Host" ; g:grade "documented" .
+
+kind:block_device a g:EntityKind , owl:NamedIndividual ;
+    rdfs:label "Block device"@en , "Блочное устройство"@ru ;
+    rdfs:comment "A whole disk; partitions are not observed."@en ;
+    g:source "docs.kernel.org block/stat: /sys/block/<dev>/stat" ; g:grade "documented" .
+
+kind:mount_point a g:EntityKind , owl:NamedIndividual ;
+    rdfs:label "Mount point"@en , "Точка монтирования"@ru ;
+    g:onDevice kind:block_device ;
+    g:source "statvfs(3); proc_pid_mountinfo(5)" ; g:grade "documented" .
+
+kind:control_group a g:EntityKind , owl:NamedIndividual ;
+    rdfs:label "Control group"@en , "Контрольная группа"@ru ;
+    rdfs:comment "A systemd service or scope with its control group (ADR 0016)."@en ;
+    g:runsIn kind:control_group ;
+    g:source "admin-guide/cgroup-v2" ; g:grade "documented" .
+
+kind:process a g:EntityKind , owl:NamedIndividual ;
+    rdfs:label "Process"@en , "Процесс"@ru ;
+    rdfs:comment "A process or kernel thread of the process snapshot. Kernel threads run in no control group."@en ;
+    g:runsIn kind:control_group ;
+    g:source "proc_pid_stat(5); proc_pid_cgroup(5)" ; g:grade "documented" .
+
+[] a owl:AllDifferent ;
+    owl:distinctMembers ( kind:host kind:block_device kind:mount_point kind:control_group kind:process ) .
+
+role:culprit a g:Role , owl:NamedIndividual ;
+    rdfs:label "Culprit"@en , "Виновник"@ru ;
+    g:bindsTo kind:control_group , kind:process ;
+    g:source "ADR 0034" ; g:grade "documented" .
+
+role:others a g:Role , owl:NamedIndividual ;
+    rdfs:label "Others"@en , "Остальные"@ru ;
+    rdfs:comment "Control groups and processes other than the culprit's: where impact on the others is read."@en ;
+    g:bindsTo kind:control_group , kind:process ;
+    g:source "ADR 0034" ; g:grade "documented" .
+
+role:device a g:Role , owl:NamedIndividual ;
+    rdfs:label "Device"@en , "Устройство"@ru ;
+    g:bindsTo kind:block_device ;
+    g:source "ADR 0034" ; g:grade "documented" .
+
+role:host a g:Role , owl:NamedIndividual ;
+    rdfs:label "Host"@en , "Узел"@ru ;
+    g:bindsTo kind:host ;
+    g:source "ADR 0034" ; g:grade "documented" .
+
+role:filesystem a g:Role , owl:NamedIndividual ;
+    rdfs:label "Filesystem"@en , "Файловая система"@ru ;
+    rdfs:comment "The mount point whose fullness the disk causes D6 and D7 are about."@en ;
+    g:bindsTo kind:mount_point ;
+    g:source "docs/research/disk-io.md, D6 and D7" ; g:grade "documented" .
+
+[] a owl:AllDifferent ;
+    owl:distinctMembers ( role:culprit role:others role:device role:host role:filesystem ) .
+
+#################################################################
+# Signals (the agent's wire names, ADR 0013)
+#################################################################
+
+# CPU, host (/proc/stat, /proc/pressure/cpu)
+
+signal:cpu.user_ratio a g:Signal , owl:NamedIndividual ;
+    g:measures res:cpu ; g:observedOn kind:host ; g:unit "1" ; g:signalKind "ratio" ;
+    g:source "proc_stat(5) cpu line, user" ; g:grade "documented" .
+
+signal:cpu.system_ratio a g:Signal , owl:NamedIndividual ;
+    g:measures res:cpu ; g:observedOn kind:host ; g:unit "1" ; g:signalKind "ratio" ;
+    g:source "proc_stat(5) cpu line, system" ; g:grade "documented" .
+
+signal:cpu.nice_ratio a g:Signal , owl:NamedIndividual ;
+    g:measures res:cpu ; g:observedOn kind:host ; g:unit "1" ; g:signalKind "ratio" ;
+    g:source "proc_stat(5) cpu line, nice" ; g:grade "documented" .
+
+signal:cpu.idle_ratio a g:Signal , owl:NamedIndividual ;
+    g:measures res:cpu ; g:observedOn kind:host ; g:unit "1" ; g:signalKind "ratio" ;
+    g:source "proc_stat(5) cpu line, idle" ; g:grade "documented" .
+
+signal:cpu.iowait_ratio a g:Signal , owl:NamedIndividual ;
+    rdfs:comment "CPU idle while tasks wait on disk; falls when other work uses the CPU, so weak evidence of disk waiting."@en ;
+    g:measures res:cpu ; g:observedOn kind:host ; g:unit "1" ; g:signalKind "ratio" ;
+    g:source "proc_stat(5) cpu line, iowait; Gregg p. 434" ; g:grade "documented" .
+
+signal:cpu.irq_ratio a g:Signal , owl:NamedIndividual ;
+    g:measures res:cpu ; g:observedOn kind:host ; g:unit "1" ; g:signalKind "ratio" ;
+    g:source "proc_stat(5) cpu line, irq and softirq" ; g:grade "documented" .
+
+signal:cpu.steal_ratio a g:Signal , owl:NamedIndividual ;
+    g:measures res:cpu ; g:observedOn kind:host ; g:unit "1" ; g:signalKind "ratio" ;
+    g:source "proc_stat(5) cpu line, steal" ; g:grade "documented" .
+
+signal:cpu.runnable_tasks a g:Signal , owl:NamedIndividual ;
+    g:measures res:cpu ; g:observedOn kind:host ; g:unit "tasks" ; g:signalKind "level" ;
+    g:source "proc_stat(5) procs_running" ; g:grade "documented" .
+
+signal:cpu.blocked_tasks a g:Signal , owl:NamedIndividual ;
+    rdfs:comment "Tasks in uninterruptible sleep (state D). Seen in the CPU statistics, it usually points to waiting on storage; rules of the disk domain use it as evidence."@en ;
+    g:measures res:cpu ; g:observedOn kind:host ; g:unit "tasks" ; g:signalKind "level" ;
+    g:source "proc_stat(5) procs_blocked; Gregg p. 195" ; g:grade "documented" .
+
+signal:cpu.context_switches_per_s a g:Signal , owl:NamedIndividual ;
+    g:measures res:cpu ; g:observedOn kind:host ; g:unit "1/s" ; g:signalKind "rate" ;
+    g:source "proc_stat(5) ctxt" ; g:grade "documented" .
+
+signal:cpu.forks_per_s a g:Signal , owl:NamedIndividual ;
+    g:measures res:pids ; g:observedOn kind:host ; g:unit "1/s" ; g:signalKind "rate" ;
+    g:source "proc_stat(5) processes" ; g:grade "documented" .
+
+signal:cpu.pressure_some_ratio a g:Signal , owl:NamedIndividual ;
+    g:measures res:cpu ; g:observedOn kind:host ; g:unit "1" ; g:signalKind "ratio" ; g:isImpact true ;
+    g:source "accounting/psi, /proc/pressure/cpu some (share from total)" ; g:grade "documented" .
+
+# Memory and swap, host (/proc/meminfo, /proc/vmstat, /proc/pressure/memory)
+
+signal:mem.used_ratio a g:Signal , owl:NamedIndividual ;
+    g:measures res:memory ; g:observedOn kind:host ; g:unit "1" ; g:signalKind "ratio" ;
+    g:source "proc_meminfo(5): 1 - MemAvailable / MemTotal" ; g:grade "documented" .
+
+signal:mem.available_bytes a g:Signal , owl:NamedIndividual ;
+    g:measures res:memory ; g:observedOn kind:host ; g:unit "bytes" ; g:signalKind "level" ;
+    g:source "proc_meminfo(5) MemAvailable" ; g:grade "documented" .
+
+signal:mem.free_bytes a g:Signal , owl:NamedIndividual ;
+    g:measures res:memory ; g:observedOn kind:host ; g:unit "bytes" ; g:signalKind "level" ;
+    g:source "proc_meminfo(5) MemFree" ; g:grade "documented" .
+
+signal:mem.cached_bytes a g:Signal , owl:NamedIndividual ;
+    g:measures res:memory ; g:observedOn kind:host ; g:unit "bytes" ; g:signalKind "level" ;
+    g:source "proc_meminfo(5) Cached" ; g:grade "documented" .
+
+signal:mem.anon_bytes a g:Signal , owl:NamedIndividual ;
+    g:measures res:memory ; g:observedOn kind:host ; g:unit "bytes" ; g:signalKind "level" ;
+    g:source "proc_meminfo(5) AnonPages" ; g:grade "documented" .
+
+signal:mem.dirty_bytes a g:Signal , owl:NamedIndividual ;
+    rdfs:comment "Page cache waiting to be written back."@en ;
+    g:measures res:memory ; g:observedOn kind:host ; g:unit "bytes" ; g:signalKind "level" ;
+    g:source "proc_meminfo(5) Dirty; Love p. 331" ; g:grade "documented" .
+
+signal:mem.writeback_bytes a g:Signal , owl:NamedIndividual ;
+    rdfs:comment "Page cache being written back now."@en ;
+    g:measures res:memory ; g:observedOn kind:host ; g:unit "bytes" ; g:signalKind "level" ;
+    g:source "proc_meminfo(5) Writeback; Love p. 332" ; g:grade "documented" .
+
+signal:mem.major_faults_per_s a g:Signal , owl:NamedIndividual ;
+    rdfs:comment "Page faults that had to read from storage."@en ;
+    g:measures res:memory ; g:observedOn kind:host ; g:unit "1/s" ; g:signalKind "rate" ;
+    g:source "/proc/vmstat pgmajfault; Gregg p. 308" ; g:grade "documented" .
+
+signal:mem.direct_reclaims_per_s a g:Signal , owl:NamedIndividual ;
+    g:measures res:memory ; g:observedOn kind:host ; g:unit "1/s" ; g:signalKind "rate" ;
+    g:source "/proc/vmstat allocstall" ; g:grade "documented" .
+
+signal:mem.oom_kills a g:Signal , owl:NamedIndividual ;
+    g:measures res:memory ; g:observedOn kind:host ; g:unit "kills" ; g:signalKind "count" ;
+    g:source "/proc/vmstat oom_kill" ; g:grade "documented" .
+
+signal:mem.pressure_some_ratio a g:Signal , owl:NamedIndividual ;
+    g:measures res:memory ; g:observedOn kind:host ; g:unit "1" ; g:signalKind "ratio" ; g:isImpact true ;
+    g:source "accounting/psi, /proc/pressure/memory some" ; g:grade "documented" .
+
+signal:mem.pressure_full_ratio a g:Signal , owl:NamedIndividual ;
+    g:measures res:memory ; g:observedOn kind:host ; g:unit "1" ; g:signalKind "ratio" ; g:isImpact true ;
+    g:source "accounting/psi, /proc/pressure/memory full" ; g:grade "documented" .
+
+signal:swap.used_bytes a g:Signal , owl:NamedIndividual ;
+    g:measures res:swap ; g:observedOn kind:host ; g:unit "bytes" ; g:signalKind "level" ;
+    g:source "proc_meminfo(5): SwapTotal - SwapFree" ; g:grade "documented" .
+
+signal:swap.used_ratio a g:Signal , owl:NamedIndividual ;
+    g:measures res:swap ; g:observedOn kind:host ; g:unit "1" ; g:signalKind "ratio" ;
+    g:source "proc_meminfo(5): 1 - SwapFree / SwapTotal" ; g:grade "documented" .
+
+signal:swap.in_pages_per_s a g:Signal , owl:NamedIndividual ;
+    g:measures res:swap ; g:observedOn kind:host ; g:unit "pages/s" ; g:signalKind "rate" ;
+    g:source "/proc/vmstat pswpin; Gregg p. 306" ; g:grade "documented" .
+
+signal:swap.out_pages_per_s a g:Signal , owl:NamedIndividual ;
+    g:measures res:swap ; g:observedOn kind:host ; g:unit "pages/s" ; g:signalKind "rate" ;
+    g:source "/proc/vmstat pswpout; Gregg p. 306" ; g:grade "documented" .
+
+# Disk, per whole disk (/proc/diskstats, /proc/pressure/io)
+
+signal:disk.read_bytes_per_s a g:Signal , owl:NamedIndividual ;
+    g:measures res:disk ; g:observedOn kind:block_device ; g:unit "bytes/s" ; g:signalKind "rate" ;
+    g:source "block/stat sectors read; Gregg p. 460" ; g:grade "documented" .
+
+signal:disk.write_bytes_per_s a g:Signal , owl:NamedIndividual ;
+    g:measures res:disk ; g:observedOn kind:block_device ; g:unit "bytes/s" ; g:signalKind "rate" ;
+    g:source "block/stat sectors written; Gregg p. 460" ; g:grade "documented" .
+
+signal:disk.read_ops_per_s a g:Signal , owl:NamedIndividual ;
+    g:measures res:disk ; g:observedOn kind:block_device ; g:unit "1/s" ; g:signalKind "rate" ;
+    g:source "block/stat read I/Os (after merging); Gregg p. 461" ; g:grade "documented" .
+
+signal:disk.write_ops_per_s a g:Signal , owl:NamedIndividual ;
+    g:measures res:disk ; g:observedOn kind:block_device ; g:unit "1/s" ; g:signalKind "rate" ;
+    g:source "block/stat write I/Os (after merging); Gregg p. 461" ; g:grade "documented" .
+
+signal:disk.read_request_bytes a g:Signal , owl:NamedIndividual ;
+    rdfs:comment "Average read request (iostat rareq-sz): small requests mark random I/O. Context for the reasoner, not checked by detection (ADR 0036)."@en ;
+    g:measures res:disk ; g:observedOn kind:block_device ; g:unit "bytes" ; g:signalKind "level" ;
+    g:source "iostat(1) rareq-sz; Gregg p. 461" ; g:grade "documented" .
+
+signal:disk.write_request_bytes a g:Signal , owl:NamedIndividual ;
+    rdfs:comment "Average write request (iostat wareq-sz). Context for the reasoner, not checked by detection (ADR 0036)."@en ;
+    g:measures res:disk ; g:observedOn kind:block_device ; g:unit "bytes" ; g:signalKind "level" ;
+    g:source "iostat(1) wareq-sz; Gregg p. 461" ; g:grade "documented" .
+
+signal:disk.read_await_ms a g:Signal , owl:NamedIndividual ;
+    g:measures res:disk ; g:observedOn kind:block_device ; g:unit "ms" ; g:signalKind "level" ; g:isImpact true ;
+    g:source "iostat(1) r_await; Gregg pp. 430, 461" ; g:grade "documented" .
+
+signal:disk.write_await_ms a g:Signal , owl:NamedIndividual ;
+    g:measures res:disk ; g:observedOn kind:block_device ; g:unit "ms" ; g:signalKind "level" ; g:isImpact true ;
+    g:source "iostat(1) w_await; Gregg pp. 430, 461" ; g:grade "documented" .
+
+signal:disk.util_ratio a g:Signal , owl:NamedIndividual ;
+    rdfs:comment "Share of time with requests; not a limit for devices that serve requests in parallel, such as NVMe."@en ;
+    g:measures res:disk ; g:observedOn kind:block_device ; g:unit "1" ; g:signalKind "ratio" ;
+    g:source "iostat(1) %util; Gregg p. 433" ; g:grade "documented" .
+
+signal:disk.queue_depth a g:Signal , owl:NamedIndividual ;
+    rdfs:comment "Average requests waiting and in service (iostat aqu-sz): saturation."@en ;
+    g:measures res:disk ; g:observedOn kind:block_device ; g:unit "requests" ; g:signalKind "level" ;
+    g:source "block/stat time_in_queue; Gregg p. 434" ; g:grade "documented" .
+
+signal:disk.in_flight a g:Signal , owl:NamedIndividual ;
+    g:measures res:disk ; g:observedOn kind:block_device ; g:unit "requests" ; g:signalKind "level" ;
+    g:source "block/stat in_flight" ; g:grade "documented" .
+
+signal:io.pressure_some_ratio a g:Signal , owl:NamedIndividual ;
+    rdfs:comment "Includes the culprit's own stall: host pressure alone is not impact on the others."@en ;
+    g:measures res:disk ; g:observedOn kind:host ; g:unit "1" ; g:signalKind "ratio" ; g:isImpact true ;
+    g:source "accounting/psi, /proc/pressure/io some; Gregg p. 464" ; g:grade "documented" .
+
+signal:io.pressure_full_ratio a g:Signal , owl:NamedIndividual ;
+    g:measures res:disk ; g:observedOn kind:host ; g:unit "1" ; g:signalKind "ratio" ; g:isImpact true ;
+    g:source "accounting/psi, /proc/pressure/io full" ; g:grade "documented" .
+
+# Filesystems, per mount point of a block device (statvfs)
+
+signal:fs.used_ratio a g:Signal , owl:NamedIndividual ;
+    g:measures res:filesystem ; g:observedOn kind:mount_point ; g:unit "1" ; g:signalKind "ratio" ; g:isImpact true ;
+    g:source "statvfs(3): used / (used + f_bavail), used = f_blocks - f_bfree, as df(1) computes Use%" ; g:grade "documented" .
+
+signal:fs.available_bytes a g:Signal , owl:NamedIndividual ;
+    g:measures res:filesystem ; g:observedOn kind:mount_point ; g:unit "bytes" ; g:signalKind "level" ;
+    g:source "statvfs(3): f_bavail * f_frsize" ; g:grade "documented" .
+
+signal:fs.inodes_used_ratio a g:Signal , owl:NamedIndividual ;
+    g:measures res:filesystem ; g:observedOn kind:mount_point ; g:unit "1" ; g:signalKind "ratio" ;
+    g:source "statvfs(3): 1 - f_ffree / f_files" ; g:grade "documented" .
+
+# Control groups (cgroup v2 interface files, ADR 0016)
+
+signal:cgroup.cpu_cores a g:Signal , owl:NamedIndividual ;
+    g:measures res:cpu ; g:observedOn kind:control_group ; g:unit "cores" ; g:signalKind "rate" ;
+    g:source "admin-guide/cgroup-v2 cpu.stat usage_usec" ; g:grade "documented" .
+
+signal:cgroup.throttled_ratio a g:Signal , owl:NamedIndividual ;
+    g:measures res:cpu ; g:observedOn kind:control_group ; g:unit "1" ; g:signalKind "ratio" ;
+    g:source "admin-guide/cgroup-v2 cpu.stat nr_throttled / nr_periods" ; g:grade "documented" .
+
+signal:cgroup.cpu_pressure_some_ratio a g:Signal , owl:NamedIndividual ;
+    g:measures res:cpu ; g:observedOn kind:control_group ; g:unit "1" ; g:signalKind "ratio" ; g:isImpact true ;
+    g:source "accounting/psi, cpu.pressure of the group" ; g:grade "documented" .
+
+signal:cgroup.mem_bytes a g:Signal , owl:NamedIndividual ;
+    g:measures res:memory ; g:observedOn kind:control_group ; g:unit "bytes" ; g:signalKind "level" ;
+    g:source "admin-guide/cgroup-v2 memory.current" ; g:grade "documented" .
+
+signal:cgroup.mem_high_events a g:Signal , owl:NamedIndividual ;
+    g:measures res:memory ; g:observedOn kind:control_group ; g:unit "events" ; g:signalKind "count" ;
+    g:source "admin-guide/cgroup-v2 memory.events high" ; g:grade "documented" .
+
+signal:cgroup.mem_max_events a g:Signal , owl:NamedIndividual ;
+    g:measures res:memory ; g:observedOn kind:control_group ; g:unit "events" ; g:signalKind "count" ;
+    g:source "admin-guide/cgroup-v2 memory.events max" ; g:grade "documented" .
+
+signal:cgroup.oom_kills a g:Signal , owl:NamedIndividual ;
+    g:measures res:memory ; g:observedOn kind:control_group ; g:unit "kills" ; g:signalKind "count" ;
+    g:source "admin-guide/cgroup-v2 memory.events oom_kill" ; g:grade "documented" .
+
+signal:cgroup.mem_pressure_some_ratio a g:Signal , owl:NamedIndividual ;
+    g:measures res:memory ; g:observedOn kind:control_group ; g:unit "1" ; g:signalKind "ratio" ; g:isImpact true ;
+    g:source "accounting/psi, memory.pressure of the group" ; g:grade "documented" .
+
+signal:cgroup.mem_pressure_full_ratio a g:Signal , owl:NamedIndividual ;
+    g:measures res:memory ; g:observedOn kind:control_group ; g:unit "1" ; g:signalKind "ratio" ; g:isImpact true ;
+    g:source "accounting/psi, memory.pressure of the group" ; g:grade "documented" .
+
+signal:cgroup.read_bytes_per_s a g:Signal , owl:NamedIndividual ;
+    g:measures res:disk ; g:observedOn kind:control_group ; g:unit "bytes/s" ; g:signalKind "rate" ;
+    g:source "admin-guide/cgroup-v2 io.stat rbytes" ; g:grade "documented" .
+
+signal:cgroup.write_bytes_per_s a g:Signal , owl:NamedIndividual ;
+    rdfs:comment "Buffered writes count on the group that owns the inode, also when a flusher thread issues them."@en ;
+    g:measures res:disk ; g:observedOn kind:control_group ; g:unit "bytes/s" ; g:signalKind "rate" ;
+    g:source "admin-guide/cgroup-v2 io.stat wbytes; \"Writeback\"" ; g:grade "documented" .
+
+signal:cgroup.read_ops_per_s a g:Signal , owl:NamedIndividual ;
+    g:measures res:disk ; g:observedOn kind:control_group ; g:unit "1/s" ; g:signalKind "rate" ;
+    g:source "admin-guide/cgroup-v2 io.stat rios" ; g:grade "documented" .
+
+signal:cgroup.write_ops_per_s a g:Signal , owl:NamedIndividual ;
+    g:measures res:disk ; g:observedOn kind:control_group ; g:unit "1/s" ; g:signalKind "rate" ;
+    g:source "admin-guide/cgroup-v2 io.stat wios" ; g:grade "documented" .
+
+signal:cgroup.io_pressure_some_ratio a g:Signal , owl:NamedIndividual ;
+    rdfs:comment "Present in every group, with or without the io controller: where impact on the others is read."@en ;
+    g:measures res:disk ; g:observedOn kind:control_group ; g:unit "1" ; g:signalKind "ratio" ; g:isImpact true ;
+    g:source "accounting/psi, io.pressure of the group" ; g:grade "documented" .
+
+signal:cgroup.io_pressure_full_ratio a g:Signal , owl:NamedIndividual ;
+    g:measures res:disk ; g:observedOn kind:control_group ; g:unit "1" ; g:signalKind "ratio" ; g:isImpact true ;
+    g:source "accounting/psi, io.pressure of the group" ; g:grade "documented" .
+
+# Processes, host totals (/proc/<pid>/stat)
+
+signal:proc.count a g:Signal , owl:NamedIndividual ;
+    g:measures res:pids ; g:observedOn kind:host ; g:unit "processes" ; g:signalKind "level" ;
+    g:source "proc(5): one directory per process in /proc" ; g:grade "documented" .
+
+signal:proc.threads a g:Signal , owl:NamedIndividual ;
+    g:measures res:pids ; g:observedOn kind:host ; g:unit "threads" ; g:signalKind "level" ;
+    g:source "proc_pid_stat(5) num_threads" ; g:grade "documented" .
+
+# Power supply (sysfs power_supply)
+
+signal:power.on_ac a g:Signal , owl:NamedIndividual ;
+    g:measures res:power ; g:observedOn kind:host ; g:unit "1" ; g:signalKind "level" ;
+    g:source "ABI testing/sysfs-class-power: online of the Mains supply" ; g:grade "documented" .
+
+signal:power.battery_ratio a g:Signal , owl:NamedIndividual ;
+    g:measures res:power ; g:observedOn kind:host ; g:unit "1" ; g:signalKind "ratio" ;
+    g:source "ABI testing/sysfs-class-power: capacity of the Battery supply" ; g:grade "documented" .
+
+# The agent's own consumption (NFR-1)
+
+signal:agent.cpu_cores a g:Signal , owl:NamedIndividual ;
+    g:measures res:cpu ; g:observedOn kind:host ; g:unit "cores" ; g:signalKind "rate" ;
+    g:source "proc_pid_stat(5) utime + stime of the agent and its children" ; g:grade "documented" .
+
+signal:agent.anon_bytes a g:Signal , owl:NamedIndividual ;
+    g:measures res:memory ; g:observedOn kind:host ; g:unit "bytes" ; g:signalKind "level" ;
+    g:source "proc_pid_statm(5) resident - shared of the agent and its children" ; g:grade "documented" .
+
+#################################################################
+# Event types (ADR 0019, 0037)
+#################################################################
+
+event:block_io_error a g:EventType , owl:NamedIndividual ;
+    rdfs:label "Block I/O error"@en , "Ошибка ввода-вывода блочного устройства"@ru ;
+    g:about res:disk ; g:emittedBy "kernel" ;
+    g:messagePattern "error, dev \\S+, sector \\d+" ;
+    g:source "block/blk-mq.c blk_print_req_error (KERN_ERR \"%s error, dev %s, sector %llu ...\"), status names in block/blk-core.c blk_errors" ;
+    g:grade "documented" .
+
+event:nvme_timeout a g:EventType , owl:NamedIndividual ;
+    rdfs:label "NVMe command timeout"@en , "Тайм-аут команды NVMe"@ru ;
+    g:about res:disk ; g:emittedBy "kernel" ;
+    g:messagePattern "^nvme .*timeout, (aborting|reset controller)" ;
+    g:source "drivers/nvme/host/pci.c nvme_timeout (dev_warn \"... timeout, aborting\", \"... timeout, reset controller\"); ADR 0037" ;
+    g:grade "documented" .
+
+event:btrfs_device_errors a g:EventType , owl:NamedIndividual ;
+    rdfs:label "Btrfs device error counters"@en , "Счётчики ошибок устройства Btrfs"@ru ;
+    g:about res:disk ; g:emittedBy "kernel" ;
+    g:messagePattern "^BTRFS .*bdev \\S+ errs: wr \\d+, rd \\d+, flush \\d+, corrupt \\d+" ;
+    g:source "fs/btrfs/volumes.c btrfs_dev_stat_print_on_error (btrfs_err_rl \"bdev %s errs: wr %u, rd %u, flush %u, corrupt %u, gen %u\")" ;
+    g:grade "documented" .
+
+event:hung_task a g:EventType , owl:NamedIndividual ;
+    rdfs:label "Hung task"@en , "Зависшая задача"@ru ;
+    rdfs:comment "A task in state D not scheduled for longer than hung_task_timeout_secs."@en ;
+    g:about res:disk ; g:emittedBy "kernel" ;
+    g:messagePattern "^INFO: task .+:\\d+ blocked for more than \\d+ seconds\\." ;
+    g:source "kernel/hung_task.c check_hung_task (pr_err); admin-guide/sysctl/kernel hung_task_timeout_secs" ;
+    g:grade "documented" .
+
+event:oom_kill a g:EventType , owl:NamedIndividual ;
+    rdfs:label "Kernel OOM kill"@en , "Завершение процесса при нехватке памяти"@ru ;
+    g:about res:memory ; g:emittedBy "kernel" ;
+    g:messagePattern "^Out of memory: Killed process \\d+" ;
+    g:source "mm/oom_kill.c __oom_kill_process (pr_err \"%s: Killed process %d (%s) ...\")" ;
+    g:grade "documented" .
+
+event:unit_out_of_memory a g:EventType , owl:NamedIndividual ;
+    rdfs:label "Unit hit by the OOM killer"@en , "Служба затронута завершением при нехватке памяти"@ru ;
+    g:about res:memory ; g:emittedBy "systemd" ;
+    g:messageId "fe6faa94e7774663a0da52717891d8ef" ;
+    g:source "systemd sd-messages.h SD_MESSAGE_UNIT_OUT_OF_MEMORY" ; g:grade "documented" .
+
+event:unit_oomd_kill a g:EventType , owl:NamedIndividual ;
+    rdfs:label "Unit killed by systemd-oomd"@en , "Служба завершена systemd-oomd"@ru ;
+    g:about res:memory ; g:emittedBy "systemd" ;
+    g:messageId "d989611b15e44c9dbf31e3c81256e4ed" ;
+    g:source "systemd sd-messages.h SD_MESSAGE_UNIT_OOMD_KILL; systemd-oomd.service(8)" ; g:grade "documented" .
+
+event:unit_failed a g:EventType , owl:NamedIndividual ;
+    rdfs:label "Unit failed"@en , "Отказ службы"@ru ;
+    rdfs:comment "About no resource of its own: a consequence that other evidence must explain."@en ;
+    g:emittedBy "systemd" ;
+    g:messageId "d9b373ed55a64feb8242e02dbe79a49c" ;
+    g:source "systemd sd-messages.h SD_MESSAGE_UNIT_FAILURE_RESULT" ; g:grade "documented" .
+
+#################################################################
+# Process signs (ADR 0038)
+#################################################################
+
+sign:kswapd a g:ProcessSign , owl:NamedIndividual ;
+    rdfs:label "Page reclaim thread"@en , "Поток освобождения страниц"@ru ;
+    g:indicates res:memory ; g:namePattern "kswapd*" ;
+    g:source "Gregg pp. 316, 374: kswapd is the page-out daemon" ; g:grade "documented" .
+
+sign:writeback_flusher a g:ProcessSign , owl:NamedIndividual ;
+    rdfs:label "Writeback flusher at work"@en , "Поток обратной записи за работой"@ru ;
+    rdfs:comment "A kernel worker running writeback now ('+'); '-' marks the work it ran last."@en ;
+    g:indicates res:disk ; g:namePattern "kworker/*+flush-*" ;
+    g:source "fs/fs-writeback.c (work item flush-%s); kernel/workqueue.c wq_worker_comm; Gregg p. 374; observed in the overhead run 20261028T195813Z" ;
+    g:grade "documented" .
+
+sign:jbd2 a g:ProcessSign , owl:NamedIndividual ;
+    rdfs:label "Ext4 journal thread"@en , "Поток журнала ext4"@ru ;
+    g:indicates res:filesystem ; g:namePattern "jbd2/*" ;
+    g:source "fs/jbd2/journal.c (kthread jbd2/%s)" ; g:grade "documented" .
+
+sign:btrfs_transaction a g:ProcessSign , owl:NamedIndividual ;
+    rdfs:label "Btrfs transaction commit"@en , "Фиксация транзакции Btrfs"@ru ;
+    g:indicates res:filesystem ; g:namePattern "btrfs-transaction" ;
+    g:source "fs/btrfs/disk-io.c (kthread btrfs-transaction); Btrfs Administration, commit" ; g:grade "documented" .
+
+sign:btrfs_cleaner a g:ProcessSign , owl:NamedIndividual ;
+    rdfs:label "Btrfs cleaner"@en , "Очистка Btrfs"@ru ;
+    rdfs:comment "Deletes snapshots and old roots in the background."@en ;
+    g:indicates res:filesystem ; g:namePattern "btrfs-cleaner" ;
+    g:source "fs/btrfs/disk-io.c (kthread btrfs-cleaner); Btrfs Subvolumes" ; g:grade "documented" .
+
+sign:waiting_on_io a g:ProcessSign , owl:NamedIndividual ;
+    rdfs:label "Process waiting on I/O"@en , "Процесс в ожидании ввода-вывода"@ru ;
+    g:indicates res:disk ; g:namePattern "*" ; g:state "D" ;
+    g:source "proc_pid_stat(5): D = waiting in uninterruptible disk sleep; ADR 0038" ; g:grade "documented" .
+
+[] a owl:AllDifferent ;
+    owl:distinctMembers ( sign:kswapd sign:writeback_flusher sign:jbd2 sign:btrfs_transaction sign:btrfs_cleaner
+                          sign:waiting_on_io ) .
+
+#################################################################
+# Context facts (ADR 0036)
+#################################################################
+
+fact:disk.rotational a g:ContextFact , owl:NamedIndividual ;
+    g:concerns res:disk ; g:observedOn kind:block_device ;
+    g:allowedValue "yes" , "no" ;
+    g:source "block/queue-sysfs: rotational" ; g:grade "documented" .
+
+fact:disk.scheduler a g:ContextFact , owl:NamedIndividual ;
+    rdfs:comment "I/O priorities (ionice) need BFQ; proportional weights need BFQ or iocost."@en ;
+    g:concerns res:disk ; g:observedOn kind:block_device ;
+    g:allowedValue "none" , "mq-deadline" , "bfq" , "kyber" ;
+    g:source "block/queue-sysfs: scheduler; block/switching-sched" ; g:grade "documented" .
+
+fact:disk.iocost a g:ContextFact , owl:NamedIndividual ;
+    g:concerns res:disk ; g:observedOn kind:block_device ;
+    g:allowedValue "on" , "off" ;
+    g:source "admin-guide/cgroup-v2 io.cost.qos (root group only)" ; g:grade "documented" .
+
+fact:cgroup.io_accounting a g:ContextFact , owl:NamedIndividual ;
+    rdfs:comment "Whether the I/O of all, some or none of the reported groups is counted on their own systemd unit."@en ;
+    g:concerns res:disk ; g:observedOn kind:host ;
+    g:allowedValue "all" , "partial" , "none" ;
+    g:source "admin-guide/cgroup-v2 io.stat; systemd.resource-control(5) IOAccounting=; ADR 0036" ; g:grade "documented" .
+
+fact:swap.enabled a g:ContextFact , owl:NamedIndividual ;
+    g:concerns res:swap ; g:observedOn kind:host ;
+    g:allowedValue "yes" , "no" ;
+    g:source "proc_meminfo(5) SwapTotal > 0" ; g:grade "documented" .
+
+fact:power.profile a g:ContextFact , owl:NamedIndividual ;
+    g:concerns res:power ; g:observedOn kind:host ;
+    g:allowedValue "eco" , "balanced" , "performance" ;
+    g:source "ABI testing/sysfs-platform_profile; cpufreq energy_performance_preference (ADR 0022)" ; g:grade "documented" .
+
+#################################################################
+# Workload classes (ADR 0023)
+#################################################################
+
+class:idle a g:WorkloadClass , owl:NamedIndividual ;
+    rdfs:label "Idle"@en , "Простой"@ru ;
+    g:source "ADR 0023" ; g:grade "documented" .
+
+class:interactive a g:WorkloadClass , owl:NamedIndividual ;
+    rdfs:label "Interactive"@en , "Интерактивная работа"@ru ;
+    g:source "ADR 0023" ; g:grade "documented" .
+
+class:build a g:WorkloadClass , owl:NamedIndividual ;
+    rdfs:label "Build"@en , "Сборка"@ru ;
+    g:source "ADR 0023" ; g:grade "documented" .
+
+class:backup a g:WorkloadClass , owl:NamedIndividual ;
+    rdfs:label "Backup"@en , "Резервное копирование"@ru ;
+    g:source "ADR 0023" ; g:grade "documented" .
+
+class:maintenance a g:WorkloadClass , owl:NamedIndividual ;
+    rdfs:label "Maintenance"@en , "Обслуживание"@ru ;
+    g:source "ADR 0023" ; g:grade "documented" .
+
+#################################################################
+# Root causes of the disk domain (docs/research/disk-io.md)
+#################################################################
+
+cause:bulk_sequential_writer a g:RootCause , owl:NamedIndividual ;
+    rdfs:label "Bulk sequential writer"@en , "Массовая последовательная запись"@ru ;
+    rdfs:comment "One group writes a large volume sequentially and the others' requests queue behind it."@en ;
+    g:concerns res:disk ; g:culpritKind kind:control_group ;
+    g:source "docs/research/disk-io.md D1; Gregg p. 434; Love p. 300" ; g:grade "documented" .
+
+cause:bulk_reader a g:RootCause , owl:NamedIndividual ;
+    rdfs:label "Bulk reader or scan"@en , "Массовое чтение или сканирование"@ru ;
+    rdfs:comment "One group reads a lot; its reads queue against the others' and push their pages out of the cache."@en ;
+    g:concerns res:disk ; g:culpritKind kind:control_group ;
+    g:source "docs/research/disk-io.md D2; Love p. 300; Gregg p. 365" ; g:grade "documented" .
+
+cause:small_random_io a g:RootCause , owl:NamedIndividual ;
+    rdfs:label "Small random I/O"@en , "Мелкий произвольный ввод-вывод"@ru ;
+    rdfs:comment "Many small scattered requests use up the device's operations long before its bytes."@en ;
+    g:concerns res:disk ; g:culpritKind kind:control_group ;
+    g:source "docs/research/disk-io.md D3; Gregg pp. 430-431, 440, 461" ; g:grade "documented" .
+
+cause:sync_write_storm a g:RootCause , owl:NamedIndividual ;
+    rdfs:label "Synchronous write storm"@en , "Поток синхронной записи"@ru ;
+    rdfs:comment "A group commits every write to stable storage and pays device latency on each."@en ;
+    g:concerns res:disk ; g:culpritKind kind:control_group ;
+    g:source "docs/research/disk-io.md D4; Gregg p. 366; Love p. 331" ; g:grade "documented" .
+
+cause:writeback_storm a g:RootCause , owl:NamedIndividual ;
+    rdfs:label "Writeback storm"@en , "Всплеск обратной записи"@ru ;
+    rdfs:comment "Dirty page cache is flushed in a burst that fills the device queue."@en ;
+    g:concerns res:disk ; g:culpritKind kind:control_group ;
+    g:source "docs/research/disk-io.md D5; Love pp. 331-332; Bovet pp. 625-626; admin-guide/sysctl/vm" ; g:grade "documented" .
+
+cause:filesystem_filled a g:RootCause , owl:NamedIndividual ;
+    rdfs:label "Filesystem filled by a writer"@en , "Заполнение файловой системы процессом"@ru ;
+    rdfs:comment "A group writes steadily until the filesystem runs out of space."@en ;
+    g:concerns res:filesystem ; g:culpritKind kind:control_group ;
+    g:source "docs/research/disk-io.md D6; Gregg p. 371" ; g:grade "documented" .
+
+cause:filesystem_full a g:RootCause , owl:NamedIndividual ;
+    rdfs:label "Filesystem full"@en , "Переполнение файловой системы"@ru ;
+    rdfs:comment "The filesystem is nearly full with no writer in the window."@en ;
+    g:concerns res:filesystem ;
+    g:source "docs/research/disk-io.md D7; Gregg p. 371" ; g:grade "documented" .
+
+cause:device_errors a g:RootCause , owl:NamedIndividual ;
+    rdfs:label "Device errors"@en , "Ошибки устройства"@ru ;
+    rdfs:comment "A failing or misbehaving device: media errors, timeouts, controller resets."@en ;
+    g:concerns res:disk ;
+    g:source "docs/research/disk-io.md D8; Gregg pp. 441, 451, 461" ; g:grade "documented" .
+
+cause:filesystem_maintenance a g:RootCause , owl:NamedIndividual ;
+    rdfs:label "Filesystem maintenance"@en , "Обслуживание файловой системы"@ru ;
+    rdfs:comment "A scheduled job reads or rewrites much of the filesystem: scrub, balance, trim, snapshot cleanup, file index."@en ;
+    g:concerns res:disk ; g:culpritKind kind:control_group ;
+    g:source "docs/research/disk-io.md D9; btrfs-scrub(8); btrfs-balance(8); fstrim(8); updatedb(8)" ; g:grade "documented" .
+
+cause:swap_io a g:RootCause , owl:NamedIndividual ;
+    rdfs:label "Swap I/O"@en , "Ввод-вывод подкачки"@ru ;
+    rdfs:comment "Memory runs short and anonymous pages move to and from swap. The culprit is the group whose memory grows."@en ;
+    g:concerns res:memory , res:disk ; g:culpritKind kind:control_group ;
+    g:source "docs/research/disk-io.md D10; Gregg pp. 306-307; Bovet p. 711" ; g:grade "documented" .
+
+cause:page_cache_thrashing a g:RootCause , owl:NamedIndividual ;
+    rdfs:label "Page cache thrashing"@en , "Пробуксовка страничного кэша"@ru ;
+    rdfs:comment "The data in use does not fit the memory left for the page cache; file pages are dropped and read back."@en ;
+    g:concerns res:memory , res:disk ;
+    g:source "docs/research/disk-io.md D11; Gregg pp. 310, 390; Bovet p. 713" ; g:grade "documented" .
+
+#################################################################
+# Action types (ADR 0007, 0035)
+#################################################################
+
+action:io_max_rbps a g:ActionType , owl:NamedIndividual ;
+    rdfs:label "Limit read bandwidth"@en , "Ограничение скорости чтения"@ru ;
+    g:targets kind:control_group ; g:controls res:disk ;
+    g:source "admin-guide/cgroup-v2 io.max rbps; works with every scheduler, removed by writing max" ; g:grade "documented" .
+
+action:io_max_wbps a g:ActionType , owl:NamedIndividual ;
+    rdfs:label "Limit write bandwidth"@en , "Ограничение скорости записи"@ru ;
+    g:targets kind:control_group ; g:controls res:disk ;
+    g:source "admin-guide/cgroup-v2 io.max wbps" ; g:grade "documented" .
+
+action:io_max_riops a g:ActionType , owl:NamedIndividual ;
+    rdfs:label "Limit read operations"@en , "Ограничение числа операций чтения"@ru ;
+    g:targets kind:control_group ; g:controls res:disk ;
+    g:source "admin-guide/cgroup-v2 io.max riops" ; g:grade "documented" .
+
+action:io_max_wiops a g:ActionType , owl:NamedIndividual ;
+    rdfs:label "Limit write operations"@en , "Ограничение числа операций записи"@ru ;
+    g:targets kind:control_group ; g:controls res:disk ;
+    g:source "admin-guide/cgroup-v2 io.max wiops" ; g:grade "documented" .
+
+action:io_weight a g:ActionType , owl:NamedIndividual ;
+    rdfs:label "Lower I/O weight"@en , "Снижение веса ввода-вывода"@ru ;
+    rdfs:comment "Takes effect only with the BFQ scheduler or the iocost controller."@en ;
+    g:targets kind:control_group ; g:controls res:disk ;
+    g:source "admin-guide/cgroup-v2 io.weight, \"IO\"" ; g:grade "documented" .
+
+action:ionice a g:ActionType , owl:NamedIndividual ;
+    rdfs:label "Lower I/O priority"@en , "Снижение приоритета ввода-вывода"@ru ;
+    rdfs:comment "Takes effect only with a scheduler that honours I/O priorities (BFQ)."@en ;
+    g:targets kind:process ; g:controls res:disk ;
+    g:source "ionice(1); ioprio_set(2)" ; g:grade "documented" .
+
+action:renice a g:ActionType , owl:NamedIndividual ;
+    rdfs:label "Lower scheduling priority"@en , "Снижение приоритета планирования"@ru ;
+    g:targets kind:process ; g:controls res:cpu ;
+    g:source "renice(1); setpriority(2)" ; g:grade "documented" .
+
+action:cpu_max a g:ActionType , owl:NamedIndividual ;
+    rdfs:label "Limit CPU bandwidth"@en , "Ограничение доли процессора"@ru ;
+    g:targets kind:control_group ; g:controls res:cpu ;
+    g:source "admin-guide/cgroup-v2 cpu.max" ; g:grade "documented" .
+
+action:cpu_weight a g:ActionType , owl:NamedIndividual ;
+    rdfs:label "Lower CPU weight"@en , "Снижение веса процессора"@ru ;
+    g:targets kind:control_group ; g:controls res:cpu ;
+    g:source "admin-guide/cgroup-v2 cpu.weight" ; g:grade "documented" .
+
+action:memory_high a g:ActionType , owl:NamedIndividual ;
+    rdfs:label "Memory throttling limit"@en , "Порог сдерживания памяти"@ru ;
+    g:targets kind:control_group ; g:controls res:memory ;
+    g:source "admin-guide/cgroup-v2 memory.high: usage above it is throttled and reclaimed, never OOM-killed" ; g:grade "documented" .
+
+#################################################################
+# Protected entities (ADR 0035)
+#################################################################
+
+prot:init a g:ProtectedEntity , owl:NamedIndividual ;
+    rdfs:label "System manager"@en , "Системный менеджер"@ru ;
+    g:unitPattern "init.scope" ; g:commandPattern "systemd" ;
+    g:source "systemd(1); systemd.special(7) init.scope" ; g:grade "documented" .
+
+prot:journald a g:ProtectedEntity , owl:NamedIndividual ;
+    rdfs:label "Journal"@en , "Системный журнал"@ru ;
+    g:unitPattern "systemd-journald.service" ; g:commandPattern "systemd-journal" ;
+    g:source "systemd-journald.service(8)" ; g:grade "documented" .
+
+prot:dbus a g:ProtectedEntity , owl:NamedIndividual ;
+    rdfs:label "Message bus"@en , "Шина сообщений D-Bus"@ru ;
+    g:unitPattern "dbus.service" , "dbus-broker.service" ; g:commandPattern "dbus-daemon" , "dbus-broker*" ;
+    g:source "dbus-daemon(1); dbus-broker(1)" ; g:grade "documented" .
+
+prot:logind a g:ProtectedEntity , owl:NamedIndividual ;
+    rdfs:label "Login manager"@en , "Менеджер сеансов входа"@ru ;
+    g:unitPattern "systemd-logind.service" ; g:commandPattern "systemd-logind" ;
+    g:source "systemd-logind.service(8)" ; g:grade "documented" .
+
+prot:user_manager a g:ProtectedEntity , owl:NamedIndividual ;
+    rdfs:label "User's service manager"@en , "Менеджер служб пользователя"@ru ;
+    rdfs:comment "The manager itself; the programs it starts live in their own groups and are not protected."@en ;
+    g:unitPattern "user@*.service" ;
+    g:source "user@.service(5)" ; g:grade "documented" .
+
+prot:agent a g:ProtectedEntity , owl:NamedIndividual ;
+    rdfs:label "gungnIR agent"@en , "Агент gungnIR"@ru ;
+    g:unitPattern "gungnir-agent.service" ; g:commandPattern "gungnir-agent" ;
+    g:source "ADR 0007" ; g:grade "documented" .
+
+prot:actuator a g:ProtectedEntity , owl:NamedIndividual ;
+    rdfs:label "gungnIR actuator"@en , "Исполнитель gungnIR"@ru ;
+    g:unitPattern "gungnir-actuator.service" ; g:commandPattern "gungnir-actuato*" ;
+    g:source "ADR 0007" ; g:grade "documented" .

@@ -9,6 +9,7 @@ dependencies = [
     "psycopg[binary]>=3.3",
     "psycopg-pool>=3.3",
     "pydantic>=2.14",
+    "rdflib>=7.6",
     "scikit-learn>=1.9.1",
     "uvicorn>=0.54",
 ]
@@ -17,7 +18,7 @@ dependencies = [
 gungnir-core = "gungnir_core.cli:main"
 
 [dependency-groups]
-dev = ["httpx2>=2.16", "pytest>=9.2", "ruff>=0.17"]
+dev = ["httpx2>=2.16", "owlready2>=0.51", "pytest>=9.2", "ruff>=0.17"]
 
 [build-system]
 requires = ["hatchling"]
