@@ -31,8 +31,8 @@ provenance = { source = "initial value, to be measured in scenarios (ADR 0025)",
 [[impact]]
 signal = "io.pressure_some_ratio"
 level = "noticeable"
-above = 0.30
-provenance = { source = "initial value, to be measured in scenarios (ADR 0025)", grade = "unverified" }
+above = 0.10
+provenance = { source = "trials of 2026-10-30: a program calling fsync 200 times a second waited 0.06 alone and 0.12-0.17 beside a buffered writer flooding the page cache; over three days of samples only labeled runs, plocate-updatedb and grub-btrfsd stayed above 0.10 for three samples in a row", grade = "measured" }
 
 [[impact]]
 signal = "io.pressure_full_ratio"

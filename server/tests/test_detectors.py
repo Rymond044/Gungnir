@@ -150,7 +150,7 @@ def test_short_available_memory_is_seen_without_a_baseline():
 
 def test_group_pressure_follows_the_host_s_lowest_impact_level():
     levels = pressure_levels()
-    assert levels["io.pressure_some_ratio"] == 0.30
+    assert levels["io.pressure_some_ratio"] == 0.10
     assert levels["mem.pressure_full_ratio"] == 0.60
     assert not any(name.startswith("cgroup.") for name in levels)
 
