@@ -20,7 +20,14 @@ install -d -m 0755 /etc/gungnir
 [ -z "$token_file" ] || install -m 0600 -o root -g root "$token_file" /etc/gungnir/agent.token
 install -m 0644 gungnir-agent.service /etc/systemd/system/gungnir-agent.service
 
+# I/O accounting in every control group (ADR 0036). The service managers read
+# these at start, so they take full effect after the next boot.
+install -D -m 0644 systemd/io-accounting.conf /etc/systemd/system.conf.d/gungnir-io.conf
+install -D -m 0644 systemd/io-accounting.conf /etc/systemd/user.conf.d/gungnir-io.conf
+install -D -m 0644 systemd/user-io-delegation.conf /etc/systemd/system/user@.service.d/gungnir-io.conf
+
 systemctl daemon-reload
 systemctl enable --now gungnir-agent.service
 systemctl restart gungnir-agent.service
 systemctl --no-pager status gungnir-agent.service
+echo "I/O accounting for every control group is configured; reboot for it to take effect."

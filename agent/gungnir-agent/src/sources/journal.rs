@@ -8,8 +8,9 @@
 //! where it stopped. The fallback is `/dev/kmsg`, kernel messages only.
 //!
 //! Only events worth diagnosing leave the host: kernel messages of error
-//! priority or worse and a few systemd messages identified by their message
-//! id. Turning them into event types is knowledge and happens in the core.
+//! priority or worse, warnings of the storage stack, and a few systemd
+//! messages identified by their message id. Turning them into event types is
+//! knowledge and happens in the core.
 
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom};
@@ -30,6 +31,12 @@ use crate::clock;
 /// (3 = error). Warnings would bring the call trace that the kernel prints
 /// with every OOM kill, dozens of lines per event.
 const MAX_KERNEL_PRIORITY: u8 = 3;
+/// Warnings (4) of the storage stack are kept too: disk drivers report
+/// command timeouts and controller resets at this priority, e.g. NVMe's
+/// `nvme nvme0: I/O tag 12 … timeout, aborting`. Matched on the start of
+/// the message, which names the driver or the filesystem.
+const STORAGE_WARNING: u8 = 4;
+const STORAGE_PREFIXES: [&str; 8] = ["nvme", "sd ", "scsi", "mmc", "BTRFS", "EXT4-fs", "XFS", "F2FS-fs"];
 const MAX_MESSAGE_BYTES: usize = 1000;
 /// Events waiting between the reader thread and the sampling loop.
 const QUEUE: usize = 1024;
@@ -59,6 +66,16 @@ pub struct Event {
     pub key: String,
 }
 
+fn keep_kernel(priority: u8, message: &str) -> bool {
+    priority <= MAX_KERNEL_PRIORITY || (priority == STORAGE_WARNING && from_storage(message))
+}
+
+fn from_storage(message: &str) -> bool {
+    // libata names ports `ata1`, `ata1.00`.
+    let ata = message.strip_prefix("ata").is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_digit()));
+    ata || STORAGE_PREFIXES.iter().any(|prefix| message.starts_with(prefix))
+}
+
 fn truncate(mut text: String) -> String {
     if text.len() > MAX_MESSAGE_BYTES {
         let mut end = MAX_MESSAGE_BYTES;
@@ -79,17 +96,6 @@ fn parse_entry(line: &str) -> Option<(String, Option<Event>)> {
     let ts_us: i64 = text("__REALTIME_TIMESTAMP")?.parse().ok()?;
     let priority: u8 = text("PRIORITY").and_then(|p| p.parse().ok()).unwrap_or(6);
     let message_id = text("MESSAGE_ID");
-
-    let source = if text("_TRANSPORT").as_deref() == Some("kernel") {
-        if priority > MAX_KERNEL_PRIORITY {
-            return Some((cursor, None));
-        }
-        "kernel"
-    } else if message_id.as_deref().is_some_and(|id| MESSAGE_IDS.contains(&id)) {
-        "systemd"
-    } else {
-        return Some((cursor, None));
-    };
     // Messages that are not valid UTF-8 arrive as arrays of bytes.
     let message = match entry.get("MESSAGE") {
         Some(serde_json::Value::String(s)) => s.clone(),
@@ -98,6 +104,17 @@ fn parse_entry(line: &str) -> Option<(String, Option<Event>)> {
         )
         .into_owned(),
         _ => String::new(),
+    };
+
+    let source = if text("_TRANSPORT").as_deref() == Some("kernel") {
+        if !keep_kernel(priority, &message) {
+            return Some((cursor, None));
+        }
+        "kernel"
+    } else if message_id.as_deref().is_some_and(|id| MESSAGE_IDS.contains(&id)) {
+        "systemd"
+    } else {
+        return Some((cursor, None));
     };
     let event = Event {
         ts: ts_us / 1000,
@@ -229,11 +246,11 @@ fn parse_kmsg(record: &str, boot_id: &str, ts: i64) -> Option<Event> {
     let mut fields = header.split(',');
     let priority = (fields.next()?.parse::<u32>().ok()? & 7) as u8;
     let seq = fields.next()?;
-    if priority > MAX_KERNEL_PRIORITY {
-        return None;
-    }
     // Continuation lines carry key=value metadata, not the message.
     let message = text.lines().next().unwrap_or_default().to_owned();
+    if !keep_kernel(priority, &message) {
+        return None;
+    }
     Some(Event {
         ts,
         source: "kernel",
@@ -307,6 +324,16 @@ mod tests {
         assert_eq!(parse_entry(info).unwrap().1, None);
         let trace = r#"{"__CURSOR":"c","__REALTIME_TIMESTAMP":"1","PRIORITY":"4","_TRANSPORT":"kernel","MESSAGE":" dump_stack_lvl+0x5d/0x80"}"#;
         assert_eq!(parse_entry(trace).unwrap().1, None);
+    }
+
+    #[test]
+    fn storage_warnings_are_kept() {
+        let nvme = r#"{"__CURSOR":"c","__REALTIME_TIMESTAMP":"1","PRIORITY":"4","_TRANSPORT":"kernel","MESSAGE":"nvme nvme0: I/O tag 12 (100c) opcode 0x2 (Read) QID 3 timeout, aborting"}"#;
+        assert_eq!(parse_entry(nvme).unwrap().1.unwrap().priority, 4);
+        assert!(parse_kmsg("4,9,1,-;ata1.00: failed command: READ FPDMA QUEUED", "b", 5).is_some());
+        assert!(parse_kmsg("4,9,1,-;BTRFS warning (device nvme0n1p3): csum failed", "b", 5).is_some());
+        assert!(parse_kmsg("4,9,1,-;atkbd serio0: Unknown key pressed", "b", 5).is_none());
+        assert!(parse_kmsg("5,9,1,-;nvme nvme0: 16/0/0 default/read/poll queues", "b", 5).is_none());
     }
 
     #[test]

@@ -1,12 +1,13 @@
 //! Memory and swap occupancy from `/proc/meminfo`, or a reduced set from
-//! `sysinfo(2)` when procfs is unavailable.
+//! `sysinfo(2)` when procfs is unavailable. Whether swap is configured is a
+//! fact: a rule about swapping applies only where there is swap.
 
 use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use super::{Collected, Reading, Roots, Source, invalid, read};
+use super::{Collected, FactLog, Reading, Roots, Source, invalid, read};
 
 /// Values of `/proc/meminfo` in bytes, keyed by field name.
 fn parse(text: &str) -> HashMap<&str, u64> {
@@ -27,11 +28,13 @@ fn parse(text: &str) -> HashMap<&str, u64> {
 
 pub struct Meminfo {
     path: PathBuf,
+    facts: FactLog,
 }
 
 pub fn open_meminfo(roots: &Roots, now: Instant) -> io::Result<Box<dyn Source>> {
-    let mut source = Meminfo { path: roots.proc.join("meminfo") };
+    let mut source = Meminfo { path: roots.proc.join("meminfo"), facts: FactLog::default() };
     source.collect(now, &mut Collected::default())?;
+    source.facts.clear();
     Ok(Box::new(source))
 }
 
@@ -40,7 +43,7 @@ impl Source for Meminfo {
         self.path.display().to_string()
     }
 
-    fn collect(&mut self, _now: Instant, out: &mut Collected) -> io::Result<()> {
+    fn collect(&mut self, now: Instant, out: &mut Collected) -> io::Result<()> {
         let text = read(&self.path)?;
         let m = parse(&text);
         let get = |key: &str| {
@@ -59,6 +62,7 @@ impl Source for Meminfo {
         out.readings.push(Reading::host("mem.dirty_bytes", get("Dirty")? as f64));
         out.readings.push(Reading::host("mem.writeback_bytes", get("Writeback")? as f64));
         push_swap(get("SwapTotal")?, get("SwapFree")?, out);
+        push_swap_fact(&mut self.facts, now, get("SwapTotal")?, out);
         Ok(())
     }
 }
@@ -72,13 +76,21 @@ fn push_swap(total: u64, free: u64, out: &mut Collected) {
     }
 }
 
+fn push_swap_fact(facts: &mut FactLog, now: Instant, total: u64, out: &mut Collected) {
+    facts.push(now, "swap.enabled", "host", if total > 0 { "yes" } else { "no" }.to_owned(), out);
+}
+
 /// `sysinfo(2)` has no notion of available memory or page cache, so this
 /// fallback reports only what it measures exactly.
-pub struct Sysinfo;
+#[derive(Default)]
+pub struct Sysinfo {
+    facts: FactLog,
+}
 
 pub fn open_sysinfo(_roots: &Roots, now: Instant) -> io::Result<Box<dyn Source>> {
-    let mut source = Sysinfo;
+    let mut source = Sysinfo::default();
     source.collect(now, &mut Collected::default())?;
+    source.facts.clear();
     Ok(Box::new(source))
 }
 
@@ -87,11 +99,12 @@ impl Source for Sysinfo {
         "sysinfo(2)".to_owned()
     }
 
-    fn collect(&mut self, _now: Instant, out: &mut Collected) -> io::Result<()> {
+    fn collect(&mut self, now: Instant, out: &mut Collected) -> io::Result<()> {
         let info = rustix::system::sysinfo();
         let unit = u64::from(info.mem_unit.max(1));
         out.readings.push(Reading::host("mem.free_bytes", (info.freeram as u64 * unit) as f64));
         push_swap(info.totalswap as u64 * unit, info.freeswap as u64 * unit, out);
+        push_swap_fact(&mut self.facts, now, info.totalswap as u64 * unit, out);
         Ok(())
     }
 }
@@ -103,19 +116,20 @@ mod tests {
 
     #[test]
     fn reads_real_meminfo_in_bytes() {
-        let mut source = Meminfo { path: fixture_roots().proc.join("meminfo") };
+        let mut source = Meminfo { path: fixture_roots().proc.join("meminfo"), facts: FactLog::default() };
         let mut out = Collected::default();
         source.collect(Instant::now(), &mut out).unwrap();
         // Fixture: MemAvailable 8914408 kB, MemTotal 15860504 kB.
         assert_eq!(find(&out.readings, "mem.available_bytes", "host").unwrap().value, 8914408.0 * 1024.0);
         let used = find(&out.readings, "mem.used_ratio", "host").unwrap().value;
         assert!((used - (1.0 - 8914408.0 / 15860504.0)).abs() < 1e-12);
+        assert_eq!(out.facts[0].name, "swap.enabled");
     }
 
     #[test]
     fn sysinfo_reports_free_memory() {
         let mut out = Collected::default();
-        Sysinfo.collect(Instant::now(), &mut out).unwrap();
+        Sysinfo::default().collect(Instant::now(), &mut out).unwrap();
         assert!(find(&out.readings, "mem.free_bytes", "host").unwrap().value > 0.0);
     }
 }

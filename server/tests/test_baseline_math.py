@@ -102,3 +102,10 @@ def test_group_memory_gets_a_wider_floor_than_host_memory():
     book = baselines.Book(None, None, Params())
     assert book.floor("cgroup.mem_bytes", "docker.service", 100e6) == pytest.approx(10e6)
     assert book.floor("mem.anon_bytes", "host", 100e6) == pytest.approx(1e6)
+
+
+def test_request_sizes_and_group_operations_are_context_only():
+    assert frame.is_checked_kind("disk.read_ops_per_s")
+    assert not frame.is_checked_kind("disk.read_request_bytes")
+    assert not frame.is_checked_kind("cgroup.write_ops_per_s")
+    assert frame.is_checked_kind("cgroup.write_bytes_per_s")

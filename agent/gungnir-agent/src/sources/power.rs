@@ -6,13 +6,9 @@
 
 use std::io;
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
-use super::{Collected, Fact, Reading, Roots, Source, invalid, read_trimmed};
-
-/// A fact is repeated this often even when unchanged, so the core learns it
-/// after its own restart.
-const FACT_EVERY: Duration = Duration::from_secs(300);
+use super::{Collected, FactLog, Reading, Roots, Source, invalid, read_trimmed};
 
 pub struct PowerSupply {
     dir: PathBuf,
@@ -101,7 +97,7 @@ fn level(raw: &str) -> String {
 
 pub struct Profile {
     path: PathBuf,
-    last: Option<(Instant, String)>,
+    facts: FactLog,
 }
 
 /// ACPI platform profile, set by firmware-aware tools such as
@@ -117,10 +113,9 @@ pub fn open_cpufreq_epp(roots: &Roots, now: Instant) -> io::Result<Box<dyn Sourc
 }
 
 fn open_profile(path: PathBuf, now: Instant) -> io::Result<Box<dyn Source>> {
-    let mut source = Profile { path, last: None };
+    let mut source = Profile { path, facts: FactLog::default() };
     source.collect(now, &mut Collected::default())?;
-    // The probe read must not count as sent.
-    source.last = None;
+    source.facts.clear();
     Ok(Box::new(source))
 }
 
@@ -131,20 +126,15 @@ impl Source for Profile {
 
     fn collect(&mut self, now: Instant, out: &mut Collected) -> io::Result<()> {
         let value = level(&read_trimmed(&self.path)?);
-        let due = match &self.last {
-            Some((at, last)) => *last != value || now.duration_since(*at) >= FACT_EVERY,
-            None => true,
-        };
-        if due {
-            out.facts.push(Fact { name: "power.profile", entity: "host".into(), value: value.clone() });
-            self.last = Some((now, value));
-        }
+        self.facts.push(now, "power.profile", "host", value, out);
         Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
     use crate::sources::scratch_dir;
 
@@ -174,7 +164,7 @@ mod tests {
         let path = dir.join("energy_performance_preference");
         std::fs::write(&path, "balance_power\n").unwrap();
         let t0 = Instant::now();
-        let mut source = Profile { path: path.clone(), last: None };
+        let mut source = Profile { path: path.clone(), facts: FactLog::default() };
         let mut out = Collected::default();
         source.collect(t0, &mut out).unwrap();
         source.collect(t0 + Duration::from_secs(5), &mut out).unwrap();

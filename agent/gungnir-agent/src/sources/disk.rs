@@ -4,13 +4,18 @@
 //! Only whole disks are reported: the entries of `/sys/block`, minus the
 //! excluded prefixes (loop and RAM devices by default). Partitions would
 //! repeat their disk's load.
+//!
+//! Each disk also yields facts that decide which remedies can work: whether
+//! it is rotational, its I/O scheduler, and whether the iocost controller
+//! weighs its I/O. Proportional I/O weights and I/O priorities need iocost
+//! or BFQ; an absolute `io.max` limit works everywhere.
 
 use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use super::{Collected, Reading, Roots, Source, invalid, rate, read};
+use super::{Collected, FactLog, Reading, Roots, Source, invalid, rate, read, read_trimmed};
 
 /// Sectors in diskstats are always 512 bytes, whatever the device uses.
 const SECTOR: f64 = 512.0;
@@ -75,6 +80,7 @@ pub struct Disks {
     roots: Roots,
     origin: Origin,
     prev: Option<(Instant, HashMap<String, Stat>)>,
+    facts: FactLog,
 }
 
 pub fn open_proc_diskstats(roots: &Roots, now: Instant) -> io::Result<Box<dyn Source>> {
@@ -87,8 +93,9 @@ pub fn open_sys_block(roots: &Roots, now: Instant) -> io::Result<Box<dyn Source>
 }
 
 fn open(roots: &Roots, origin: Origin, now: Instant) -> io::Result<Box<dyn Source>> {
-    let mut source = Disks { roots: roots.clone(), origin, prev: None };
+    let mut source = Disks { roots: roots.clone(), origin, prev: None, facts: FactLog::default() };
     source.collect(now, &mut Collected::default())?;
+    source.facts.clear();
     Ok(Box::new(source))
 }
 
@@ -137,9 +144,50 @@ impl Source for Disks {
                 }
             }
         }
+        self.push_facts(now, cur.keys(), out);
         self.prev = Some((now, cur));
         Ok(())
     }
+}
+
+impl Disks {
+    /// Facts of each disk. A file that cannot be read gives no fact rather
+    /// than a wrong one.
+    fn push_facts<'a>(&mut self, now: Instant, disks: impl Iterator<Item = &'a String>, out: &mut Collected) {
+        let iocost =
+            read(&self.roots.cgroup.join("io.cost.qos")).map(|t| iocost_devices(&t)).unwrap_or_default();
+        for disk in disks {
+            let dir = self.roots.sys.join("block").join(disk);
+            if let Ok(flag) = read_trimmed(&dir.join("queue/rotational")) {
+                let value = if flag == "1" { "yes" } else { "no" };
+                self.facts.push(now, "disk.rotational", disk, value.to_owned(), out);
+            }
+            if let Ok(text) = read_trimmed(&dir.join("queue/scheduler")) {
+                self.facts.push(now, "disk.scheduler", disk, active_scheduler(&text).to_owned(), out);
+            }
+            if let Ok(dev) = read_trimmed(&dir.join("dev")) {
+                let value = if iocost.contains(&dev) { "on" } else { "off" };
+                self.facts.push(now, "disk.iocost", disk, value.to_owned(), out);
+            }
+        }
+    }
+}
+
+/// The scheduler in use: the bracketed name of `queue/scheduler`, or the
+/// only name when the device offers no choice.
+fn active_scheduler(text: &str) -> &str {
+    text.split_ascii_whitespace()
+        .find_map(|name| name.strip_prefix('[')?.strip_suffix(']'))
+        .unwrap_or(text.trim())
+}
+
+/// Devices (`major:minor`) on which iocost is enabled, from the root
+/// group's `io.cost.qos`. The file is empty when no device has it.
+fn iocost_devices(text: &str) -> Vec<String> {
+    text.lines()
+        .filter(|line| line.split_ascii_whitespace().any(|pair| pair == "enable=1"))
+        .filter_map(|line| line.split_ascii_whitespace().next().map(str::to_owned))
+        .collect()
 }
 
 fn reading(signal: &'static str, disk: &str, value: f64) -> Reading {
@@ -159,11 +207,22 @@ fn push_deltas(disk: &str, a: &Stat, b: &Stat, seconds: f64, out: &mut Collected
     // Average time per request, queueing included; 0 when idle, as iostat does.
     push("disk.read_await_ms", await_ms(a.read_ms, b.read_ms, a.reads, b.reads));
     push("disk.write_await_ms", await_ms(a.write_ms, b.write_ms, a.writes, b.writes));
+    // Average request size after merging, as iostat's areq-sz; small
+    // requests mark random I/O. No requests, no size.
+    push("disk.read_request_bytes", per_request(a.read_sectors, b.read_sectors, a.reads, b.reads));
+    push("disk.write_request_bytes", per_request(a.write_sectors, b.write_sectors, a.writes, b.writes));
     let ms = seconds * 1000.0;
     // Share of wall time with at least one request in flight. Misleading for
     // parallel devices such as NVMe, where queue depth says more.
     push("disk.util_ratio", rate(a.io_ms, b.io_ms, ms).map(|v| v.min(1.0)));
     push("disk.queue_depth", rate(a.weighted_ms, b.weighted_ms, ms));
+}
+
+fn per_request(sectors_a: u64, sectors_b: u64, ops_a: u64, ops_b: u64) -> Option<f64> {
+    if sectors_b < sectors_a || ops_b <= ops_a {
+        return None;
+    }
+    Some((sectors_b - sectors_a) as f64 * SECTOR / (ops_b - ops_a) as f64)
 }
 
 fn await_ms(ms_a: u64, ms_b: u64, ops_a: u64, ops_b: u64) -> Option<f64> {
@@ -177,7 +236,7 @@ fn await_ms(ms_a: u64, ms_b: u64, ops_a: u64, ops_b: u64) -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sources::{find, fixture_roots};
+    use crate::sources::{find, fixture_roots, scratch_dir};
 
     fn roots_without_loop() -> Roots {
         Roots { disk_exclude: vec!["loop".into()], ..fixture_roots() }
@@ -226,6 +285,36 @@ mod tests {
         assert_eq!(v("disk.write_await_ms"), 0.0);
         assert_eq!(v("disk.util_ratio"), 0.75);
         assert_eq!(v("disk.queue_depth"), 2.0);
+        assert_eq!(v("disk.read_request_bytes"), 20.0 * 512.0);
+        assert!(find(&out.readings, "disk.write_request_bytes", "sda").is_none());
+    }
+
+    #[test]
+    fn facts_say_which_remedies_can_work() {
+        let root = scratch_dir("disk-facts");
+        let queue = root.join("sys/block/nvme0n1/queue");
+        std::fs::create_dir_all(&queue).unwrap();
+        std::fs::write(queue.join("rotational"), "0\n").unwrap();
+        std::fs::write(queue.join("scheduler"), "[none] mq-deadline kyber bfq\n").unwrap();
+        std::fs::write(root.join("sys/block/nvme0n1/dev"), "259:0\n").unwrap();
+        std::fs::create_dir_all(root.join("cgroup")).unwrap();
+        std::fs::write(root.join("cgroup/io.cost.qos"), "8:0 enable=1 ctrl=auto\n259:0 enable=0 ctrl=auto\n")
+            .unwrap();
+        let roots = Roots { sys: root.join("sys"), cgroup: root.join("cgroup"), ..fixture_roots() };
+        let mut disks = Disks { roots, origin: Origin::SysBlock, prev: None, facts: FactLog::default() };
+        let mut out = Collected::default();
+        let t0 = Instant::now();
+        disks.push_facts(t0, ["nvme0n1".to_owned()].iter(), &mut out);
+        disks.push_facts(t0, ["nvme0n1".to_owned()].iter(), &mut out);
+        let facts: Vec<_> = out.facts.iter().map(|f| (f.name, f.value.as_str())).collect();
+        assert_eq!(facts, [("disk.rotational", "no"), ("disk.scheduler", "none"), ("disk.iocost", "off")]);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn scheduler_without_choice_is_its_only_name() {
+        assert_eq!(active_scheduler("mq-deadline kyber [bfq] none"), "bfq");
+        assert_eq!(active_scheduler("none"), "none");
     }
 
     #[test]
@@ -234,8 +323,14 @@ mod tests {
             roots: roots_without_loop(),
             origin: Origin::Diskstats(fixture_roots().proc.join("diskstats")),
             prev: None,
+            facts: FactLog::default(),
         };
-        let fallback = Disks { roots: roots_without_loop(), origin: Origin::SysBlock, prev: None };
+        let fallback = Disks {
+            roots: roots_without_loop(),
+            origin: Origin::SysBlock,
+            prev: None,
+            facts: FactLog::default(),
+        };
         let a = preferred.snapshot().unwrap();
         let b = fallback.snapshot().unwrap();
         let mut disks: Vec<_> = a.keys().cloned().collect();

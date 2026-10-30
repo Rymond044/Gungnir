@@ -57,3 +57,13 @@ signal = "disk.write_await_ms"
 level = "noticeable"
 above = 50
 provenance = { source = "initial value, to be measured in scenarios (ADR 0025)", grade = "unverified" }
+
+# A full filesystem harms whoever writes to it: writes slow down, then fail
+# (Gregg, Systems Performance, 2nd ed., p. 371). It is the harm of the disk
+# causes "filesystem filled" and "filesystem full" (docs/research/disk-io.md).
+[[impact]]
+signal = "fs.used_ratio"
+level = "severe"
+above = 0.90
+samples = 60
+provenance = { source = "Zabbix template Linux by Zabbix agent: Space is critically low, {$VFS.FS.PUSED.MAX.CRIT} = 90 (%), min over 5m", grade = "documented" }

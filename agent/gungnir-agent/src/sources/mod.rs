@@ -20,9 +20,10 @@ mod vmstat;
 pub use journal::Event;
 pub use processes::Process;
 
+use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 
@@ -47,6 +48,43 @@ pub struct Fact {
     pub name: &'static str,
     pub entity: String,
     pub value: String,
+}
+
+/// A fact is repeated this often even when unchanged, so the core learns it
+/// after its own restart.
+const FACT_EVERY: Duration = Duration::from_secs(300);
+
+/// The facts a source has sent: a fact goes out when it changes and every
+/// five minutes otherwise.
+#[derive(Debug, Default)]
+pub(crate) struct FactLog {
+    sent: HashMap<(&'static str, String), (Instant, String)>,
+}
+
+impl FactLog {
+    pub(crate) fn push(
+        &mut self,
+        now: Instant,
+        name: &'static str,
+        entity: &str,
+        value: String,
+        out: &mut Collected,
+    ) {
+        let key = (name, entity.to_owned());
+        let due = match self.sent.get(&key) {
+            Some((at, last)) => *last != value || now.duration_since(*at) >= FACT_EVERY,
+            None => true,
+        };
+        if due {
+            out.facts.push(Fact { name, entity: key.1.clone(), value: value.clone() });
+            self.sent.insert(key, (now, value));
+        }
+    }
+
+    /// Forgets what was sent, so the probe read of a source does not count.
+    pub(crate) fn clear(&mut self) {
+        self.sent.clear();
+    }
 }
 
 /// What one round of collection yields.

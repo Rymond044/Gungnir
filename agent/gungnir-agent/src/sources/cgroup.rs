@@ -10,13 +10,20 @@
 //! a count only when it is not zero, memory only when it moved noticeably,
 //! and everything every five minutes. Missing rates therefore mean zero, and
 //! a series not refreshed by a full snapshot has ended.
+//!
+//! I/O bytes and operations exist only where the io controller is enabled
+//! for the group's parent; elsewhere they count on the nearest ancestor that
+//! has it. The fact `cgroup.io_accounting` (all, partial, none) says whether
+//! the I/O of every reported group is attributed to its own systemd unit.
+//! A service that manages its subtree itself, as udevd does, enables no
+//! controllers below it; its I/O still counts on the service.
 
 use std::collections::{BTreeMap, HashMap};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use super::{Collected, Reading, Roots, Source, pressure, read, read_trimmed};
+use super::{Collected, FactLog, Reading, Roots, Source, pressure, read, read_trimmed};
 
 const FULL_EVERY: Duration = Duration::from_secs(300);
 const MEM: &str = "cgroup.mem_bytes";
@@ -40,6 +47,8 @@ const COUNTERS: &[(&str, &str, Kind)] = &[
     ("cpu.usage_usec", "cgroup.cpu_cores", Kind::PerSecond(1e6)),
     ("io.rbytes", "cgroup.read_bytes_per_s", Kind::PerSecond(1.0)),
     ("io.wbytes", "cgroup.write_bytes_per_s", Kind::PerSecond(1.0)),
+    ("io.rios", "cgroup.read_ops_per_s", Kind::PerSecond(1.0)),
+    ("io.wios", "cgroup.write_ops_per_s", Kind::PerSecond(1.0)),
     ("memory.high", "cgroup.mem_high_events", Kind::PerInterval),
     ("memory.max", "cgroup.mem_max_events", Kind::PerInterval),
     ("memory.oom_kill", "cgroup.oom_kills", Kind::PerInterval),
@@ -62,6 +71,7 @@ fn takes_max(signal: &str) -> bool {
 struct Snapshot {
     counters: HashMap<&'static str, u64>,
     mem_bytes: Option<u64>,
+    has_io: bool,
 }
 
 /// The entity name of a group: its path below the hierarchy root, with the
@@ -89,18 +99,26 @@ pub struct Cgroup2 {
     prev: HashMap<String, (Instant, Snapshot)>,
     sent_mem: HashMap<String, f64>,
     last_full: Option<Instant>,
+    facts: FactLog,
 }
 
 pub fn open_cgroup2(roots: &Roots, now: Instant) -> io::Result<Box<dyn Source>> {
     let root = roots.cgroup.clone();
     // The unified hierarchy has this file at its root; cgroup v1 does not.
     read(&root.join("cgroup.controllers"))?;
-    let mut source = Cgroup2 { root, prev: HashMap::new(), sent_mem: HashMap::new(), last_full: None };
+    let mut source = Cgroup2 {
+        root,
+        prev: HashMap::new(),
+        sent_mem: HashMap::new(),
+        last_full: None,
+        facts: FactLog::default(),
+    };
     source.collect(now, &mut Collected::default())?;
     // The probe read primes the counters but is not sent, so the first real
     // round must again be a full snapshot.
     source.last_full = None;
     source.sent_mem.clear();
+    source.facts.clear();
     Ok(Box::new(source))
 }
 
@@ -119,6 +137,17 @@ impl Cgroup2 {
         found.sort();
         found.dedup();
         Ok(found)
+    }
+
+    /// Whether the deepest systemd unit (service or scope) at or above a
+    /// group has its own `io.stat`, so that the group's I/O counts on it.
+    fn unit_has_io(&self, rel: &str) -> bool {
+        let parts: Vec<&str> = rel.split('/').collect();
+        let Some(end) = parts.iter().rposition(|name| name.ends_with(".service") || name.ends_with(".scope"))
+        else {
+            return false;
+        };
+        self.root.join(parts[..=end].join("/")).join("io.stat").exists()
     }
 
     fn snapshot(&self, rel: &str) -> Snapshot {
@@ -142,9 +171,10 @@ impl Cgroup2 {
             put("memory.oom_kill", field(&text, "oom_kill"));
         }
         if let Ok(text) = read(&dir.join("io.stat")) {
-            let (r, w) = io_bytes(&text);
-            put("io.rbytes", Some(r));
-            put("io.wbytes", Some(w));
+            for (key, value) in io_totals(&text) {
+                put(key, Some(value));
+            }
+            snap.has_io = true;
         }
         for (file, some, full) in [
             ("cpu.pressure", "cpu.pressure.some", None),
@@ -189,20 +219,26 @@ fn field(text: &str, key: &str) -> Option<u64> {
     })
 }
 
-/// Bytes read and written over all devices of an `io.stat` file.
-fn io_bytes(text: &str) -> (u64, u64) {
-    let (mut r, mut w) = (0, 0);
+/// Bytes and operations read and written, summed over all devices of an
+/// `io.stat` file.
+fn io_totals(text: &str) -> [(&'static str, u64); 4] {
+    let mut totals = [("io.rbytes", 0), ("io.wbytes", 0), ("io.rios", 0), ("io.wios", 0)];
     for pair in text.split_ascii_whitespace() {
-        if let Some((key, value)) = pair.split_once('=') {
-            let value: u64 = value.parse().unwrap_or(0);
-            match key {
-                "rbytes" => r += value,
-                "wbytes" => w += value,
-                _ => {}
-            }
+        if let Some((key, value)) = pair.split_once('=')
+            && let Some(slot) = totals.iter_mut().find(|(name, _)| name.strip_prefix("io.") == Some(key))
+        {
+            slot.1 += value.parse::<u64>().unwrap_or(0);
         }
     }
-    (r, w)
+    totals
+}
+
+fn io_accounting(with_io: usize, groups: usize) -> &'static str {
+    match with_io {
+        0 => "none",
+        n if n == groups => "all",
+        _ => "partial",
+    }
 }
 
 /// Signal values of one group between two snapshots.
@@ -252,8 +288,10 @@ impl Source for Cgroup2 {
         };
 
         let mut current = HashMap::with_capacity(groups.len());
+        let (total, mut with_io) = (groups.len(), 0);
         for rel in groups {
             let snap = self.snapshot(&rel);
+            with_io += usize::from(snap.has_io || self.unit_has_io(&rel));
             let name = entity(&rel);
             if let Some(bytes) = snap.mem_bytes {
                 merge(MEM, &name, bytes as f64);
@@ -266,6 +304,7 @@ impl Source for Cgroup2 {
             current.insert(rel, (now, snap));
         }
         self.prev = current;
+        self.facts.push(now, "cgroup.io_accounting", "host", io_accounting(with_io, total).to_owned(), out);
 
         let full = self.last_full.is_none_or(|t| now.duration_since(t) >= FULL_EVERY);
         if full {
@@ -310,7 +349,13 @@ mod tests {
     }
 
     fn source(root: &Path) -> Cgroup2 {
-        Cgroup2 { root: root.to_owned(), prev: HashMap::new(), sent_mem: HashMap::new(), last_full: None }
+        Cgroup2 {
+            root: root.to_owned(),
+            prev: HashMap::new(),
+            sent_mem: HashMap::new(),
+            last_full: None,
+            facts: FactLog::default(),
+        }
     }
 
     #[test]
@@ -374,6 +419,41 @@ mod tests {
         std::fs::write(root.join("system.slice/b.service/cgroup.events"), "populated 0\n").unwrap();
         let groups = source(&root).groups().unwrap();
         assert_eq!(groups, vec!["system.slice", "system.slice/a.service"]);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn io_stat_sums_bytes_and_operations_over_devices() {
+        let text = "259:0 rbytes=4096 wbytes=8192 rios=1 wios=2 dbytes=0 dios=0\n8:0 rbytes=4096 wbytes=0 rios=3 wios=0\n";
+        assert_eq!(
+            io_totals(text),
+            [("io.rbytes", 8192), ("io.wbytes", 8192), ("io.rios", 4), ("io.wios", 2)]
+        );
+    }
+
+    #[test]
+    fn groups_without_io_controller_make_accounting_partial() {
+        let root = scratch_dir("cgroup-io");
+        group(&root, "system.slice/a.service", 0, 0, 0);
+        group(&root, "user.slice/app.scope", 0, 0, 0);
+        std::fs::remove_file(root.join("user.slice/app.scope/io.stat")).unwrap();
+        let mut out = Collected::default();
+        source(&root).collect(Instant::now(), &mut out).unwrap();
+        let fact = out.facts.iter().find(|f| f.name == "cgroup.io_accounting").unwrap();
+        assert_eq!(fact.value, "partial");
+        assert_eq!(io_accounting(0, 3), "none");
+
+        // A service's own subtree without controllers still counts on the service.
+        std::fs::remove_dir_all(root.join("user.slice")).unwrap();
+        group(&root, "system.slice/udevd.service/udev", 0, 0, 0);
+        std::fs::remove_file(root.join("system.slice/udevd.service/udev/io.stat")).unwrap();
+        std::fs::write(root.join("system.slice/udevd.service/io.stat"), "").unwrap();
+        std::fs::write(root.join("system.slice/io.stat"), "").unwrap();
+        let mut out = Collected::default();
+        source(&root).collect(Instant::now(), &mut out).unwrap();
+        let fact = out.facts.iter().find(|f| f.name == "cgroup.io_accounting").unwrap();
+        assert_eq!(fact.value, "all");
+        assert_eq!(io_accounting(3, 3), "all");
         std::fs::remove_dir_all(root).unwrap();
     }
 

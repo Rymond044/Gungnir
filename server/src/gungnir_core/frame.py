@@ -24,8 +24,11 @@ from gungnir_core.telemetry import RAW_SAMPLES
 # a late round.
 FULL_PERIOD = timedelta(minutes=5, seconds=10)
 CARRIED = ("cgroup.mem_bytes",)
-# Context, never checked or put into baselines (ADR 0021).
+# Context, never checked or put into baselines (ADR 0021). Request sizes
+# tell random from sequential I/O for the reasoner; at idle they jump with
+# every small write, so as series of their own they would only add noise.
 CONTEXT_PREFIXES = ("agent.", "power.")
+CONTEXT_SIGNALS = ("disk.read_request_bytes", "disk.write_request_bytes")
 # Group signals that get baselines and may be checked once they have one.
 KEY_GROUP_SIGNALS = (
     "cgroup.cpu_cores",
@@ -47,7 +50,7 @@ def is_group(signal: str) -> bool:
 def is_checked_kind(signal: str) -> bool:
     """Series that get histograms: dense series except context, and the key
     group signals."""
-    if signal.startswith(CONTEXT_PREFIXES):
+    if signal.startswith(CONTEXT_PREFIXES) or signal in CONTEXT_SIGNALS:
         return False
     return not is_group(signal) or signal in KEY_GROUP_SIGNALS
 
