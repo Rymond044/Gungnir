@@ -9,7 +9,7 @@
 # stress-ng, fio)
 #
 # The memory scenario takes more than the available memory for a minute:
-# the desktop lags and other programs are pushed into swap. The disk
+# the desktop may lag while the host swaps. The disk
 # scenario writes up to about 120 GB into a 12 GB file.
 set -euo pipefail
 
@@ -93,10 +93,13 @@ for which in $wanted; do
             --time_based --runtime="$step_s"
         ;;
     memory)
-        # The culprit takes a gigabyte more than is available; the victim
-        # keeps touching 512 MiB of its own and stalls when it is reclaimed.
+        # The culprit takes a gigabyte more than is available and the host
+        # swaps. On the laptop (8 GiB of swap) the kernel swaps the culprit's
+        # own pages, so the culprit and the host stall and the victim, which
+        # keeps touching its 512 MiB, hardly does (run 20261030T200255Z):
+        # swap I/O, not a hog that starves others.
         avail_kb=$(awk '/MemAvailable/ {print $2}' /proc/meminfo)
-        scenario memory_hog '["cgroup.mem_bytes","mem.available_bytes","cgroup.mem_pressure_some_ratio"]' \
+        scenario swap_io '["swap.out_pages_per_s","mem.available_bytes","mem.pressure_some_ratio"]' \
             stress-ng --vm 1 --vm-bytes 512m --vm-keep --timeout "${victim_s}s" -- \
             stress-ng --vm 1 --vm-bytes $(( avail_kb + 1024 * 1024 ))k --vm-keep --timeout "${step_s}s"
         ;;
