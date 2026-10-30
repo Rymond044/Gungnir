@@ -1,9 +1,10 @@
 """Knowledge files: where they live and the provenance every entry must carry.
 
-S3 keeps workload class rules, control thresholds and impact thresholds as
-TOML files in `knowledge/`; S4 moves them into the knowledge base. A file
-with an entry lacking provenance does not load at all, so unsourced
-knowledge cannot slip in.
+The layers of the base are directories of `knowledge/` (ADR 0033):
+`ontology/`, `rules/`, `expected/`, `policy/`, `detection/`, `tests/`, and
+`local/` for the operator's host-local entries. A file with an entry
+lacking provenance does not load at all, so unsourced knowledge cannot
+slip in.
 """
 
 import os
@@ -50,10 +51,17 @@ def entries(path: Path, table: str, required: bool = True) -> list[dict]:
             raise KnowledgeError(f"cannot read knowledge file {path}: {err.strerror}") from err
     items = load(path).get(table, [])
     for i, item in enumerate(items, 1):
-        where = f"{path}: [[{table}]] #{i}"
-        prov = item.get("provenance")
-        if not isinstance(prov, dict) or not str(prov.get("source", "")).strip():
-            raise KnowledgeError(f"{where} has no provenance source")
-        if prov.get("grade") not in GRADES:
-            raise KnowledgeError(f"{where}: provenance grade must be one of {', '.join(GRADES)}")
+        problem = provenance_problem(item, f"{path}: [[{table}]] #{i}")
+        if problem:
+            raise KnowledgeError(problem)
     return items
+
+
+def provenance_problem(item: dict, where: str) -> str | None:
+    """The complaint about an entry's provenance, or None."""
+    prov = item.get("provenance")
+    if not isinstance(prov, dict) or not str(prov.get("source", "")).strip():
+        return f"{where} has no provenance source"
+    if prov.get("grade") not in GRADES:
+        return f"{where}: provenance grade must be one of {', '.join(GRADES)}"
+    return None

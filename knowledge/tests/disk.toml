@@ -1,0 +1,434 @@
+# Knowledge tests of the disk domain (slice S4): what is seen, and the root
+# cause the base must return.
+#
+# [[case]]: `expect` is the cause whose rule must fire; without it no rule
+# may fire (a negative case). `within` is the rank the reasoner must give
+# it from S5 on (default 1). `not` lists causes that must not fire.
+# `facts` and `culprit_class` give the context the conditions read.
+# Seen, each `at` seconds from the case's start:
+#   [[case.record]]  signal, role, direction; record = "impact" with level
+#   [[case.value]]   signal, role, value: a context value on a record
+#   [[case.event]]   event
+#   [[case.sign]]    sign, role
+# Values and windows follow the dossier docs/research/disk-io.md and the
+# labeled runs it cites.
+
+[[case]]
+name = "a large copy makes a reader wait"
+expect = "bulk_sequential_writer"
+not = ["small_random_io", "sync_write_storm", "writeback_storm", "filesystem_maintenance"]
+provenance = { source = "docs/research/disk-io.md D1; calibration run 20261029T114359Z seqwrite (~130 KiB requests)", grade = "measured" }
+
+[[case.record]]
+signal = "cgroup.write_bytes_per_s"
+role = "culprit"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "disk.write_bytes_per_s"
+role = "device"
+direction = "up"
+at = 5
+
+[[case.value]]
+signal = "disk.write_request_bytes"
+role = "device"
+value = 133_000
+at = 5
+
+[[case.record]]
+signal = "disk.queue_depth"
+role = "device"
+direction = "up"
+at = 5
+
+[[case.record]]
+signal = "disk.read_await_ms"
+role = "device"
+direction = "up"
+at = 15
+
+[[case.record]]
+signal = "cgroup.io_pressure_some_ratio"
+role = "others"
+direction = "up"
+at = 15
+
+[[case]]
+name = "a backup of the home directory makes the others wait"
+expect = "bulk_reader"
+not = ["bulk_sequential_writer", "small_random_io", "filesystem_maintenance"]
+provenance = { source = "docs/research/disk-io.md D2; calibration run 20261029T114359Z seqread (others' pressure up to 0.39)", grade = "measured" }
+
+[[case.record]]
+signal = "cgroup.read_bytes_per_s"
+role = "culprit"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "disk.read_bytes_per_s"
+role = "device"
+direction = "up"
+at = 0
+
+[[case.value]]
+signal = "disk.read_request_bytes"
+role = "device"
+value = 133_000
+at = 0
+
+[[case.record]]
+signal = "disk.read_await_ms"
+role = "device"
+direction = "up"
+at = 10
+
+[[case.record]]
+signal = "cgroup.io_pressure_some_ratio"
+role = "others"
+direction = "up"
+at = 10
+
+[[case.sign]]
+sign = "waiting_on_io"
+role = "others"
+at = 15
+
+[[case]]
+name = "a database writes small random pages"
+expect = "small_random_io"
+not = ["bulk_sequential_writer", "sync_write_storm", "writeback_storm"]
+provenance = { source = "docs/research/disk-io.md D3; calibration run 20261029T114359Z randwrite (~5 KiB requests, write await 31 ms, queue depth 41)", grade = "measured" }
+
+[[case.record]]
+signal = "cgroup.write_bytes_per_s"
+role = "culprit"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "disk.write_ops_per_s"
+role = "device"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "disk.write_bytes_per_s"
+role = "device"
+direction = "up"
+at = 0
+
+[[case.value]]
+signal = "disk.write_request_bytes"
+role = "device"
+value = 5_100
+at = 0
+
+[[case.record]]
+signal = "disk.write_await_ms"
+role = "device"
+direction = "up"
+at = 5
+
+[[case.record]]
+signal = "disk.queue_depth"
+role = "device"
+direction = "up"
+at = 5
+
+[[case.record]]
+signal = "cgroup.io_pressure_some_ratio"
+role = "others"
+direction = "up"
+at = 10
+
+# The device's bytes rise too, so D1 fires as well: sizes over 8 KiB are
+# not small. Which comes first is the reasoner's ranking (S5).
+[[case]]
+name = "a program syncs after every small write"
+expect = "sync_write_storm"
+not = ["small_random_io", "writeback_storm"]
+provenance = { source = "docs/research/disk-io.md D4; calibration run 20261029T114359Z fsync (~13 KiB requests, own pressure 0.14, others up to 0.17)", grade = "measured" }
+
+[[case.record]]
+signal = "cgroup.write_bytes_per_s"
+role = "culprit"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "cgroup.io_pressure_some_ratio"
+role = "culprit"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "disk.write_ops_per_s"
+role = "device"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "disk.write_bytes_per_s"
+role = "device"
+direction = "up"
+at = 0
+
+[[case.value]]
+signal = "disk.write_request_bytes"
+role = "device"
+value = 13_300
+at = 0
+
+[[case.record]]
+signal = "disk.write_await_ms"
+role = "device"
+direction = "up"
+at = 5
+
+[[case.sign]]
+sign = "btrfs_transaction"
+role = "host"
+at = 10
+
+[[case.record]]
+signal = "cgroup.io_pressure_some_ratio"
+role = "others"
+direction = "up"
+at = 10
+
+# Buffered writes: dirty memory first, the flush up to 35 s later. The
+# flush is charged to the writer's group, so D1 fires as well.
+[[case]]
+name = "buffered writes are flushed in a burst"
+expect = "writeback_storm"
+not = ["small_random_io", "sync_write_storm"]
+provenance = { source = "docs/research/disk-io.md D5; overhead run 20261028T195813Z phase disk (dirty up to 1.2 GB, queue depth 78, +flush-btrfs-1 in state D, up to 5 blocked tasks)", grade = "measured" }
+
+[[case.record]]
+signal = "mem.dirty_bytes"
+role = "host"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "disk.write_bytes_per_s"
+role = "device"
+direction = "up"
+at = 30
+
+[[case.value]]
+signal = "disk.write_request_bytes"
+role = "device"
+value = 130_000
+at = 30
+
+[[case.record]]
+signal = "mem.writeback_bytes"
+role = "host"
+direction = "up"
+at = 30
+
+[[case.record]]
+signal = "cgroup.write_bytes_per_s"
+role = "culprit"
+direction = "up"
+at = 30
+
+[[case.sign]]
+sign = "writeback_flusher"
+role = "host"
+at = 32
+
+[[case.record]]
+signal = "disk.queue_depth"
+role = "device"
+direction = "up"
+at = 32
+
+[[case.record]]
+signal = "cgroup.io_pressure_some_ratio"
+role = "others"
+direction = "up"
+at = 40
+
+[[case.record]]
+signal = "cpu.blocked_tasks"
+role = "host"
+direction = "up"
+at = 40
+
+# D7 fires as well: a full filesystem is its whole rule. The writer makes
+# D6 the better explanation, which is the reasoner's ranking (S5).
+[[case]]
+name = "a log grows until the filesystem is full"
+expect = "filesystem_filled"
+not = ["bulk_sequential_writer"]
+provenance = { source = "docs/research/disk-io.md D6", grade = "unverified" }
+
+[[case.record]]
+signal = "cgroup.write_bytes_per_s"
+role = "culprit"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "fs.available_bytes"
+role = "filesystem"
+direction = "down"
+at = 9_000
+
+[[case.record]]
+signal = "fs.used_ratio"
+role = "filesystem"
+direction = "up"
+record = "impact"
+level = "severe"
+at = 14_400
+
+[[case.event]]
+event = "unit_failed"
+at = 15_000
+
+[[case]]
+name = "the filesystem is full with nobody writing"
+expect = "filesystem_full"
+not = ["filesystem_filled"]
+provenance = { source = "docs/research/disk-io.md D7", grade = "unverified" }
+
+[[case.record]]
+signal = "fs.used_ratio"
+role = "filesystem"
+direction = "up"
+record = "impact"
+level = "severe"
+at = 0
+
+[[case]]
+name = "the disk fails its reads"
+expect = "device_errors"
+not = ["bulk_reader", "small_random_io"]
+provenance = { source = "docs/research/disk-io.md D8: kernel message formats from block/blk-mq.c, fs/btrfs/volumes.c, kernel/hung_task.c", grade = "documented" }
+
+[[case.record]]
+signal = "disk.read_await_ms"
+role = "device"
+direction = "up"
+at = 0
+
+[[case.event]]
+event = "block_io_error"
+at = 20
+
+[[case.event]]
+event = "btrfs_device_errors"
+at = 20
+
+[[case.record]]
+signal = "io.pressure_full_ratio"
+role = "host"
+direction = "up"
+at = 25
+
+[[case.record]]
+signal = "cpu.blocked_tasks"
+role = "host"
+direction = "up"
+at = 25
+
+[[case.event]]
+event = "hung_task"
+at = 150
+
+[[case]]
+name = "a scrub makes the others wait"
+expect = "filesystem_maintenance"
+culprit_class = "maintenance"
+not = ["bulk_reader", "small_random_io"]
+provenance = { source = "docs/research/disk-io.md D9; Btrfs Scrub: about 80 % of the device bandwidth", grade = "documented" }
+
+[[case.record]]
+signal = "cgroup.read_bytes_per_s"
+role = "culprit"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "disk.read_bytes_per_s"
+role = "device"
+direction = "up"
+at = 0
+
+[[case.value]]
+signal = "disk.read_request_bytes"
+role = "device"
+value = 130_000
+at = 0
+
+[[case.record]]
+signal = "cgroup.io_pressure_some_ratio"
+role = "others"
+direction = "up"
+at = 10
+
+# Negative cases: heavy activity that harms nobody is the process at work.
+
+[[case]]
+name = "a large copy that nobody waits for"
+provenance = { source = "docs/research/disk-io.md, Two lessons: a single stream on this NVMe disk barely harms the others; ADR 0034", grade = "measured" }
+
+[[case.record]]
+signal = "cgroup.write_bytes_per_s"
+role = "culprit"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "disk.write_bytes_per_s"
+role = "device"
+direction = "up"
+at = 0
+
+[[case.value]]
+signal = "disk.write_request_bytes"
+role = "device"
+value = 133_000
+at = 0
+
+[[case.record]]
+signal = "disk.queue_depth"
+role = "device"
+direction = "up"
+at = 5
+
+# Host pressure includes the culprit's own stall, so it is not harm.
+[[case.record]]
+signal = "io.pressure_some_ratio"
+role = "host"
+direction = "up"
+at = 5
+
+[[case]]
+name = "a scrub on an idle host"
+culprit_class = "maintenance"
+provenance = { source = "docs/research/disk-io.md D9 (expected behavior); ADR 0002", grade = "documented" }
+
+[[case.record]]
+signal = "cgroup.read_bytes_per_s"
+role = "culprit"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "disk.read_bytes_per_s"
+role = "device"
+direction = "up"
+at = 0
+
+[[case.value]]
+signal = "disk.read_request_bytes"
+role = "device"
+value = 130_000
+at = 0

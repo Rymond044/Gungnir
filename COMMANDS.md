@@ -79,7 +79,7 @@ core workload unmatched laptop                    # noticeable processes and uni
 cd server && uv run gungnir-core workload assign laptop build --command zig       # or --unit name.service
 ```
 
-`assign` appends a rule with provenance "operator, host, date" to `knowledge/local/laptop.toml`; the core reads it on its next step. Shipped rules: `knowledge/workload_classes.toml`.
+`assign` appends a rule with provenance "operator, host, date" to `knowledge/local/laptop.toml`; the core reads it on its next step. Shipped rules: `knowledge/expected/workload_classes.toml`.
 
 ### Baselines
 
@@ -131,7 +131,7 @@ The live core uses the defaults.
 ## Knowledge base
 
 ```sh
-cd server && uv run gungnir-core knowledge check    # ontology, names used by the knowledge files, HermiT
+cd server && uv run gungnir-core knowledge check    # ontology, every layer, knowledge tests, HermiT
 core knowledge check --no-reasoner                  # in the container: no Java there, so no HermiT
 ```
 
@@ -142,7 +142,7 @@ The ontology is `knowledge/ontology/gungnir.ttl`; open it in Protégé (File →
 Before: core up, calibration run done, a day of data collected.
 
 1. `core status laptop`: the agent, its sources, the current `workload.class`.
-2. `core workload show laptop`, then start a build (`cd agent && cargo clean -p gungnir-agent && cargo build --release`); after about 30 s `workload show` reports `build`. Open `knowledge/workload_classes.toml`: every rule has its source.
+2. `core workload show laptop`, then start a build (`cd agent && cargo clean -p gungnir-agent && cargo build --release`); after about 30 s `workload show` reports `build`. Open `knowledge/expected/workload_classes.toml`: every rule has its source.
 3. `stress-ng --cpu 0 --timeout 60s`, wait 40 s, `core anomalies laptop --hours 1`: a `threshold` record on `cpu.idle_ratio`, and after a baseline exists a `robust.mad` one; it closes about 15 s after the load ends.
 4. `systemd-run --user --scope -p MemoryHigh=200M stress-ng --vm 1 --vm-bytes 400M --timeout 60s`: memory pressure in the group, an `impact` record when it is high enough.
 5. `core baselines laptop --signal 'cpu.*'`: medians per class, power factors.

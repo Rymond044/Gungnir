@@ -54,3 +54,27 @@ def test_records_read_back_in_words(conn):
     assert "2 records, 1 open" in text
     assert "impact severe" in text and "limit above 60.0 %" in text
     assert "threshold" in text and "limit below 10.0 %" in text
+
+
+def test_a_disk_record_carries_the_request_size_during_it(conn):
+    conn.autocommit = True
+    host = seed.add_host(conn)
+    ticks = seed.ticks(START, 80)
+    slow = range(40, 52)
+    rows = [(t, "disk.write_await_ms", "nvme0n1", 30.0 if i in slow else 0.2) for i, t in enumerate(ticks)]
+    # Small requests while the disk is slow, large ones before and after;
+    # no reads at all, so no read size is sent.
+    rows += [
+        (t, "disk.write_request_bytes", "nvme0n1", 4096.0 if i in slow else 131072.0)
+        for i, t in enumerate(ticks)
+    ]
+    seed.samples(conn, host, rows)
+
+    runner = Runner.live(conn, host, P)
+    runner.at = START
+    runner.run(START + timedelta(seconds=5 * 46))
+    [(ended, context)] = conn.execute("SELECT ended_at, context FROM anomalies").fetchall()
+    assert ended is None and context == {"disk.write_request_bytes": 4096.0}
+    runner.run(START + timedelta(seconds=5 * 80))
+    [(ended, context)] = conn.execute("SELECT ended_at, context FROM anomalies").fetchall()
+    assert ended == ticks[52] and context == {"disk.write_request_bytes": 4096.0}

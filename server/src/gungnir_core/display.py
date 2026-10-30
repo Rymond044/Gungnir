@@ -226,4 +226,7 @@ def render_records(rows: list, now: datetime, zone: timezone, title: str) -> str
         context = f"class {r.workload_class or '-'}, {r.power_profile or '-'}"
         episode = f", episode {r.episode}" if r.episode else ""
         lines.append(f"    value {value}; {context}; against {against(r.signal, r.baseline)}{episode}")
+        if r.context:
+            seen = ", ".join(f"{k} {format_value(k, v)}" for k, v in sorted(r.context.items()))
+            lines.append(f"    during it: {seen}")
     return "\n".join(lines)

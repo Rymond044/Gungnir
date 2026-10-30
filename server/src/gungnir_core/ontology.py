@@ -360,21 +360,23 @@ class _Reader:
         return ProtectedEntity(name, units, commands)
 
 
-# Tables of the TOML layers so far, the field that names something in the
-# ontology, and its category.
+# Tables of the detection and workload layers, the field that names
+# something in the ontology, and its category. Rules, expected behavior,
+# policy and knowledge tests check their own references when they load.
 REFERENCES = (
     ("threshold", "signal", "signal"),
     ("impact", "signal", "signal"),
     ("workload_rule", "class", "class"),
 )
+REFERENCE_LAYERS = ("detection", "expected", "local")
 
 
 def references(onto: Ontology) -> tuple[int, list[str]]:
-    """Checks the names the knowledge files use, shipped and host-local.
-    Returns the number of entries checked and the problems found."""
+    """Checks the names the detection and workload files use, shipped and
+    host-local. Returns the number of entries checked and the problems found."""
     root = knowledge.directory()
     checked, problems = 0, []
-    for file in sorted(root.glob("*.toml")) + sorted((root / "local").glob("*.toml")):
+    for file in [f for layer in REFERENCE_LAYERS for f in sorted((root / layer).glob("*.toml"))]:
         for table, field, category in REFERENCES:
             for i, entry in enumerate(knowledge.entries(file, table), 1):
                 checked += 1

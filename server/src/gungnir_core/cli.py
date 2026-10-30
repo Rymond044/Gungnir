@@ -15,6 +15,7 @@ import psycopg
 
 from gungnir_core import (
     anomalies,
+    base,
     baselines,
     capacity,
     hosts,
@@ -186,13 +187,22 @@ def main() -> None:
 
 def check_knowledge(reasoner: bool) -> int:
     try:
-        onto = ontology.load()
+        kb = base.load()
+        onto = kb.ontology
         counts = ", ".join(f"{category} {len(onto.names(category))}" for category in ontology.CATEGORIES)
         print(f"{ontology.path()}: {counts}")
-        checked, problems = ontology.references(onto)
-        if problems:
-            raise KnowledgeError("\n".join(problems))
-        print(f"knowledge files: {checked} entries name only what the ontology has")
+        print(f"detection and workload files: {kb.references} entries name only what the ontology has")
+        shown = sum(len(r.manifestations) for r in kb.rules.values())
+        print(f"rules: {len(kb.rules)} causes, {shown} manifestations")
+        print(f"expected behavior: {len(kb.expected)} entries")
+        print(
+            f"policy: {len(kb.policy.entries)} actions, {len(kb.policy.advisories)} advisories,"
+            f" contraindications for {len(kb.policy.contraindicated)} causes"
+        )
+        ran, failures = base.run_tests(kb)
+        if failures:
+            raise KnowledgeError("knowledge tests failed:\n" + "\n".join(failures))
+        print(f"knowledge tests: {ran} cases pass")
         if reasoner:
             classified = ontology.consistency()
             print("HermiT: consistent")

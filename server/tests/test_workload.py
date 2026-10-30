@@ -25,6 +25,7 @@ def test_shipped_rules_load_with_provenance():
 
 
 def test_a_rule_without_provenance_stops_the_file(tmp_path, monkeypatch):
+    (tmp_path / "expected").mkdir()
     (tmp_path / workload.GLOBAL_FILE).write_text('[[workload_rule]]\nclass = "build"\ncommand = ["cc1"]\n')
     monkeypatch.setenv("GUNGNIR_KNOWLEDGE_DIR", str(tmp_path))
     with pytest.raises(knowledge.KnowledgeError, match="provenance"):
@@ -82,6 +83,7 @@ def test_a_gap_restarts_the_count():
 
 def test_operator_rules_go_to_the_host_file(tmp_path, monkeypatch):
     monkeypatch.setenv("GUNGNIR_KNOWLEDGE_DIR", str(tmp_path))
+    (tmp_path / "expected").mkdir()
     (tmp_path / workload.GLOBAL_FILE).write_text("")
     path = workload.assign("laptop", "backup", None, "kopia.service", T0.date())
     assert path.endswith("local/laptop.toml")

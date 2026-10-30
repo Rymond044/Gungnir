@@ -135,11 +135,13 @@ class LimitDetector:
 
 
 def thresholds(host: str | None = None) -> LimitDetector:
-    return LimitDetector("threshold", "anomaly", load_limits("threshold", "static_thresholds.toml", host))
+    return LimitDetector(
+        "threshold", "anomaly", load_limits("threshold", "detection/static_thresholds.toml", host)
+    )
 
 
 def impact(host: str | None = None) -> LimitDetector:
-    return LimitDetector("impact", "impact", load_limits("impact", "impact.toml", host))
+    return LimitDetector("impact", "impact", load_limits("impact", "detection/impact.toml", host))
 
 
 # Robust statistics against a baseline.

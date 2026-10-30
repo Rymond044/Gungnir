@@ -1,0 +1,135 @@
+# Action policy (ADR 0035), disk domain first: which action treats which
+# root cause, from docs/research/disk-io.md.
+#
+# [[policy]]: an action type of the ontology on the entity of `target` (a
+# role; the culprit for now). `parameter` is relative to what the target
+# consumes now: `share` of the current value of `signal` on it. `when`
+# names the alternative of the rule's culprit manifestation that must have
+# matched, where a rule allows reads or writes. `requires`/`excludes` name
+# context facts as in the rules. Effectiveness and the likelihood of each
+# side effect are in the words of strength (ADR 0034).
+#
+# The share 0.5 is ADR 0035's initial value, to be calibrated on the S9
+# scenarios. Proportional controls (io.weight, ionice) need BFQ or iocost,
+# which no host has so far; they enter with that condition when one does.
+#
+# [[advisory]]: what to tell the user where no action of the actuator
+# applies or helps. [[contraindication]]: actions never proposed for a
+# cause; the loader refuses a policy entry that names one.
+
+#################################################################
+# Actions
+#################################################################
+
+[[policy]]
+cause = "bulk_sequential_writer"
+action = "io_max_wbps"
+target = "culprit"
+parameter = { signal = "cgroup.write_bytes_per_s", share = 0.5 }
+effectiveness = "typical"
+side_effects = [{ effect = "the culprit finishes its writes later", likelihood = "characteristic" }]
+provenance = { source = "docs/research/disk-io.md D1; admin-guide/cgroup-v2 io.max: blk-throttle delays I/O above the limit on every scheduler, removed by writing max", grade = "documented" }
+
+[[policy]]
+cause = "bulk_reader"
+action = "io_max_rbps"
+target = "culprit"
+parameter = { signal = "cgroup.read_bytes_per_s", share = 0.5 }
+effectiveness = "typical"
+side_effects = [{ effect = "the culprit finishes its reads later", likelihood = "characteristic" }]
+provenance = { source = "docs/research/disk-io.md D2; admin-guide/cgroup-v2 io.max", grade = "documented" }
+
+[[policy]]
+cause = "small_random_io"
+action = "io_max_riops"
+target = "culprit"
+when = "cgroup.read_bytes_per_s"
+parameter = { signal = "cgroup.read_ops_per_s", share = 0.5 }
+effectiveness = "typical"
+side_effects = [{ effect = "the culprit finishes its reads later", likelihood = "characteristic" }]
+provenance = { source = "docs/research/disk-io.md D3; admin-guide/cgroup-v2 io.max riops; ADR 0036 (group operations)", grade = "documented" }
+
+[[policy]]
+cause = "small_random_io"
+action = "io_max_wiops"
+target = "culprit"
+when = "cgroup.write_bytes_per_s"
+parameter = { signal = "cgroup.write_ops_per_s", share = 0.5 }
+effectiveness = "typical"
+side_effects = [{ effect = "the culprit finishes its writes later", likelihood = "characteristic" }]
+provenance = { source = "docs/research/disk-io.md D3; admin-guide/cgroup-v2 io.max wiops; ADR 0036 (group operations)", grade = "documented" }
+
+[[policy]]
+cause = "sync_write_storm"
+action = "io_max_wiops"
+target = "culprit"
+parameter = { signal = "cgroup.write_ops_per_s", share = 0.5 }
+effectiveness = "typical"
+side_effects = [{ effect = "the culprit waits longer for each commit", likelihood = "characteristic" }]
+provenance = { source = "docs/research/disk-io.md D4; admin-guide/cgroup-v2 io.max wiops", grade = "documented" }
+
+[[policy]]
+cause = "writeback_storm"
+action = "io_max_wbps"
+target = "culprit"
+parameter = { signal = "cgroup.write_bytes_per_s", share = 0.5 }
+effectiveness = "typical"
+side_effects = [
+    { effect = "the culprit finishes its writes later", likelihood = "characteristic" },
+    { effect = "the culprit holds more dirty memory, which counts against its memory; watch cgroup.mem_bytes", likelihood = "possible" },
+]
+provenance = { source = "docs/research/disk-io.md D5; admin-guide/cgroup-v2 Writeback: the io controller writes out dirty pages per memory domain, and per-group dirty limits apply", grade = "documented" }
+
+[[policy]]
+cause = "filesystem_maintenance"
+action = "io_max_rbps"
+target = "culprit"
+when = "cgroup.read_bytes_per_s"
+parameter = { signal = "cgroup.read_bytes_per_s", share = 0.5 }
+effectiveness = "typical"
+side_effects = [{ effect = "the maintenance job takes longer", likelihood = "characteristic" }]
+provenance = { source = "docs/research/disk-io.md D9; btrfs-scrub(8): use cgroup2 bandwidth limits through systemd where the scheduler is not BFQ", grade = "documented" }
+
+[[policy]]
+cause = "filesystem_maintenance"
+action = "io_max_wbps"
+target = "culprit"
+when = "cgroup.write_bytes_per_s"
+parameter = { signal = "cgroup.write_bytes_per_s", share = 0.5 }
+effectiveness = "typical"
+side_effects = [{ effect = "the maintenance job takes longer", likelihood = "characteristic" }]
+provenance = { source = "docs/research/disk-io.md D9; btrfs-balance(8) Performance implications; admin-guide/cgroup-v2 io.max", grade = "documented" }
+
+#################################################################
+# Advisories
+#################################################################
+
+[[advisory]]
+cause = "writeback_storm"
+text = "Writeback is host-wide: an administrator can lower vm.dirty_background_bytes and vm.dirty_bytes so that flushing starts earlier and in smaller bursts. Do not run sync or drop caches: that forces exactly the flush that hurts."
+provenance = { source = "docs/research/disk-io.md D5; admin-guide/sysctl/vm dirty_*; Love pp. 331-332", grade = "documented" }
+
+[[advisory]]
+cause = "filesystem_filled"
+text = "The group named as culprit has been filling the filesystem. Find what it writes; space usually goes to logs (journalctl --vacuum-size), package caches, old snapshots and container images. Limiting its I/O only slows the filling; nothing is deleted automatically."
+provenance = { source = "docs/research/disk-io.md D6; journald.conf(5) SystemMaxUse=; Gregg p. 371", grade = "documented" }
+
+[[advisory]]
+cause = "filesystem_full"
+text = "The filesystem is nearly full and no writer is active now. Space usually goes to logs (journalctl --vacuum-size), package caches, old snapshots and container images. Nothing is deleted automatically."
+provenance = { source = "docs/research/disk-io.md D7; Gregg p. 371", grade = "documented" }
+
+[[advisory]]
+cause = "device_errors"
+text = "The device reports errors. Copy important data off it now, read its SMART data (smartctl -a), and check the cable and the firmware. Limiting I/O does not help."
+provenance = { source = "docs/research/disk-io.md D8; Gregg p. 451 (errors first in the USE method; smartctl)", grade = "documented" }
+
+#################################################################
+# Contraindications
+#################################################################
+
+[[contraindication]]
+cause = "swap_io"
+actions = ["io_max_rbps", "io_max_wbps", "io_max_riops", "io_max_wiops"]
+reason = "throttling swap I/O lengthens every page-in of the victims"
+provenance = { source = "docs/research/disk-io.md D10, inferred", grade = "unverified" }

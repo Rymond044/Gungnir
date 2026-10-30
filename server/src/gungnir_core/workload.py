@@ -27,7 +27,7 @@ CLASSES = ("idle", "interactive", "build", "backup", "maintenance")
 RULED = ("build", "backup", "maintenance")
 FACT = "workload.class"
 RULE_TABLE = "workload_rule"
-GLOBAL_FILE = "workload_classes.toml"
+GLOBAL_FILE = "expected/workload_classes.toml"
 # Operator rules win over the shipped ones.
 OPERATOR_PRIORITY = 100
 # Classify at most this much per call, so a long backlog commits in steps.

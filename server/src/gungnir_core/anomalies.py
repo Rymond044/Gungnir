@@ -26,6 +26,8 @@ class RecordRow:
     power_profile: str | None
     baseline: dict
     episode: int | None
+    # Medians of the entity's context signals over the interval.
+    context: dict | None
 
 
 def records_of(
@@ -41,8 +43,8 @@ def records_of(
     replay is named."""
     rows = conn.execute(
         "SELECT a.id, a.kind, a.detector, a.level, s.signal, s.entity, a.started_at, a.ended_at,"
-        " a.direction, a.peak_score, a.value, a.workload_class, a.power_profile, a.baseline, a.episode"
-        " FROM anomalies a JOIN series s ON s.id = a.series_id"
+        " a.direction, a.peak_score, a.value, a.workload_class, a.power_profile, a.baseline, a.episode,"
+        " a.context FROM anomalies a JOIN series s ON s.id = a.series_id"
         " WHERE a.host_id = %(h)s AND a.replay_id IS NOT DISTINCT FROM %(r)s"
         " AND (a.ended_at IS NULL OR a.ended_at >= %(since)s)"
         " AND (NOT %(open)s OR a.ended_at IS NULL)"

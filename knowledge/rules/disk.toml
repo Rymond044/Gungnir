@@ -1,0 +1,565 @@
+# Causal rules of the disk domain (ADR 0034), formalised from the research
+# dossier docs/research/disk-io.md, causes D1-D9. Each rule names a root
+# cause of the ontology and the manifestations it is expected to produce.
+#
+# A manifestation is one of four kinds:
+#   anomaly = signal(s)  a record of the series in `direction` ("up" or
+#                        "down"); `record` narrows it to "anomaly" or
+#                        "impact" (with `level`), default any record
+#   value   = signal(s)  a context value detection attached to a record of
+#                        the same entity, `at_most` or `above` a bound
+#   event   = type(s)    a kernel or journal event of the host
+#   sign    = sign(s)    a process sign in the process snapshot
+# A list means any one of them; it counts once.
+#
+# `role` is the entity it is expected on: culprit, others, device,
+# filesystem, host. One manifestation is the `anchor`; the `window` of every
+# other one is [min, max] seconds from the anchor's start. `strength` is
+# characteristic, typical or possible; `harm = true` marks the harm the
+# cause does. Rule conditions: `requires` and `excludes` name context facts
+# or `culprit_class`, the workload class whose rules match the culprit's
+# group. Grades follow the dossier: documented, measured (seen in a labeled
+# run), unverified (inferred there; to be confirmed by an S9 scenario).
+#
+# Every rule except D9 excludes a maintenance culprit: with the same
+# manifestations, a maintenance unit makes D9.
+
+#################################################################
+# D1. Bulk sequential writer
+#################################################################
+
+[[rule]]
+cause = "bulk_sequential_writer"
+excludes = { culprit_class = "maintenance" }
+provenance = { source = "docs/research/disk-io.md D1; Gregg p. 434; Love p. 300", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "cgroup.write_bytes_per_s"
+direction = "up"
+role = "culprit"
+anchor = true
+strength = "characteristic"
+provenance = { source = "admin-guide/cgroup-v2 io.stat wbytes", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "disk.write_bytes_per_s"
+direction = "up"
+role = "device"
+window = [-15, 30]
+strength = "characteristic"
+provenance = { source = "Gregg p. 460", grade = "documented" }
+
+[[rule.manifestation]]
+value = "disk.write_request_bytes"
+above = 8192
+role = "device"
+window = [-15, 30]
+strength = "characteristic"
+provenance = { source = "Gregg p. 461: sizes over 8 KiB are large I/O or a merged sequential workload; calibration run 20261029T114359Z seqwrite ~130 KiB", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "disk.queue_depth"
+direction = "up"
+role = "device"
+window = [-15, 30]
+strength = "typical"
+provenance = { source = "Gregg p. 434: saturation is the queue beyond what the device delivers", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "disk.read_await_ms"
+direction = "up"
+role = "device"
+window = [-15, 60]
+strength = "typical"
+provenance = { source = "Love p. 300 (writes starving reads); Gregg p. 461", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "cgroup.io_pressure_some_ratio"
+direction = "up"
+role = "others"
+window = [-15, 60]
+strength = "characteristic"
+harm = true
+provenance = { source = "accounting/psi: share of time tasks of the group stalled on I/O", grade = "documented" }
+
+[[rule.manifestation]]
+sign = "waiting_on_io"
+role = "others"
+window = [-15, 60]
+strength = "possible"
+harm = true
+provenance = { source = "ADR 0038; proc_pid_stat(5) state D", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "cpu.blocked_tasks"
+direction = "up"
+role = "host"
+window = [-15, 60]
+strength = "possible"
+provenance = { source = "docs/research/disk-io.md D1, inferred from Gregg p. 195", grade = "unverified" }
+
+[[rule.manifestation]]
+anomaly = "disk.util_ratio"
+direction = "up"
+role = "device"
+window = [-15, 30]
+strength = "possible"
+provenance = { source = "iostat(1) %util: not a limit for devices serving requests in parallel; Gregg p. 433", grade = "documented" }
+
+#################################################################
+# D2. Bulk reader or scan
+#################################################################
+
+[[rule]]
+cause = "bulk_reader"
+excludes = { culprit_class = "maintenance" }
+provenance = { source = "docs/research/disk-io.md D2; Love p. 300; Gregg p. 365", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "cgroup.read_bytes_per_s"
+direction = "up"
+role = "culprit"
+anchor = true
+strength = "characteristic"
+provenance = { source = "admin-guide/cgroup-v2 io.stat rbytes", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = ["disk.read_bytes_per_s", "disk.read_ops_per_s"]
+direction = "up"
+role = "device"
+window = [-15, 30]
+strength = "characteristic"
+provenance = { source = "Gregg p. 460", grade = "documented" }
+
+# Typical, not characteristic: a directory scan reads small metadata blocks.
+[[rule.manifestation]]
+value = "disk.read_request_bytes"
+above = 8192
+role = "device"
+window = [-15, 30]
+strength = "typical"
+provenance = { source = "Gregg p. 461; calibration run 20261029T114359Z seqread ~130 KiB", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "disk.read_await_ms"
+direction = "up"
+role = "device"
+window = [-15, 60]
+strength = "typical"
+provenance = { source = "Gregg p. 461", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "cgroup.io_pressure_some_ratio"
+direction = "up"
+role = "others"
+window = [-15, 60]
+strength = "characteristic"
+harm = true
+provenance = { source = "accounting/psi; calibration run 20261029T114359Z seqread: others up to 0.39", grade = "documented" }
+
+[[rule.manifestation]]
+sign = "waiting_on_io"
+role = "others"
+window = [-15, 60]
+strength = "possible"
+harm = true
+provenance = { source = "ADR 0038; proc_pid_stat(5) state D", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "mem.major_faults_per_s"
+direction = "up"
+role = "host"
+window = [0, 600]
+strength = "possible"
+provenance = { source = "docs/research/disk-io.md D2, inferred from Gregg p. 365 (unneeded reads pollute the cache)", grade = "unverified" }
+
+#################################################################
+# D3. Small random I/O
+#################################################################
+
+[[rule]]
+cause = "small_random_io"
+excludes = { culprit_class = "maintenance" }
+provenance = { source = "docs/research/disk-io.md D3; Gregg pp. 430-431, 440, 461", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = ["cgroup.read_bytes_per_s", "cgroup.write_bytes_per_s"]
+direction = "up"
+role = "culprit"
+anchor = true
+strength = "characteristic"
+provenance = { source = "admin-guide/cgroup-v2 io.stat", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = ["disk.read_ops_per_s", "disk.write_ops_per_s"]
+direction = "up"
+role = "device"
+window = [-15, 30]
+strength = "characteristic"
+provenance = { source = "Gregg p. 461: the device runs out of operations before bytes", grade = "documented" }
+
+[[rule.manifestation]]
+value = ["disk.read_request_bytes", "disk.write_request_bytes"]
+at_most = 8192
+role = "device"
+window = [-15, 30]
+strength = "characteristic"
+provenance = { source = "Gregg p. 461: sizes of 8 KiB or less indicate random I/O that could not be merged", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = ["disk.write_await_ms", "disk.read_await_ms"]
+direction = "up"
+role = "device"
+window = [-15, 60]
+strength = "typical"
+provenance = { source = "Gregg p. 461; calibration run 20261029T114359Z randwrite: up to 31 ms", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "disk.queue_depth"
+direction = "up"
+role = "device"
+window = [-15, 30]
+strength = "typical"
+provenance = { source = "calibration run 20261029T114359Z randwrite: median 41, max 808", grade = "measured" }
+
+[[rule.manifestation]]
+anomaly = "cgroup.io_pressure_some_ratio"
+direction = "up"
+role = "others"
+window = [-15, 60]
+strength = "characteristic"
+harm = true
+provenance = { source = "accounting/psi", grade = "documented" }
+
+[[rule.manifestation]]
+sign = "waiting_on_io"
+role = "others"
+window = [-15, 60]
+strength = "possible"
+harm = true
+provenance = { source = "ADR 0038; proc_pid_stat(5) state D", grade = "documented" }
+
+#################################################################
+# D4. Synchronous write storm
+#################################################################
+
+[[rule]]
+cause = "sync_write_storm"
+excludes = { culprit_class = "maintenance" }
+provenance = { source = "docs/research/disk-io.md D4; Gregg p. 366; Love p. 331", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "cgroup.write_bytes_per_s"
+direction = "up"
+role = "culprit"
+anchor = true
+strength = "characteristic"
+provenance = { source = "admin-guide/cgroup-v2 io.stat wbytes", grade = "documented" }
+
+# The culprit waits for every commit: its own stall is activity, not harm.
+[[rule.manifestation]]
+anomaly = "cgroup.io_pressure_some_ratio"
+direction = "up"
+role = "culprit"
+window = [-15, 30]
+strength = "characteristic"
+provenance = { source = "Gregg p. 366: a synchronous write pays device latency; calibration run 20261029T114359Z fsync: own pressure 0.14", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "disk.write_ops_per_s"
+direction = "up"
+role = "device"
+window = [-15, 30]
+strength = "characteristic"
+provenance = { source = "calibration run 20261029T114359Z fsync: 9.1 k/s at ~13 KiB", grade = "measured" }
+
+[[rule.manifestation]]
+anomaly = "disk.write_await_ms"
+direction = "up"
+role = "device"
+window = [-15, 60]
+strength = "typical"
+provenance = { source = "Gregg p. 366; calibration run 20261029T114359Z fsync: 14 ms", grade = "documented" }
+
+[[rule.manifestation]]
+sign = ["btrfs_transaction", "jbd2"]
+role = "host"
+window = [-15, 60]
+strength = "possible"
+provenance = { source = "fs/btrfs/disk-io.c (btrfs-transaction); fs/jbd2/journal.c (jbd2/%s)", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "cgroup.io_pressure_some_ratio"
+direction = "up"
+role = "others"
+window = [-15, 60]
+strength = "characteristic"
+harm = true
+provenance = { source = "accounting/psi; calibration run 20261029T114359Z fsync: others up to 0.17", grade = "documented" }
+
+[[rule.manifestation]]
+sign = "waiting_on_io"
+role = "others"
+window = [-15, 60]
+strength = "possible"
+harm = true
+provenance = { source = "ADR 0038; proc_pid_stat(5) state D", grade = "documented" }
+
+#################################################################
+# D5. Writeback storm
+#################################################################
+
+# Windows of 35 s: dirty_expire_centisecs 30 s plus one flusher wakeup,
+# dirty_writeback_centisecs 5 s (the laptop's values, the kernel defaults).
+[[rule]]
+cause = "writeback_storm"
+excludes = { culprit_class = "maintenance" }
+provenance = { source = "docs/research/disk-io.md D5; Love pp. 331-332; Bovet pp. 625-626; admin-guide/sysctl/vm", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "mem.dirty_bytes"
+direction = "up"
+role = "host"
+anchor = true
+strength = "characteristic"
+provenance = { source = "Love p. 331; overhead run 20261028T195813Z: dirty up to 1.2 GB", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "disk.write_bytes_per_s"
+direction = "up"
+role = "device"
+window = [0, 35]
+strength = "characteristic"
+provenance = { source = "admin-guide/sysctl/vm dirty_expire_centisecs, dirty_writeback_centisecs", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "mem.writeback_bytes"
+direction = "up"
+role = "host"
+window = [0, 35]
+strength = "typical"
+provenance = { source = "Love p. 332", grade = "documented" }
+
+[[rule.manifestation]]
+sign = "writeback_flusher"
+role = "host"
+window = [0, 60]
+strength = "typical"
+provenance = { source = "Gregg p. 374; fs/fs-writeback.c flush-%s; overhead run 20261028T195813Z: +flush-btrfs-1 in state D", grade = "documented" }
+
+# Cgroup writeback charges the flusher's I/O to the group owning the inode.
+[[rule.manifestation]]
+anomaly = "cgroup.write_bytes_per_s"
+direction = "up"
+role = "culprit"
+window = [-15, 35]
+strength = "typical"
+provenance = { source = "admin-guide/cgroup-v2 Writeback", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "disk.queue_depth"
+direction = "up"
+role = "device"
+window = [0, 60]
+strength = "typical"
+provenance = { source = "overhead run 20261028T195813Z: queue depth 78", grade = "measured" }
+
+[[rule.manifestation]]
+anomaly = "cgroup.io_pressure_some_ratio"
+direction = "up"
+role = "others"
+window = [0, 90]
+strength = "characteristic"
+harm = true
+provenance = { source = "accounting/psi; Love p. 300", grade = "documented" }
+
+[[rule.manifestation]]
+sign = "waiting_on_io"
+role = "others"
+window = [0, 90]
+strength = "possible"
+harm = true
+provenance = { source = "ADR 0038; proc_pid_stat(5) state D", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "cpu.blocked_tasks"
+direction = "up"
+role = "host"
+window = [0, 90]
+strength = "possible"
+provenance = { source = "overhead run 20261028T195813Z: up to 5 blocked tasks", grade = "measured" }
+
+#################################################################
+# D6. Filesystem filled by a culprit
+#################################################################
+
+# The anchor is the harm; the writes that fill a disk come hours before.
+# The 6 h look-back is our choice (dossier D6).
+[[rule]]
+cause = "filesystem_filled"
+excludes = { culprit_class = "maintenance" }
+provenance = { source = "docs/research/disk-io.md D6; Gregg p. 371", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "fs.used_ratio"
+direction = "up"
+record = "impact"
+level = "severe"
+role = "filesystem"
+anchor = true
+strength = "characteristic"
+harm = true
+provenance = { source = "Zabbix template Linux by Zabbix agent, {$VFS.FS.PUSED.MAX.CRIT} = 90; Gregg p. 371", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "fs.available_bytes"
+direction = "down"
+role = "filesystem"
+window = [-21600, 0]
+strength = "typical"
+provenance = { source = "statvfs(3)", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "cgroup.write_bytes_per_s"
+direction = "up"
+role = "culprit"
+window = [-21600, 0]
+strength = "characteristic"
+provenance = { source = "docs/research/disk-io.md D6, inferred", grade = "unverified" }
+
+[[rule.manifestation]]
+event = "unit_failed"
+window = [0, 3600]
+strength = "possible"
+provenance = { source = "docs/research/disk-io.md D6, inferred: writes fail when space runs out", grade = "unverified" }
+
+#################################################################
+# D7. Filesystem full
+#################################################################
+
+[[rule]]
+cause = "filesystem_full"
+provenance = { source = "docs/research/disk-io.md D7; Gregg p. 371", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "fs.used_ratio"
+direction = "up"
+record = "impact"
+level = "severe"
+role = "filesystem"
+anchor = true
+strength = "characteristic"
+harm = true
+provenance = { source = "Zabbix template Linux by Zabbix agent, {$VFS.FS.PUSED.MAX.CRIT} = 90; Gregg p. 371", grade = "documented" }
+
+[[rule.manifestation]]
+event = "unit_failed"
+window = [0, 3600]
+strength = "possible"
+provenance = { source = "docs/research/disk-io.md D7, inferred", grade = "unverified" }
+
+#################################################################
+# D8. Device errors
+#################################################################
+
+# No culprit: harm only. An NVMe timeout is a device error before any
+# request fails, so either event anchors the rule.
+[[rule]]
+cause = "device_errors"
+provenance = { source = "docs/research/disk-io.md D8; Gregg pp. 441, 451, 461", grade = "documented" }
+
+[[rule.manifestation]]
+event = ["block_io_error", "nvme_timeout"]
+anchor = true
+strength = "characteristic"
+provenance = { source = "block/blk-mq.c blk_print_req_error (KERN_ERR); drivers/nvme/host/pci.c nvme_timeout; ADR 0037", grade = "documented" }
+
+[[rule.manifestation]]
+event = "btrfs_device_errors"
+window = [-60, 60]
+strength = "typical"
+provenance = { source = "fs/btrfs/volumes.c btrfs_dev_stat_print_on_error", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = ["disk.read_await_ms", "disk.write_await_ms"]
+direction = "up"
+role = "device"
+window = [-60, 60]
+strength = "typical"
+provenance = { source = "Gregg p. 441 (latency outliers while the controller retries), p. 461 (latency grows with errors)", grade = "documented" }
+
+[[rule.manifestation]]
+event = "hung_task"
+window = [0, 300]
+strength = "possible"
+provenance = { source = "kernel/hung_task.c; admin-guide/sysctl/kernel hung_task_timeout_secs (120 s on the laptop)", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "io.pressure_full_ratio"
+direction = "up"
+role = "host"
+window = [-60, 300]
+strength = "typical"
+harm = true
+provenance = { source = "accounting/psi", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "cpu.blocked_tasks"
+direction = "up"
+role = "host"
+window = [-60, 300]
+strength = "typical"
+provenance = { source = "Gregg p. 195: tasks in state D", grade = "documented" }
+
+#################################################################
+# D9. Filesystem maintenance
+#################################################################
+
+# The culprit's group is matched by a maintenance rule of
+# expected/workload_classes.toml. Its activity is expected behavior; the
+# harm still makes it a cause (ADR 0002).
+[[rule]]
+cause = "filesystem_maintenance"
+requires = { culprit_class = "maintenance" }
+provenance = { source = "docs/research/disk-io.md D9; btrfs-scrub(8); btrfs-balance(8); fstrim(8); updatedb(8)", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = ["cgroup.read_bytes_per_s", "cgroup.write_bytes_per_s"]
+direction = "up"
+role = "culprit"
+anchor = true
+strength = "characteristic"
+provenance = { source = "admin-guide/cgroup-v2 io.stat", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = ["disk.read_bytes_per_s", "disk.write_bytes_per_s"]
+direction = "up"
+role = "device"
+window = [-15, 30]
+strength = "typical"
+provenance = { source = "Btrfs Scrub: about 80 % of the device bandwidth; btrfs-balance(8) Performance implications", grade = "documented" }
+
+# Possible, not typical as in the dossier: only snapshot deletion runs it.
+[[rule.manifestation]]
+sign = "btrfs_cleaner"
+role = "host"
+window = [-15, 60]
+strength = "possible"
+provenance = { source = "Btrfs Subvolumes; fs/btrfs/disk-io.c btrfs-cleaner", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "cgroup.io_pressure_some_ratio"
+direction = "up"
+role = "others"
+window = [-15, 60]
+strength = "characteristic"
+harm = true
+provenance = { source = "accounting/psi", grade = "documented" }
+
+[[rule.manifestation]]
+sign = "waiting_on_io"
+role = "others"
+window = [-15, 60]
+strength = "possible"
+harm = true
+provenance = { source = "ADR 0038; proc_pid_stat(5) state D", grade = "documented" }

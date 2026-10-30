@@ -1,0 +1,118 @@
+# Causal rules across resources (ADR 0034). For now the two memory causes
+# as the disk sees them, D10 and D11 of docs/research/disk-io.md; the
+# cross-effects dossier completes them. Format as in disk.toml.
+
+#################################################################
+# D10. Swap I/O
+#################################################################
+
+[[rule]]
+cause = "swap_io"
+requires = { "swap.enabled" = "yes" }
+provenance = { source = "docs/research/disk-io.md D10; Gregg pp. 306-307; Bovet p. 711", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "swap.out_pages_per_s"
+direction = "up"
+role = "host"
+anchor = true
+strength = "characteristic"
+provenance = { source = "Gregg p. 306", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "swap.in_pages_per_s"
+direction = "up"
+role = "host"
+window = [0, 120]
+strength = "characteristic"
+provenance = { source = "Bovet p. 711 (swap thrashing); Gregg p. 307", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "mem.major_faults_per_s"
+direction = "up"
+role = "host"
+window = [0, 120]
+strength = "typical"
+provenance = { source = "Gregg p. 308", grade = "documented" }
+
+[[rule.manifestation]]
+sign = "kswapd"
+role = "host"
+window = [-30, 60]
+strength = "typical"
+provenance = { source = "Gregg p. 374", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = ["disk.read_ops_per_s", "disk.write_ops_per_s"]
+direction = "up"
+role = "device"
+window = [0, 120]
+strength = "typical"
+provenance = { source = "docs/research/disk-io.md D10, inferred: swap traffic is small random I/O", grade = "unverified" }
+
+# The culprit is the group whose memory grows (ontology, ADR 0039 item 8);
+# its window and strength are revisited in the cross-effects dossier.
+[[rule.manifestation]]
+anomaly = "cgroup.mem_bytes"
+direction = "up"
+role = "culprit"
+window = [-300, 60]
+strength = "typical"
+provenance = { source = "docs/research/disk-io.md D10, inferred", grade = "unverified" }
+
+[[rule.manifestation]]
+anomaly = "mem.pressure_some_ratio"
+direction = "up"
+role = "host"
+window = [0, 120]
+strength = "characteristic"
+harm = true
+provenance = { source = "accounting/psi", grade = "documented" }
+
+#################################################################
+# D11. Page cache thrashing
+#################################################################
+
+[[rule]]
+cause = "page_cache_thrashing"
+provenance = { source = "docs/research/disk-io.md D11; Gregg pp. 310, 390; Bovet p. 713", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "mem.major_faults_per_s"
+direction = "up"
+role = "host"
+anchor = true
+strength = "characteristic"
+provenance = { source = "Gregg p. 308", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = ["disk.read_ops_per_s", "disk.read_bytes_per_s"]
+direction = "up"
+role = "device"
+window = [-15, 60]
+strength = "characteristic"
+provenance = { source = "Gregg p. 390: a working set that does not fit returns from disk", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "mem.available_bytes"
+direction = "down"
+role = "host"
+window = [-300, 0]
+strength = "typical"
+provenance = { source = "docs/research/disk-io.md D11, inferred", grade = "unverified" }
+
+[[rule.manifestation]]
+sign = "kswapd"
+role = "host"
+window = [-30, 60]
+strength = "typical"
+provenance = { source = "Gregg p. 374", grade = "documented" }
+
+[[rule.manifestation]]
+anomaly = "mem.pressure_some_ratio"
+direction = "up"
+role = "host"
+window = [0, 120]
+strength = "characteristic"
+harm = true
+provenance = { source = "accounting/psi", grade = "documented" }

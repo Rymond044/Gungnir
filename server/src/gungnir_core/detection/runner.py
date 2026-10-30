@@ -21,10 +21,25 @@ from gungnir_core.detection.detectors import BookBaselines, Context, Detector, R
 from gungnir_core.detection.records import Closed, Opened, Tracker
 from gungnir_core.hosts import Host
 from gungnir_core.params import Params
+from gungnir_core.telemetry import RAW_SAMPLES
 
 # A live loop without a watermark starts this far back; history is the
 # replay's job.
 LIVE_START = timedelta(minutes=1)
+
+# Medians of the context signals of a record's entity over its interval,
+# up to `until` while it is open. Only disks have context signals so far.
+CONTEXT_SQL = (
+    "UPDATE anomalies a SET context = c.context FROM ("
+    " SELECT a.id, jsonb_object_agg(cs.signal, m.median) AS context"
+    " FROM anomalies a JOIN series s ON s.id = a.series_id"
+    " JOIN series cs ON cs.host_id = s.host_id AND cs.entity = s.entity AND cs.signal = ANY(%(signals)s)"
+    " CROSS JOIN LATERAL (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY r.value) AS median"
+    f"  FROM {RAW_SAMPLES} r WHERE r.series_id = cs.id"
+    "  AND r.ts >= a.started_at AND r.ts <= coalesce(a.ended_at, %(until)s)) m"
+    " WHERE a.id = ANY(%(ids)s) AND m.median IS NOT NULL GROUP BY a.id"
+    ") c WHERE a.id = c.id"
+)
 
 
 @dataclass
@@ -140,10 +155,11 @@ class Runner:
                 seen.add(ev.key)
                 events += self.tracker.feed(ev)
         events += self.tracker.expire(seen, f.ts.size - start, int(f.ts[-1]))
-        return self.write(events, classes[start:], powers[start:])
+        return self.write(events, classes[start:], powers[start:], int(f.ts[-1]))
 
-    def write(self, events, classes, powers) -> int:
+    def write(self, events, classes, powers, until_ms: int) -> int:
         tokens: dict[int, list[int]] = {}
+        touched: list[int] = []
         written = 0
         for ev in events:
             if isinstance(ev, Opened):
@@ -177,12 +193,15 @@ class Runner:
                     ids.append(rid)
                 tokens[ev.token] = ids
                 self.tracker.set_ids(ev.token, ids)
+                touched += ids
                 written += len(ids)
             elif isinstance(ev, Closed):
+                ids = ev.ids or tokens.get(ev.token, [])
                 self.conn.execute(
                     "UPDATE anomalies SET ended_at = %s, peak_score = %s WHERE id = ANY(%s)",
-                    (frame.from_ms(ev.ended_ms), _finite(ev.peak), ev.ids or tokens.get(ev.token, [])),
+                    (frame.from_ms(ev.ended_ms), _finite(ev.peak), ids),
                 )
+                touched += ids
         for track in self.tracker.open_tracks().values():
             current = track["open"]
             if current["ids"]:
@@ -190,6 +209,12 @@ class Runner:
                     "UPDATE anomalies SET peak_score = %s WHERE id = ANY(%s) AND peak_score < %s",
                     (_finite(current["peak"]), current["ids"], _finite(current["peak"])),
                 )
+                touched += current["ids"]
+        if touched:
+            self.conn.execute(
+                CONTEXT_SQL,
+                {"signals": list(frame.CONTEXT_SIGNALS), "ids": touched, "until": frame.from_ms(until_ms)},
+            )
         return written
 
     def save(self) -> None:

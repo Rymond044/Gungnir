@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, R
 from fastapi.responses import JSONResponse
 from psycopg_pool import ConnectionPool
 
-from gungnir_core import hosts, maintenance, pipeline, telemetry
+from gungnir_core import base, hosts, maintenance, pipeline, telemetry
 from gungnir_core.db import migrate, open_pool
 from gungnir_core.hosts import Host
 from gungnir_core.ingest import Batch
@@ -23,6 +23,8 @@ MAX_BODY = 4 * 1024 * 1024
 def create_app(pool: ConnectionPool | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        # A broken knowledge base stops the core here, never silently later.
+        base.load()
         own = pool is None
         app.state.pool = open_pool() if own else pool
         app.state.series = telemetry.SeriesIds()

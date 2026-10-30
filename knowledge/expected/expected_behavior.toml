@@ -1,0 +1,56 @@
+# Expected behavior (ADR 0002): unusual activity that the workload class
+# explains. While the host is in `class`, an anomaly record of one of
+# `signals` in `direction` is marked expected. `on = "members"` narrows
+# group signals to the groups the class's rules match (workload_classes.toml);
+# host and device signals take no `on`.
+#
+# Impact records are never expected: harm opens an incident whatever its
+# context, and the causal rules then explain it (D9 for maintenance).
+
+[[expected]]
+class = "maintenance"
+signals = ["cgroup.read_bytes_per_s", "cgroup.write_bytes_per_s", "cgroup.cpu_cores"]
+direction = "up"
+on = "members"
+provenance = { source = "btrfs-scrub(8): reads all data and metadata, verifies checksums; btrfs-balance(8): very I/O intensive, can be CPU intensive; fstrim(8); updatedb(8): walks the directory tree; pacman(8) and apt(8) write packages", grade = "documented" }
+
+[[expected]]
+class = "maintenance"
+signals = ["disk.read_bytes_per_s", "disk.write_bytes_per_s", "disk.read_ops_per_s", "disk.write_ops_per_s", "disk.util_ratio", "disk.queue_depth"]
+direction = "up"
+provenance = { source = "Btrfs documentation, Scrub: about 80 % of the device bandwidth on an idle filesystem; btrfs-balance(8) Performance implications", grade = "documented" }
+
+[[expected]]
+class = "backup"
+signals = ["cgroup.read_bytes_per_s", "cgroup.cpu_cores"]
+direction = "up"
+on = "members"
+provenance = { source = "borg-create(1): reads the files given, compresses (lz4 by default) and deduplicates; restic(1) backup reads and compresses", grade = "documented" }
+
+[[expected]]
+class = "backup"
+signals = ["disk.read_bytes_per_s", "disk.read_ops_per_s"]
+direction = "up"
+provenance = { source = "borg-create(1); restic(1): a backup reads every file it saves", grade = "documented" }
+
+# A build rule counts only when its processes take a noticeable share
+# (ADR 0023), so their CPU is the class itself; compilers also read
+# sources and write objects, and the linker holds large inputs in memory.
+[[expected]]
+class = "build"
+signals = ["cgroup.cpu_cores", "cgroup.mem_bytes", "cgroup.read_bytes_per_s", "cgroup.write_bytes_per_s"]
+direction = "up"
+on = "members"
+provenance = { source = "ADR 0023 (a build class needs 0.5 cores of its processes); make(1) -j runs jobs simultaneously; GCC manual, Overall Options: the driver runs cc1, as and ld on the files given", grade = "documented" }
+
+[[expected]]
+class = "build"
+signals = ["cpu.user_ratio", "cpu.runnable_tasks", "cpu.forks_per_s", "cpu.context_switches_per_s"]
+direction = "up"
+provenance = { source = "ADR 0023; make(1) -j: one process per job, each compiler run a new process", grade = "documented" }
+
+[[expected]]
+class = "build"
+signals = ["cpu.idle_ratio"]
+direction = "down"
+provenance = { source = "ADR 0023: the build class takes a noticeable share of the CPU", grade = "documented" }

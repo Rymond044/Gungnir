@@ -1,0 +1,98 @@
+# Knowledge tests of the causes across resources: for now D10 and D11 as
+# the disk sees them. Format as in disk.toml.
+
+# Swapped-in pages are read from the device as well, so D11 fires too;
+# the swap traffic makes D10 the better explanation (S5).
+[[case]]
+name = "a growing program pushes the others into swap"
+expect = "swap_io"
+facts = { "swap.enabled" = "yes" }
+provenance = { source = "docs/research/disk-io.md D10; Gregg pp. 306-308; Bovet p. 711", grade = "documented" }
+
+[[case.record]]
+signal = "cgroup.mem_bytes"
+role = "culprit"
+direction = "up"
+at = -120
+
+[[case.sign]]
+sign = "kswapd"
+role = "host"
+at = -10
+
+[[case.record]]
+signal = "swap.out_pages_per_s"
+role = "host"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "swap.in_pages_per_s"
+role = "host"
+direction = "up"
+at = 20
+
+[[case.record]]
+signal = "mem.major_faults_per_s"
+role = "host"
+direction = "up"
+at = 20
+
+[[case.record]]
+signal = "disk.read_ops_per_s"
+role = "device"
+direction = "up"
+at = 20
+
+[[case.record]]
+signal = "mem.pressure_some_ratio"
+role = "host"
+direction = "up"
+at = 25
+
+[[case]]
+name = "without swap, file pages are dropped and read back"
+expect = "page_cache_thrashing"
+not = ["swap_io", "bulk_reader"]
+facts = { "swap.enabled" = "no" }
+provenance = { source = "docs/research/disk-io.md D11; Gregg pp. 310, 390; Bovet p. 713", grade = "documented" }
+
+[[case.record]]
+signal = "mem.available_bytes"
+role = "host"
+direction = "down"
+at = -120
+
+[[case.sign]]
+sign = "kswapd"
+role = "host"
+at = -10
+
+[[case.record]]
+signal = "mem.major_faults_per_s"
+role = "host"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "disk.read_ops_per_s"
+role = "device"
+direction = "up"
+at = 5
+
+[[case.record]]
+signal = "mem.pressure_some_ratio"
+role = "host"
+direction = "up"
+at = 20
+
+[[case]]
+name = "idle pages go to swap and nobody waits"
+facts = { "swap.enabled" = "yes" }
+provenance = { source = "Gregg p. 307: anonymous page-outs may not affect application performance directly, as the kernel performs them asynchronously; ADR 0034 (no harm, no cause)", grade = "documented" }
+
+[[case.record]]
+signal = "swap.out_pages_per_s"
+role = "host"
+direction = "up"
+at = 0
