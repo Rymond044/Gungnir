@@ -1,9 +1,11 @@
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import numpy as np
 
 from gungnir_core.detection import forest
 from gungnir_core.detection.detectors import (
+    BookBaselines,
     Cold,
     Context,
     Limit,
@@ -146,6 +148,29 @@ def test_short_available_memory_is_seen_without_a_baseline():
     assert opened.records[0].direction == "down"
     assert opened.records[0].baseline["of"] == "10% of host memory"
     assert opened.started_ms == 25_000 and closed.ended_ms == 50_000
+
+
+def test_host_counts_zero_at_rest_are_judged_without_a_baseline():
+    n = 20
+    swapping = np.zeros(n)
+    swapping[5:10] = 1700.0
+    rows = {"swap.out_pages_per_s": swapping, "mem.major_faults_per_s": swapping}
+    book = SimpleNamespace(params=P, capacity={}, get=lambda series_id, cls: None)
+    found = records(Robust(BookBaselines(book), ewma=False), context(make_frame(rows)))
+    signals = {f"{e.records[0].direction}" for _, e in found if hasattr(e, "records")}
+    assert len(found) == 2 and signals == {"up"}
+    assert found[0][1].records[0].baseline["of"] == "spread floor"
+    # Major faults also come from reading files, so they wait for a baseline.
+    assert [e.records[0].series_id for _, e in found if hasattr(e, "records")] == [1]
+    # Dirty pages count from the background writeback threshold.
+    dirty = np.full(n, 5e6)
+    dirty[5:10] = 1.3e9
+    rows = {"mem.dirty_bytes": dirty, "mem.dirty_background_bytes": np.full(n, 0.93e9)}
+    found = records(Robust(BookBaselines(book), ewma=False), context(make_frame(rows)))
+    assert len(found) == 2
+    assert found[0][1].records[0].baseline["of"] == "background writeback threshold"
+    rows["mem.dirty_bytes"] = np.where(dirty > 1e9, 0.8e9, dirty)
+    assert records(Robust(BookBaselines(book), ewma=False), context(make_frame(rows))) == []
 
 
 def test_group_pressure_follows_the_host_s_lowest_impact_level():

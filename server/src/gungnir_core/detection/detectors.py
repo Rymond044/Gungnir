@@ -163,15 +163,18 @@ class Baselines(Protocol):
         power profile, with what to record about them."""
 
     def cold(self, meta: SeriesMeta, ctx: Context) -> Cold | None:
-        """A cold-start limit: from measured capacity or a share of memory
-        on the host, from noticeable levels on a control group."""
+        """A cold-start limit: from measured capacity, a share of memory or
+        the spread floor of a count on the host, from noticeable levels on a
+        control group."""
 
 
 class BookBaselines:
     """Baselines from hourly histograms, with the power correction factor
     and spread floors applied; capacity for cold start (ADR 0022, 0024),
     noticeable levels for groups (ADR 0045), a share of memory for the
-    host's available memory (ADR 0047)."""
+    host's available memory, the background writeback threshold for its
+    dirty pages and the spread floor for its counts that are zero at rest
+    (ADR 0047)."""
 
     def __init__(self, book: Book, pressure: dict[str, float] | None = None) -> None:
         self.book = book
@@ -207,6 +210,18 @@ class BookBaselines:
             return group_cold(meta, ctx, self.book.capacity, self.pressure)
         if meta.signal == "mem.available_bytes":
             return available_cold(ctx)
+        if meta.signal == "mem.dirty_bytes":
+            threshold = dirty_threshold(ctx)
+            if threshold is None:
+                return None
+            shown = float(np.nanmedian(threshold))
+            return Cold(
+                threshold, {"basis": "cold start", "limit": shown, "of": "background writeback threshold"}
+            )
+        if meta.signal in self.book.params.cold_count_signals:
+            floor = by_pattern(self.book.params.floors, meta.signal)
+            if floor is not None:
+                return Cold(floor, {"basis": "cold start", "limit": floor, "of": "spread floor"})
         cap = self.book.capacity.get((meta.signal, meta.entity))
         share = by_pattern(self.book.params.cold_start_share, meta.signal)
         if cap is None or share is None:
@@ -410,14 +425,10 @@ class Robust:
         )
 
 
-def dirty_floor(meta: SeriesMeta, ctx: Context) -> np.ndarray | None:
-    """Spread floor of the host's dirty page cache (ADR 0047): a record
-    needs a rise by the background writeback threshold, where the flusher
-    threads start writing (Love pp. 331-332). Below it dirty pages come and
-    go with every write and say nothing about writeback. Without the
-    agent's threshold, the kernel's default ratio of available memory."""
-    if meta.signal != "mem.dirty_bytes":
-        return None
+def dirty_threshold(ctx: Context) -> np.ndarray | None:
+    """The background writeback threshold at each judged tick, where the
+    flusher threads start writing (Love pp. 331-332; ADR 0047): the agent's
+    reading, else the kernel's default share of available memory."""
     f, p = ctx.frame, ctx.params
     available = f.row("mem.available_bytes")
     reported = f.row("mem.dirty_background_bytes")
@@ -430,7 +441,17 @@ def dirty_floor(meta: SeriesMeta, ctx: Context) -> np.ndarray | None:
         threshold = reported
     else:
         threshold = np.where(np.isnan(reported), default, reported)
-    return threshold[ctx.start :] / (p.robust_k * MAD_TO_SIGMA)
+    return threshold[ctx.start :]
+
+
+def dirty_floor(meta: SeriesMeta, ctx: Context) -> np.ndarray | None:
+    """Spread floor of the host's dirty page cache: a record needs a rise by
+    the background writeback threshold. Below it dirty pages come and go with
+    every write and say nothing about writeback."""
+    if meta.signal != "mem.dirty_bytes":
+        return None
+    threshold = dirty_threshold(ctx)
+    return None if threshold is None else threshold / (ctx.params.robust_k * MAD_TO_SIGMA)
 
 
 def ewma(x: np.ndarray, lam: float, start: float | None) -> tuple[np.ndarray, float | None]:

@@ -64,6 +64,14 @@ class Params:
     # Cold start of the host's available memory (ADR 0047): short below this
     # share of host memory, the default minimum of earlyoom(1), -m 10.
     cold_available_share: float = 0.1
+    # Host counts that are zero at rest (memory dossier): without a baseline
+    # a rise above their spread floor is unusual, as for a group's counts.
+    cold_count_signals: tuple[str, ...] = (
+        "mem.direct_reclaims_per_s",
+        "swap.in_pages_per_s",
+        "swap.out_pages_per_s",
+        "mem.oom_kills",
+    )
     # Background writeback threshold as a share of available memory where the
     # agent does not report it: the kernel's default vm.dirty_background_ratio
     # (admin-guide/sysctl/vm; mm/page-writeback.c).
