@@ -10,7 +10,7 @@
 #
 # The memory scenario takes more than the available memory for a minute:
 # the desktop lags and other programs are pushed into swap. The disk
-# scenario writes up to about 120 GB.
+# scenario writes up to about 120 GB into a 12 GB file.
 set -euo pipefail
 
 host=${1:?usage: culprits.sh HOST [cpu] [disk] [memory]}
@@ -79,17 +79,18 @@ for which in $wanted; do
             stress-ng --cpu "$cpus" --timeout "${step_s}s"
         ;;
     disk)
-        # Direct I/O, so the writes go to the device as large requests and
-        # not through writeback; the victim reads small blocks at a low rate.
-        # The writer keeps 32 requests in flight with no rate limit: at 1 GB/s
-        # with one request at a time the laptop's NVMe kept the victim's
-        # pressure near 0.03 (run 20261030T192216Z).
-        scenario bulk_sequential_writer \
-            '["cgroup.write_bytes_per_s","disk.write_bytes_per_s","cgroup.io_pressure_some_ratio"]' \
-            fio --name=victim --filename="$scratch/victim.dat" --size=1g --direct=1 --rw=randread --bs=4k \
+        # A buffered writer fills the page cache past the background
+        # writeback threshold; the victim writes small blocks and calls fsync
+        # after each, so it waits behind the flood. Direct writes did not
+        # harm anyone on the laptop's NVMe: a 4 KiB reader or fsync writer
+        # waited 2-4 % beside 2 GB/s with 32 requests in flight
+        # (run 20261030T193858Z and trials of 2026-10-30).
+        scenario writeback_storm \
+            '["mem.dirty_bytes","disk.write_bytes_per_s","cgroup.io_pressure_some_ratio"]' \
+            fio --name=victim --filename="$scratch/victim.dat" --size=64m --rw=randwrite --bs=4k --fsync=1 \
             --rate_iops=200 --time_based --runtime="$victim_s" -- \
-            fio --name=writer --filename="$scratch/writer.dat" --size=4g --direct=1 --rw=write --bs=1m \
-            --ioengine=libaio --iodepth=32 --time_based --runtime="$step_s"
+            fio --name=writer --filename="$scratch/writer.dat" --size=12g --rw=write --bs=1m \
+            --time_based --runtime="$step_s"
         ;;
     memory)
         # The culprit takes a gigabyte more than is available; the victim
