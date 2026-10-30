@@ -1,6 +1,6 @@
 # Commands
 
-Everyday commands for running, checking and showing gungnIR. Run them from `code/gungnir` unless said otherwise. Times shown by the CLI are in the host's local time; SQL shows UTC.
+Everyday commands for running, checking and showing gungnIR. Run them from `gungnir/` (the repository root) unless said otherwise. Times shown by the CLI are in the host's local time; SQL shows UTC.
 
 A shorthand used below:
 
@@ -27,10 +27,10 @@ Commands that write files on the host (`workload assign`, `evaluate --out`, `smd
 Back up the database before anything risky, restore into a scratch database to look at it:
 
 ```sh
-mkdir -p ~/gungnir-backups
-dc exec -T db pg_dump -U gungnir -Fc gungnir > ~/gungnir-backups/gungnir-$(date -u +%Y%m%dT%H%M%SZ).dump
+mkdir -p ../backups
+dc exec -T db pg_dump -U gungnir -Fc gungnir > ../backups/gungnir-$(date -u +%Y%m%dT%H%M%SZ).dump
 dc exec -T db psql -U gungnir -c "CREATE DATABASE scratch"
-dc exec -T db pg_restore -U gungnir -d scratch < ~/gungnir-backups/<file>.dump
+dc exec -T db pg_restore -U gungnir -d scratch < ../backups/<file>.dump
 ```
 
 ## Is it working?

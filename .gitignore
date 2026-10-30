@@ -11,4 +11,4 @@ node_modules/
 token
 *.token
 # Outputs of scenario runs on this machine.
-gungnir/scenarios/runs/
+/scenarios/runs/
