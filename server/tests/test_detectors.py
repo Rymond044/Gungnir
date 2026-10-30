@@ -4,10 +4,12 @@ import numpy as np
 
 from gungnir_core.detection import forest
 from gungnir_core.detection.detectors import (
+    Cold,
     Context,
     Limit,
     LimitDetector,
     Robust,
+    available_cold,
     ewma,
     group_cold,
     pressure_levels,
@@ -29,7 +31,7 @@ class Fixed:
 
     def cold(self, meta, ctx):
         limit = self.cold_limits.get(meta.signal)
-        return None if limit is None else (limit, {"basis": "calibration"})
+        return None if limit is None else Cold(limit, {"basis": "calibration"})
 
 
 class GroupsOnly(Fixed):
@@ -40,6 +42,8 @@ class GroupsOnly(Fixed):
         self.capacity, self.pressure = capacity or {}, pressure or {}
 
     def cold(self, meta, ctx):
+        if meta.signal == "mem.available_bytes":
+            return available_cold(ctx)
         return group_cold(meta, ctx, self.capacity, self.pressure) if is_group(meta.signal) else None
 
 
@@ -129,6 +133,19 @@ def test_a_new_group_s_memory_is_judged_against_a_share_of_host_memory():
         "cgroup.mem_bytes": grows,
     }
     assert group_records(rows) == [("10% of host memory", "up")]
+
+
+def test_short_available_memory_is_seen_without_a_baseline():
+    n = 20
+    total = 16e9
+    available = np.full(n, 8e9)
+    available[5:10] = 0.7e9
+    rows = {"mem.available_bytes": available, "mem.used_ratio": 1 - available / total}
+    found = records(Robust(GroupsOnly(), ewma=False), context(make_frame(rows)))
+    [(_, opened), (_, closed)] = found
+    assert opened.records[0].direction == "down"
+    assert opened.records[0].baseline["of"] == "10% of host memory"
+    assert opened.started_ms == 25_000 and closed.ended_ms == 50_000
 
 
 def test_group_pressure_follows_the_host_s_lowest_impact_level():

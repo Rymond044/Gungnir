@@ -61,6 +61,9 @@ class Params:
     group_memory_floor_share: float = 0.1
     # Cold start of a group's memory (ADR 0045): a share of host memory.
     group_cold_memory_share: float = 0.1
+    # Cold start of the host's available memory (ADR 0047): short below this
+    # share of host memory, the default minimum of earlyoom(1), -m 10.
+    cold_available_share: float = 0.1
     # Throughput spread floor: a share of measured capacity.
     capacity_floor_share: float = 0.01
     floors: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_FLOORS))

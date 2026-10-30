@@ -9,7 +9,7 @@ dataset run the same code, and a detector can be replaced behind the
 
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
-from typing import Protocol
+from typing import NamedTuple, Protocol
 
 import numpy as np
 
@@ -147,21 +147,31 @@ def impact(host: str | None = None) -> LimitDetector:
 # Robust statistics against a baseline.
 
 
+class Cold(NamedTuple):
+    """A cold-start limit for the judged ticks, where no baseline exists,
+    and what to record about it. A series is unusual above the limit, or
+    below it for a series whose shortage is the trouble."""
+
+    limit: float | np.ndarray
+    basis: dict
+    below: bool = False
+
+
 class Baselines(Protocol):
     def lookup(self, meta: SeriesMeta, cls: str, power: str) -> tuple[float, float, dict] | None:
         """Median and spread floor-applied for a series in a class and
         power profile, with what to record about them."""
 
-    def cold(self, meta: SeriesMeta, ctx: Context) -> tuple[float | np.ndarray, dict] | None:
-        """A cold-start upper limit for the judged ticks, where no baseline
-        exists: from measured capacity on the host, from noticeable levels
-        on a control group."""
+    def cold(self, meta: SeriesMeta, ctx: Context) -> Cold | None:
+        """A cold-start limit: from measured capacity or a share of memory
+        on the host, from noticeable levels on a control group."""
 
 
 class BookBaselines:
     """Baselines from hourly histograms, with the power correction factor
     and spread floors applied; capacity for cold start (ADR 0022, 0024),
-    noticeable levels for groups (ADR 0045)."""
+    noticeable levels for groups (ADR 0045), a share of memory for the
+    host's available memory (ADR 0047)."""
 
     def __init__(self, book: Book, pressure: dict[str, float] | None = None) -> None:
         self.book = book
@@ -195,11 +205,13 @@ class BookBaselines:
     def cold(self, meta, ctx):
         if is_group(meta.signal):
             return group_cold(meta, ctx, self.book.capacity, self.pressure)
+        if meta.signal == "mem.available_bytes":
+            return available_cold(ctx)
         cap = self.book.capacity.get((meta.signal, meta.entity))
         share = by_pattern(self.book.params.cold_start_share, meta.signal)
         if cap is None or share is None:
             return None
-        return cap * share, {"basis": "calibration", "capacity": cap, "share": share}
+        return Cold(cap * share, {"basis": "calibration", "capacity": cap, "share": share})
 
 
 def pressure_levels(host: str | None = None) -> dict[str, float]:
@@ -213,9 +225,32 @@ def pressure_levels(host: str | None = None) -> dict[str, float]:
     return levels
 
 
+def host_memory(ctx: Context) -> np.ndarray | None:
+    """Host memory at each judged tick, from the available memory and the
+    used share sampled together."""
+    available, used = ctx.frame.row("mem.available_bytes"), ctx.frame.row("mem.used_ratio")
+    if available is None or used is None:
+        return None
+    with np.errstate(divide="ignore", invalid="ignore"):
+        total = (available / (1 - used))[ctx.start :]
+    return None if np.isnan(total).all() else total
+
+
+def available_cold(ctx: Context) -> Cold | None:
+    """Cold start of the host's available memory (ADR 0047): a class without
+    a baseline still sees memory run short."""
+    total = host_memory(ctx)
+    if total is None:
+        return None
+    share = ctx.params.cold_available_share
+    limit = share * total
+    of = f"{share:.0%} of host memory"
+    return Cold(limit, {"basis": "cold start", "limit": float(np.nanmedian(limit)), "of": of}, below=True)
+
+
 def group_cold(
     meta: SeriesMeta, ctx: Context, capacity: dict[tuple[str, str], float], pressure: dict[str, float]
-) -> tuple[float | np.ndarray, dict] | None:
+) -> Cold | None:
     """Cold start of a control group series (ADR 0045). A new group (a
     program started from a terminal, a transient unit) has no baseline for
     days; until then its activity is judged against the noticeable levels
@@ -227,37 +262,33 @@ def group_cold(
     if meta.entity.endswith(".slice"):
         return None
 
-    def basis(limit: float, of: str) -> dict:
-        return {"basis": "group cold start", "limit": limit, "of": of}
+    def cold(limit: float | np.ndarray, shown: float, of: str) -> Cold:
+        return Cold(limit, {"basis": "group cold start", "limit": shown, "of": of})
 
     if signal == "cgroup.cpu_cores":
-        return p.noticeable_cores, basis(p.noticeable_cores, "noticeable cores")
+        return cold(p.noticeable_cores, p.noticeable_cores, "noticeable cores")
     if signal in ("cgroup.read_bytes_per_s", "cgroup.write_bytes_per_s"):
         disk = "disk." + signal.split(".", 1)[1]
         caps = [value for (name, _), value in capacity.items() if name == disk]
         if not caps:
             return None
         limit = p.noticeable_io_share * max(caps)
-        return limit, basis(limit, f"{p.noticeable_io_share:.0%} of measured {disk}")
+        return cold(limit, limit, f"{p.noticeable_io_share:.0%} of measured {disk}")
     if signal == "cgroup.mem_bytes":
-        available, used = ctx.frame.row("mem.available_bytes"), ctx.frame.row("mem.used_ratio")
-        if available is None or used is None:
-            return None
-        with np.errstate(divide="ignore", invalid="ignore"):
-            total = (available / (1 - used))[ctx.start :]
-        if np.isnan(total).all():
+        total = host_memory(ctx)
+        if total is None:
             return None
         limit = p.group_cold_memory_share * total
-        return limit, basis(float(np.nanmedian(limit)), f"{p.group_cold_memory_share:.0%} of host memory")
+        return cold(limit, float(np.nanmedian(limit)), f"{p.group_cold_memory_share:.0%} of host memory")
     if "_pressure_" in signal:
         host = signal.removeprefix("cgroup.").replace("_", ".", 1)
         if host not in pressure:
             return None
-        return pressure[host], basis(pressure[host], f"noticeable impact of {host}")
+        return cold(pressure[host], pressure[host], f"noticeable impact of {host}")
     # Counts of memory events and the share of periods throttled: zero
     # almost always, so a rise above the spread floor is unusual.
     floor = by_pattern(p.floors, signal)
-    return None if floor is None else (floor, basis(floor, "spread floor"))
+    return None if floor is None else cold(floor, floor, "spread floor")
 
 
 def per_tick(
@@ -282,8 +313,8 @@ def per_tick(
 class Robust:
     """z = (x - median) / (1.4826 * MAD') against the baseline of the tick's
     class; an EWMA of the series against the same median catches slow
-    drift. Without a baseline, a dense series with a measured capacity is
-    judged against `capacity * share` (cold start)."""
+    drift. Without a baseline, a series is judged against its cold-start
+    limit, if it has one."""
 
     name = "robust"
 
@@ -316,12 +347,13 @@ class Robust:
             flags = scores > p.robust_k
             signs = np.sign(z)
             if cold is not None:
-                limit, cold_basis = cold
                 use = ~has_baseline & ~np.isnan(x)
-                scores = np.where(use, x / limit, scores)
-                flags = np.where(use, x > limit, flags)
-                signs = np.where(use, 1.0, signs)
-                basis = [b if b is not None else cold_basis for b in basis]
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    beyond = cold.limit / x if cold.below else x / cold.limit
+                scores = np.where(use, beyond, scores)
+                flags = np.where(use, (x < cold.limit) if cold.below else (x > cold.limit), flags)
+                signs = np.where(use, -1.0 if cold.below else 1.0, signs)
+                basis = [b if b is not None else cold.basis for b in basis]
             scores = np.where(np.isnan(x), np.nan, scores)
             out.append(
                 self._evaluation(
