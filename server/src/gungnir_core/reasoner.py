@@ -116,7 +116,8 @@ class RuleReasoner:
         unexplained = [r for r in ev.records if r not in used and r.id not in explained and inside(r, ev)]
         unexplained += [e for e in ev.events if e not in used and inside(e, ev)]
         advisories = () if shown else self._advisories(ev)
-        return Diagnosis(tuple(shown), tuple(unexplained), tuple(sorted(explained)), advisories)
+        expected = sorted(r.id for r in ev.records if r.id in explained and inside(r, ev))
+        return Diagnosis(tuple(shown), tuple(unexplained), tuple(expected), advisories)
 
     # Binding (ADR 0044)
 
@@ -299,7 +300,9 @@ class RuleReasoner:
         harmed = {
             self.onto.signals[r.signal].resource
             for r in ev.records
-            if r.signal in self.onto.signals and (r.kind == "impact" or self.onto.signals[r.signal].impact)
+            if inside(r, ev)
+            and r.signal in self.onto.signals
+            and (r.kind == "impact" or self.onto.signals[r.signal].impact)
         }
         return tuple(a for a in self.base.policy.advisories if a.resource in harmed)
 

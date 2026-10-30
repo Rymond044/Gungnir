@@ -207,6 +207,9 @@ def test_harm_without_a_cause_gets_the_advisory_of_its_resource(reasoner):
     # Unusual but harmless: nothing to advise.
     quiet = reasoner.diagnose(ev(rec("cgroup.write_bytes_per_s", WRITER, 0)))
     assert quiet.advisories == () and len(quiet.unexplained) == 1
+    # Harm that ended before the interval asked about is only context.
+    past = dataclasses.replace(alone, end=60.0)
+    assert reasoner.diagnose(dataclasses.replace(ev(past), since=90.0)).advisories == ()
 
 
 def test_evidence_a_hypothesis_uses_is_not_unexplained(reasoner):
@@ -218,6 +221,10 @@ def test_evidence_a_hypothesis_uses_is_not_unexplained(reasoner):
     before = dataclasses.replace(stray, end=60.0)
     d = reasoner.diagnose(dataclasses.replace(ev(*copy(), before), since=90.0))
     assert d.unexplained == ()
+    # Nor is it shown as expected behavior.
+    build = dataclasses.replace(rec("cgroup.cpu_cores", WRITER, 0, cls="build"), end=60.0)
+    d = reasoner.diagnose(dataclasses.replace(ev(build, classes={WRITER: "build"}), since=90.0))
+    assert d.expected == ()
 
 
 def test_a_hypothesis_must_reach_into_the_interval(reasoner):
