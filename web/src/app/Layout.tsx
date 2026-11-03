@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate, useParams } from 'react-router'
+import { NavLink, Outlet, ScrollRestoration, useNavigate, useParams } from 'react-router'
 import { useHosts, useOverview } from '../api/hooks'
 import { age } from '../lib/format'
 import { classNames, named } from '../lib/names'
@@ -88,6 +88,9 @@ export default function Layout() {
       <main className={styles.main}>
         <Outlet />
       </main>
+      {/* Keyed by path: a new screen opens at its top, while a filter or tab
+          kept in the query string leaves the page where it was. */}
+      <ScrollRestoration getKey={(location) => location.pathname} />
     </div>
   )
 }
