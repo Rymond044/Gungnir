@@ -108,8 +108,8 @@ export default function Anomalies() {
             <table className={ui.fixed} style={{ minWidth: 980 }}>
               <colgroup>
                 <col style={{ width: 110 }} />
-                <col style={{ width: '22%' }} />
                 <col />
+                <col style={{ width: 200 }} />
                 <col style={{ width: 160 }} />
                 <col style={{ width: 150 }} />
                 <col style={{ width: 100 }} />
@@ -144,7 +144,7 @@ export default function Anomalies() {
                           <Key>{r.signal}</Key>
                         </div>
                       </td>
-                      <td style={{ overflowWrap: 'anywhere' }}>
+                      <td style={{ overflowWrap: 'break-word' }}>
                         <Entity entity={r.entity} />
                       </td>
                       <td>{detectorName(r.detector)}</td>
