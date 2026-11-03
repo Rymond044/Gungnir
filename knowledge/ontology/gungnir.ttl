@@ -47,7 +47,7 @@ g:EntityKind a owl:Class ;
 
 g:Role a owl:Class ;
     rdfs:label "Role"@en , "Роль"@ru ;
-    rdfs:comment "The entity a manifestation is expected on, bound by the reasoner to a concrete one (ADR 0034)."@en .
+    rdfs:comment "The entity a manifestation is expected on, bound by the inference engine to a concrete one (ADR 0034)."@en .
 
 g:Signal a owl:Class ;
     rdfs:label "Signal"@en , "Сигнал"@ru ;
@@ -84,7 +84,7 @@ g:ProtectedEntity a owl:Class ;
     owl:members ( g:Resource g:EntityKind g:Role g:Signal g:EventType g:ProcessSign g:ContextFact
                   g:WorkloadClass g:RootCause g:ActionType g:ProtectedEntity ) .
 
-# Causes by resource. The reasoner classifies each cause from the resources
+# Causes by resource. HermiT classifies each cause from the resources
 # it concerns; a cause across resources falls into several classes.
 
 g:DiskCause a owl:Class ;
@@ -144,7 +144,7 @@ g:concerns a owl:ObjectProperty ;
 
 g:culpritKind a owl:ObjectProperty , owl:FunctionalProperty ;
     rdfs:label "culprit kind"@en ;
-    rdfs:comment "The kind of entity the reasoner binds the culprit to. A cause without it has no culprit and no activity manifestations, only impact (ADR 0034)."@en ;
+    rdfs:comment "The kind of entity the inference engine binds the culprit to. A cause without it has no culprit and no activity manifestations, only impact (ADR 0034)."@en ;
     rdfs:domain g:RootCause ;
     rdfs:range g:EntityKind .
 
@@ -515,12 +515,12 @@ signal:disk.write_ops_per_s a g:Signal , owl:NamedIndividual ;
     g:source "block/stat write I/Os (after merging); Gregg p. 461" ; g:grade "documented" .
 
 signal:disk.read_request_bytes a g:Signal , owl:NamedIndividual ;
-    rdfs:comment "Average read request (iostat rareq-sz): small requests mark random I/O. Context for the reasoner, not checked by detection (ADR 0036)."@en ;
+    rdfs:comment "Average read request (iostat rareq-sz): small requests mark random I/O. Context for the inference engine, not checked by detection (ADR 0036)."@en ;
     g:measures res:disk ; g:observedOn kind:block_device ; g:unit "bytes" ; g:signalKind "level" ;
     g:source "iostat(1) rareq-sz; Gregg p. 461" ; g:grade "documented" .
 
 signal:disk.write_request_bytes a g:Signal , owl:NamedIndividual ;
-    rdfs:comment "Average write request (iostat wareq-sz). Context for the reasoner, not checked by detection (ADR 0036)."@en ;
+    rdfs:comment "Average write request (iostat wareq-sz). Context for the inference engine, not checked by detection (ADR 0036)."@en ;
     g:measures res:disk ; g:observedOn kind:block_device ; g:unit "bytes" ; g:signalKind "level" ;
     g:source "iostat(1) wareq-sz; Gregg p. 461" ; g:grade "documented" .
 

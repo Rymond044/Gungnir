@@ -1,8 +1,8 @@
 # Knowledge tests of the disk domain (slice S4): what is seen, and the root
 # cause the base must return.
 #
-# [[case]]: `expect` is the cause the reasoner must rank within `within`
-# (default 1); without it the reasoner may give no hypothesis at all (a
+# [[case]]: `expect` is the cause the inference engine must rank within `within`
+# (default 1); without it the inference engine may give no hypothesis at all (a
 # negative case). `not` lists causes that must stay below the cut-off.
 # `expected = true` asks that the top hypothesis be marked expected
 # behavior. `unavailable` lists signals, event types or process signs the
@@ -189,7 +189,7 @@ direction = "up"
 at = 10
 
 # The device's bytes rise too, so D1 fires as well: sizes over 8 KiB are
-# not small. Which comes first is the reasoner's ranking (S5).
+# not small. Which comes first is the inference engine's ranking (S5).
 [[case]]
 name = "a program syncs after every small write"
 expect = "sync_write_storm"
@@ -355,7 +355,7 @@ direction = "up"
 at = 15
 
 # D7 fires as well: a full filesystem is its whole rule. The writer makes
-# D6 the better explanation, which is the reasoner's ranking (S5).
+# D6 the better explanation, which is the inference engine's ranking (S5).
 [[case]]
 name = "a log grows until the filesystem is full"
 expect = "filesystem_filled"

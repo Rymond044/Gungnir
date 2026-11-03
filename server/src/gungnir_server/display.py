@@ -246,7 +246,7 @@ MARKS = {"matched": "+", "missing": "-", "pending": "?", "unobservable": ".", "a
 
 def render_diagnosis(d, zone: timezone, title: str) -> str:
     """Ranked hypotheses with their derivation trees, then what nothing
-    explains and the advisory; `d` is a reasoner Diagnosis."""
+    explains and the advisory; `d` is a Diagnosis of the inference engine."""
 
     def when(t: float) -> str:
         return datetime.fromtimestamp(t, zone).strftime("%H:%M:%S")

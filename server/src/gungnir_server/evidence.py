@@ -1,4 +1,4 @@
-"""What the reasoner sees (slice S5): the records, attached values, events
+"""What the inference engine sees (slice S5): the records, attached values, events
 and process signs of an interval, with the context facts and the workload
 class of each group. Built from a knowledge test case (`cases.evidence_of`)
 or from the database (`gather.evidence`); times are seconds, from the

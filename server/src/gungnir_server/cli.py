@@ -40,8 +40,8 @@ from gungnir_server.display import (
     stamp,
 )
 from gungnir_server.frame import fact_spans, host_series
+from gungnir_server.inference import RuleEngine, as_dict
 from gungnir_server.knowledge import KnowledgeError
-from gungnir_server.reasoner import RuleReasoner, as_dict
 
 
 def main() -> None:
@@ -131,7 +131,7 @@ def main() -> None:
 
     kn = commands.add_parser("knowledge", help="knowledge base").add_subparsers(dest="action", required=True)
     kc = kn.add_parser("check", help="check the ontology and the names the knowledge files use")
-    kc.add_argument("--no-reasoner", action="store_true", help="skip HermiT, which needs Java and owlready2")
+    kc.add_argument("--no-hermit", action="store_true", help="skip HermiT, which needs Java and owlready2")
 
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -145,7 +145,7 @@ def main() -> None:
         return
 
     if args.command == "knowledge":
-        sys.exit(check_knowledge(not args.no_reasoner))
+        sys.exit(check_knowledge(not args.no_hermit))
 
     if args.command == "smd":
         report, _ = smd.run(args.root, params.load(), args.machine)
@@ -206,7 +206,7 @@ def main() -> None:
                 print(f"{h.name}\tlast seen {seen}\tagent {h.agent_version or '-'}")
 
 
-def check_knowledge(reasoner: bool) -> int:
+def check_knowledge(hermit: bool) -> int:
     try:
         kb = base.load()
         onto = kb.ontology
@@ -224,7 +224,7 @@ def check_knowledge(reasoner: bool) -> int:
         if failures:
             raise KnowledgeError("knowledge tests failed:\n" + "\n".join(failures))
         print(f"knowledge tests: {ran} cases pass")
-        if reasoner:
+        if hermit:
             classified = ontology.consistency()
             print("HermiT: consistent")
             for cls, causes in classified.items():
@@ -348,7 +348,7 @@ def show_anomalies(conn: psycopg.Connection, args) -> None:
 def run_diagnosis(conn: psycopg.Connection, args) -> None:
     host = need_host(conn, args.name)
     kb, p = base.load(), params.load()
-    reasoner = RuleReasoner(kb, p)
+    engine = RuleEngine(kb, p)
     zone = host_zone(hosts.summary(conn, host.name))
     if args.run:
         phases = [ph for ph in labels.phases_of(conn, host, run=args.run) if not ph.normal]
@@ -361,7 +361,7 @@ def run_diagnosis(conn: psycopg.Connection, args) -> None:
         spans = [("", since, until)]
     found = []
     for label, since, until in spans:
-        d = reasoner.diagnose(gather.evidence(conn, host, kb, since, until, args.replay))
+        d = engine.diagnose(gather.evidence(conn, host, kb, since, until, args.replay))
         if args.json:
             found.append(
                 {"label": label, "since": since.isoformat(), "until": until.isoformat(), **as_dict(d)}

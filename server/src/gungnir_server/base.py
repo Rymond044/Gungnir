@@ -9,10 +9,10 @@ the host, HermiT.
 from dataclasses import dataclass
 
 from gungnir_server import cases, expected, ontology, policy, rules
+from gungnir_server.inference import RuleEngine
 from gungnir_server.knowledge import KnowledgeError
 from gungnir_server.params import Params
 from gungnir_server.params import load as load_params
-from gungnir_server.reasoner import RuleReasoner
 
 
 @dataclass(frozen=True)
@@ -35,13 +35,13 @@ def load() -> Base:
 
 
 def run_tests(base: Base, params: Params | None = None) -> tuple[int, list[str]]:
-    """Runs the knowledge tests through the reasoner; returns how many ran
+    """Runs the knowledge tests through the inference engine; returns how many ran
     and what failed."""
-    reasoner = RuleReasoner(base, params or load_params())
+    engine = RuleEngine(base, params or load_params())
     found = cases.load(base.ontology, base.rules)
     failures = cases.coverage(base.rules, found)
     for case in found:
-        diagnosis = reasoner.diagnose(cases.evidence_of(case))
+        diagnosis = engine.diagnose(cases.evidence_of(case))
         ranked = diagnosis.causes()
         shown = ", ".join(f"{h.cause} {h.confidence:.2f}" for h in diagnosis.hypotheses) or "-"
         if case.expect is None:

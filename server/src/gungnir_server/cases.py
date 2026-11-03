@@ -3,7 +3,7 @@ events, process signs and facts, with the root cause the base must
 return. Read from `knowledge/tests/*.toml`; the format is described at the
 top of `knowledge/tests/disk.toml`.
 
-A case runs through the reasoner (slice S5): the expected cause must rank
+A case runs through the inference engine (slice S5): the expected cause must rank
 within `within`, the causes listed in `not` must stay below the cut-off,
 and a case without `expect` is a negative one, with no hypothesis at all.
 Roles become fixed entities, so a case needs no group names.
@@ -61,7 +61,7 @@ class Item:
 class Case:
     name: str
     expect: str | None
-    # The rank the reasoner must give it, checked from S5 on.
+    # The rank the inference engine must give it, checked from S5 on.
     within: int
     not_: tuple[str, ...]
     facts: dict[str, str]
@@ -195,7 +195,7 @@ def _item(onto: Ontology, kind: str, raw: dict, where: str, problems: list[str])
 
 
 def evidence_of(case: Case) -> Evidence:
-    """The case as the reasoner sees it: each role is one entity, and every
+    """The case as the inference engine sees it: each role is one entity, and every
     window has closed."""
     records, values, events, signs = [], [], [], []
     for n, it in enumerate(case.items):

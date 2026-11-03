@@ -1,4 +1,4 @@
-"""The reasoner (slice S5; ADRs 0005, 0034, 0043, 0044): ranked hypotheses
+"""The inference engine (slice S5; ADRs 0005, 0034, 0043, 0044): ranked hypotheses
 from the evidence of an interval and the knowledge base.
 
 Each culprit candidate of a rule gives a hypothesis when the rule's
@@ -7,7 +7,7 @@ is matched, pending or unobservable, some harm is matched and no
 contradicting manifestation is; without its anchor it must also match
 something besides the harm. Confidence
 combines the weights of the matched manifestations as 1 - Π(1 - w) and
-lowers it by 1 - alpha * w for each missing one. The reasoner sees
+lowers it by 1 - alpha * w for each missing one. The inference engine sees
 records, never samples (ADR 0001), and reads no database.
 """
 
@@ -96,11 +96,11 @@ class Diagnosis:
         return list(dict.fromkeys(h.cause for h in self.hypotheses))
 
 
-class Reasoner(Protocol):
+class InferenceEngine(Protocol):
     def diagnose(self, evidence: Evidence) -> Diagnosis: ...
 
 
-class RuleReasoner:
+class RuleEngine:
     def __init__(self, base: "Base", params: Params) -> None:
         self.base = base
         self.onto = base.ontology

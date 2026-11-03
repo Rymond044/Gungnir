@@ -132,7 +132,7 @@ The live server uses the defaults.
 
 ```sh
 cd server && uv run gungnir-server knowledge check    # ontology, every layer, knowledge tests, HermiT
-server knowledge check --no-reasoner                  # in the container: no Java there, so no HermiT
+server knowledge check --no-hermit                    # in the container: no Java there, so no HermiT
 ```
 
 The ontology is `knowledge/ontology/gungnir.ttl`; open it in Protégé (File → Open) to browse it and run HermiT there (Reasoner → HermiT). Saving from Protégé rewrites the file in its own order and drops the `#` comments, so edits are made in the text and checked with the command above. HermiT reports how it classified the root causes (disk, filesystem, memory, CPU).

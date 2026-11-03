@@ -1,6 +1,6 @@
 #!/bin/bash
 # Culprit scenarios (slice S5): in each, one program harms another, and the
-# reasoner must name the cause and the program. A victim starts first in
+# inference engine must name the cause and the program. A victim starts first in
 # its own scope gungnir-sc-victim-<cause>, the culprit then runs in
 # gungnir-sc-<cause>; each phase is labeled with the cause it should give.
 # Both scopes are new groups, judged by the cold start of ADR 0045.

@@ -1,7 +1,7 @@
 """Expected behavior (ADR 0002): which anomalies a workload class explains,
 read from `knowledge/expected/expected_behavior.toml`.
 
-The reasoner marks such records expected; they stay evidence, and an
+The inference engine marks such records expected; they stay evidence, and an
 impact record is never expected.
 """
 

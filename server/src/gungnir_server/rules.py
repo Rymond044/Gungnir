@@ -14,7 +14,7 @@ from gungnir_server.knowledge import KnowledgeError
 from gungnir_server.ontology import Ontology
 
 KINDS = ("anomaly", "value", "event", "sign")
-# The words of ADR 0034; the reasoner maps them to numbers.
+# The words of ADR 0034; the inference engine maps them to numbers.
 STRENGTHS = ("characteristic", "typical", "possible")
 # Evidence against the cause (ADR 0049): when it is seen in its window, the
 # cause is ruled out, as the dossiers' "tell it from" says.

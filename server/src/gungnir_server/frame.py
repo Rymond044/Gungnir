@@ -25,7 +25,7 @@ from gungnir_server.telemetry import RAW_SAMPLES
 FULL_PERIOD = timedelta(minutes=5, seconds=10)
 CARRIED = ("cgroup.mem_bytes",)
 # Context, never checked or put into baselines (ADR 0021). Request sizes
-# tell random from sequential I/O for the reasoner; at idle they jump with
+# tell random from sequential I/O for the inference engine; at idle they jump with
 # every small write, so as series of their own they would only add noise.
 CONTEXT_PREFIXES = ("agent.", "power.")
 CONTEXT_SIGNALS = ("disk.read_request_bytes", "disk.write_request_bytes")

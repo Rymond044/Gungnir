@@ -36,7 +36,7 @@ CREATE TABLE anomalies (
     baseline       jsonb NOT NULL,
     -- Records of one Isolation Forest window share an episode.
     episode        bigint,
-    -- Set later by the reasoner.
+    -- Set later by the inference engine.
     expected       boolean,
     replay_id      integer REFERENCES replays ON DELETE CASCADE
 );
