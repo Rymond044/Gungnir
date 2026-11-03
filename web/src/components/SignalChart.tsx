@@ -1,5 +1,4 @@
 import { useChart, useNorm, type Interval as Span } from '../api/hooks'
-import type { Point } from '../api/types'
 import { ms } from '../lib/format'
 import { bandSegments, limitLines } from '../lib/norm'
 import { seriesKey } from '../lib/records'
@@ -11,8 +10,6 @@ export interface SeriesSpec {
   entity?: string
   name: string
   color: string
-  /** Points transformed before drawing, e.g. a share of a total. */
-  map?: (p: Point) => Point
 }
 
 interface Props {
@@ -58,7 +55,7 @@ export default function SignalChart({
   if (chart.isError) return <Failure error={chart.error} />
   const lines = series.map((s, i) => {
     const points = chart.data?.series[i]?.points ?? []
-    return { key: keys[i], name: s.name, color: s.color, points: s.map ? points.map(s.map) : points }
+    return { key: keys[i], name: s.name, color: s.color, points }
   })
   const own = hasNorm ? limitLines(norm.data) : []
   const limits = [

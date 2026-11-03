@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { useAnomalies, useEvents, useOverview, useProcesses, type Interval } from '../api/hooks'
-import type { Overview as OverviewData, Point } from '../api/types'
+import type { Overview as OverviewData } from '../api/types'
 import Entity from '../components/Entity'
 import SignalChart, { type SeriesSpec } from '../components/SignalChart'
 import { Chip, Empty, Failure, Key, Loading, Panel, Segmented } from '../components/ui'
@@ -196,26 +196,20 @@ function resources(o: OverviewData, v: Values): ResourceDef[] {
     minMax: 0.05,
     ceiling: 1,
   })
+  // Available memory, not used: it is what detection judges and what the
+  // large view of the same metric shows.
   const total = o.memory_bytes
   const available = v.get('mem.available_bytes@host')
   out.push({
     title: 'Память',
-    sub: total ? `из ${formatBytes(total)}` : '',
-    now: total && available !== undefined ? formatBytes(total - available) : '—',
+    sub: total ? `доступно из ${formatBytes(total)}` : 'доступно',
+    now: available === undefined ? '—' : formatBytes(available),
     series: [
-      ...(total
-        ? [
-            {
-              signal: 'mem.available_bytes',
-              name: 'занято',
-              color: INK,
-              map: (p: Point): Point => [p[0], total - p[1], total - p[3], total - p[2]],
-            },
-          ]
-        : []),
+      { signal: 'mem.available_bytes', name: 'доступно', color: INK },
       { signal: 'mem.cached_bytes', name: 'страничный кэш', color: BLUE },
       { signal: 'mem.dirty_bytes', name: 'грязные страницы', color: OCHRE },
     ],
+    normOf: { signal: 'mem.available_bytes' },
     format: formatBytes,
     ceiling: total ?? undefined,
   })
