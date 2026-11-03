@@ -31,6 +31,7 @@ const KIND_NAMES: Record<Kind, string> = {
   process: 'симптом процесса',
 }
 const FAINT = 'rgba(115, 109, 100, 0.12)'
+const HALO = 'rgba(245, 244, 241, 0.85)'
 const HEIGHT = 640
 
 interface GNode {
@@ -96,6 +97,9 @@ export default function KnowledgeGraph({ k, host }: { k: Knowledge; host: string
   // simulation; fitting again on every stop would zoom away from where the
   // operator is looking.
   const fitted = useRef(false)
+  // Label boxes drawn in this frame, in graph units: a label that would cover
+  // another moves above its node, or waits for hover or zoom.
+  const placed = useRef<[number, number, number, number][]>([])
 
   useEffect(() => {
     const el = box.current
@@ -176,6 +180,9 @@ export default function KnowledgeGraph({ k, host }: { k: Knowledge; host: string
               fitted.current = true
               graph.current?.zoomToFit(400, 40)
             }}
+            onRenderFramePre={() => {
+              placed.current = []
+            }}
             nodeRelSize={1}
             nodeVal={(n) => radius(n) ** 2}
             nodeLabel={(n) => `${n.label} (${KIND_NAMES[n.kind]})`}
@@ -196,10 +203,27 @@ export default function KnowledgeGraph({ k, host }: { k: Knowledge; host: string
               if (!show || dim) return
               const size = Math.max(10 / scale, n.kind === 'cause' ? 4.2 : 3.4)
               ctx.font = `${n.kind === 'cause' ? 600 : 400} ${size}px Golos Text, sans-serif`
+              const w = ctx.measureText(n.label).width
+              const pad = size * 0.2
+              const box = (top: number): [number, number, number, number] => [
+                n.x! - w / 2 - pad,
+                top - pad,
+                n.x! + w / 2 + pad,
+                top + size + pad,
+              ]
+              const free = (b: [number, number, number, number]) =>
+                !placed.current.some((p) => b[0] < p[2] && p[0] < b[2] && b[1] < p[3] && p[1] < b[3])
+              const below = box(n.y! + r + 1.5)
+              const above = box(n.y! - r - 1.5 - size)
+              const spot = free(below) ? below : free(above) ? above : n.id === focus ? below : null
+              if (!spot) return
+              placed.current.push(spot)
+              ctx.fillStyle = HALO
+              ctx.fillRect(spot[0], spot[1], spot[2] - spot[0], spot[3] - spot[1])
               ctx.textAlign = 'center'
               ctx.textBaseline = 'top'
               ctx.fillStyle = n.kind === 'cause' ? '#1c1b19' : '#4a463f'
-              ctx.fillText(n.label, n.x!, n.y! + r + 1.5)
+              ctx.fillText(n.label, n.x!, spot[1] + pad)
             }}
             nodePointerAreaPaint={(n, color, ctx) => {
               ctx.beginPath()
