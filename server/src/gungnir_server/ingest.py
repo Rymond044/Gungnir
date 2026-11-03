@@ -9,7 +9,7 @@ server learns them even after its own restart.
 
 from typing import Annotated, Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # Signal names are `resource.quantity_unit`, e.g. `disk.read_await_ms`.
 SignalName = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$", max_length=64)]
@@ -63,14 +63,7 @@ class Event(Strict):
 
 
 class CollectorStatus(Strict):
-    # An agent built before the rename of ADR 0050 says `module` and
-    # `sources`; accepted until the laptop's agent is reinstalled.
-    collector: Annotated[
-        str,
-        Field(
-            pattern=r"^[a-z][a-z0-9_]*$", max_length=32, validation_alias=AliasChoices("collector", "module")
-        ),
-    ]
+    collector: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]*$", max_length=32)]
     state: Literal["preferred", "fallback", "disabled"]
     origin: Annotated[str | None, Field(max_length=255)] = None
     reason: Annotated[str | None, Field(max_length=2000)] = None
@@ -88,9 +81,7 @@ class AgentInfo(Strict):
 class Batch(Strict):
     agent: AgentInfo
     seq: Annotated[int, Field(ge=1)]
-    collectors: Annotated[
-        list[CollectorStatus], Field(max_length=64, validation_alias=AliasChoices("collectors", "sources"))
-    ]
+    collectors: Annotated[list[CollectorStatus], Field(max_length=64)]
     dropped: Annotated[int, Field(ge=0)]
     samples: Annotated[list[Sample], Field(max_length=MAX_SAMPLES)]
     # Defaults keep agents that predate context accepted.
