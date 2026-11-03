@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router'
 import { useAnomalies, useAnomaly, useOverview } from '../api/hooks'
 import type { RecordRow } from '../api/types'
+import Entity from '../components/Entity'
 import RecordChip from '../components/RecordChip'
 import SignalChart from '../components/SignalChart'
 import { Chip, Empty, Failure, Key, Loading, Panel } from '../components/ui'
@@ -108,8 +109,7 @@ export default function Anomaly() {
           </Chip>
         )}
         <span className="muted">
-          {r.entity === 'host' ? 'хост' : <span className="mono">{r.entity}</span>} ·{' '}
-          {dayClock(start, offset, now)}
+          <Entity entity={r.entity} /> · {dayClock(start, offset, now)}
           {r.ended_at ? ` — ${dayClock(end, offset, now)}` : ', всё ещё идёт'} ·{' '}
           {duration((end - start) / 1000)}
         </span>

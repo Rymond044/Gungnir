@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { useAnomalies, useEvents, useOverview, useProcesses, type Interval } from '../api/hooks'
 import type { Overview as OverviewData, Point } from '../api/types'
+import Entity from '../components/Entity'
 import SignalChart, { type SeriesSpec } from '../components/SignalChart'
 import { Chip, Empty, Failure, Key, Loading, Panel, Segmented } from '../components/ui'
 import ui from '../components/ui.module.css'
@@ -126,8 +127,13 @@ function OpenStatus({
                 </Chip>
               </span>
               <span style={{ minWidth: 0 }}>
-                {named(signalNames, r.signal)} {r.direction === 'up' ? '↑' : '↓'}{' '}
-                <Key>{r.entity === 'host' ? r.signal : `${r.signal} · ${r.entity}`}</Key>
+                {named(signalNames, r.signal)} {r.direction === 'up' ? '↑' : '↓'} <Key>{r.signal}</Key>
+                {r.entity !== 'host' && (
+                  <>
+                    {' · '}
+                    <Entity entity={r.entity} />
+                  </>
+                )}
               </span>
               <span className="muted">{detectorName(r.detector)}</span>
               <span className="muted" title={`с ${clock(ms(r.started_at), offset)}`}>
@@ -380,8 +386,8 @@ function Processes({ host, offset }: { host: string; offset: number | null }) {
                 <tr key={p.pid}>
                   <td className="mono muted">{p.pid}</td>
                   <td>{p.comm}</td>
-                  <td className="mono" style={{ overflowWrap: 'anywhere' }}>
-                    {p.unit ?? p.cgroup ?? '—'}
+                  <td style={{ overflowWrap: 'anywhere' }}>
+                    {p.unit || p.cgroup ? <Entity entity={(p.unit ?? p.cgroup)!} /> : '—'}
                   </td>
                   <td>{formatNumber(p.cpu_cores)}</td>
                   <td>{formatBytes(p.rss_bytes)}</td>

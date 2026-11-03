@@ -9,6 +9,8 @@ import { detectorName, named, signalNames } from '../lib/names'
 import { lastInterval, RANGES, rangeSeconds, type RangeKey } from '../lib/range'
 import { isLevel, recordInterval, scoreText } from '../lib/records'
 import { useNow } from '../lib/useNow'
+import Entity from '../components/Entity'
+import { entityName } from '../lib/entity'
 
 const COLORS = ['var(--ink)', 'var(--blue)', 'var(--ochre)', 'var(--red)', 'var(--gray)', 'var(--green)']
 
@@ -57,7 +59,7 @@ export default function Metric() {
     entity: s.entity,
     name:
       series.length > 1 && s.entity !== main.entity
-        ? `${named(signalNames, s.signal)} · ${s.entity}`
+        ? `${named(signalNames, s.signal)} · ${entityName(s.entity)}`
         : named(signalNames, s.signal),
     color: COLORS[i % COLORS.length],
   }))
@@ -69,7 +71,7 @@ export default function Metric() {
       <div className={ui.head}>
         <h1>{specs.map((s) => s.name).join(', ')}</h1>
         <span className="muted">
-          {main.entity === 'host' ? 'хост' : <span className="mono">{main.entity}</span>}
+          <Entity entity={main.entity} />
         </span>
         <Key>{keys.join(', ')}</Key>
       </div>

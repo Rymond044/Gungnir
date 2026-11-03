@@ -1,5 +1,6 @@
 import { Link } from 'react-router'
 import type { EvidenceItem } from '../api/types'
+import Entity from './Entity'
 import { dayClock, formatValue } from '../lib/format'
 import { eventNames, kindNames, named, processNames, processStates, signalNames } from '../lib/names'
 
@@ -24,7 +25,7 @@ export default function Evidence({
             {kindNames[item.kind] ?? item.kind} #{item.id}
           </Link>
           {' · '}
-          {item.entity === 'host' ? 'хост' : <span className="mono">{item.entity}</span>}
+          <Entity entity={item.entity} />
           {' · '}с {dayClock(item.start * 1000, offset)}
         </span>
       )
@@ -32,7 +33,7 @@ export default function Evidence({
       return (
         <span>
           {withName && `${named(signalNames, item.signal)}: `}
-          {formatValue(item.signal, item.value)} на <span className="mono">{item.entity}</span>, в{' '}
+          {formatValue(item.signal, item.value)} на <Entity entity={item.entity} />, в{' '}
           <Link to={`/hosts/${host}/anomalies/${item.record}`}>записи #{item.record}</Link>
         </span>
       )
@@ -51,7 +52,12 @@ export default function Evidence({
             {item.comm} {item.pid}
           </span>{' '}
           ({processStates[item.state] ?? item.state}
-          {item.group ? `, ${item.group}` : ''}), с {dayClock(item.at * 1000, offset)}
+          {item.group && (
+            <>
+              , <Entity entity={item.group} />
+            </>
+          )}
+          ), с {dayClock(item.at * 1000, offset)}
         </span>
       )
   }

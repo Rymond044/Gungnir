@@ -15,6 +15,7 @@ import {
 import Evidence from './Evidence'
 import styles from './Hypothesis.module.css'
 import { Chip, Key, Source, type Tone } from './ui'
+import Entity from './Entity'
 
 const CHECK = 'M3 8.5l3 3 7-7'
 const CROSS = 'M4 4l8 8M12 4l-8 8'
@@ -133,9 +134,7 @@ export default function Hypothesis({
       </div>
       <div className={styles.binding}>
         <span>виновник</span>
-        <span className="mono" style={{ overflowWrap: 'anywhere' }}>
-          {h.culprit ?? '—'}
-        </span>
+        <span style={{ overflowWrap: 'anywhere' }}>{h.culprit ? <Entity entity={h.culprit} /> : '—'}</span>
         {h.device && (
           <>
             <span>устройство</span>

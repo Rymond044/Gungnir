@@ -1,4 +1,5 @@
 import { Link, useParams, useSearchParams } from 'react-router'
+import Entity from '../components/Entity'
 import RecordChip from '../components/RecordChip'
 import { useAnomalies, useOverview } from '../api/hooks'
 import { Empty, Failure, Key, Loading, Panel, Segmented } from '../components/ui'
@@ -107,12 +108,12 @@ export default function Anomalies() {
             <table className={ui.fixed} style={{ minWidth: 980 }}>
               <colgroup>
                 <col style={{ width: 110 }} />
-                <col style={{ width: '26%' }} />
+                <col style={{ width: '22%' }} />
                 <col />
-                <col style={{ width: 170 }} />
-                <col style={{ width: 120 }} />
-                <col style={{ width: 90 }} />
-                <col style={{ width: 140 }} />
+                <col style={{ width: 160 }} />
+                <col style={{ width: 150 }} />
+                <col style={{ width: 100 }} />
+                <col style={{ width: 130 }} />
                 <col style={{ width: 120 }} />
               </colgroup>
               <thead>
@@ -143,17 +144,11 @@ export default function Anomalies() {
                           <Key>{r.signal}</Key>
                         </div>
                       </td>
-                      <td
-                        className="mono"
-                        title={r.entity}
-                        style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                      >
-                        {shortEntity(r.entity)}
+                      <td style={{ overflowWrap: 'anywhere' }}>
+                        <Entity entity={r.entity} />
                       </td>
                       <td>{detectorName(r.detector)}</td>
-                      <td className="mono" style={{ whiteSpace: 'nowrap' }}>
-                        {scoreText(r)}
-                      </td>
+                      <td className="mono">{scoreText(r)}</td>
                       <td className="mono">{dayClock(ms(r.started_at), offset, now)}</td>
                       <td>
                         {duration((end - ms(r.started_at)) / 1000)}
@@ -175,9 +170,4 @@ export default function Anomalies() {
       </span>
     </div>
   )
-}
-
-/** A control group by its last path segment, the unit or scope; the host and devices as they are. */
-function shortEntity(entity: string): string {
-  return entity.split('/').pop() ?? entity
 }
