@@ -89,6 +89,26 @@ export function duration(seconds: number): string {
   return `${Math.floor(s / 86400)}${nbsp}д ${Math.floor((s % 86400) / 3600)}${nbsp}ч`
 }
 
+/** A stretch of seconds in its largest whole units: 30 с, 5 мин, 12 ч, 1 ч 30 мин. */
+export function span(seconds: number): string {
+  const s = Math.abs(Math.round(seconds))
+  if (s < 60) return `${s}${nbsp}с`
+  if (s < 3600) return s % 60 ? `${Math.floor(s / 60)}${nbsp}мин ${s % 60}${nbsp}с` : `${s / 60}${nbsp}мин`
+  const h = Math.floor(s / 3600)
+  const m = Math.round((s % 3600) / 60)
+  return m ? `${h}${nbsp}ч ${m}${nbsp}мин` : `${h}${nbsp}ч`
+}
+
+/** A symptom's window, seconds around its leading symptom, in words. */
+export function symptomWindow(w: [number, number] | null): string {
+  if (!w) return 'ведущий симптом'
+  const [from, to] = w
+  if (from < 0 && to <= 0) return `за ${span(-from)}–${span(-to)} до ведущего`
+  if (from < 0) return `от ${span(-from)} до ведущего до ${span(to)} после`
+  if (from === 0) return `до ${span(to)} после ведущего`
+  return `через ${span(from)}–${span(to)} после ведущего`
+}
+
 export function age(raw: number): string {
   // The browser's clock may run a little behind the host's.
   const seconds = Math.max(0, raw)

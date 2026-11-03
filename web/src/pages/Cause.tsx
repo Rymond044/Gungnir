@@ -3,7 +3,7 @@ import { useKnowledge } from '../api/hooks'
 import type { RuleSymptom } from '../api/types'
 import { Chip, Empty, Failure, Key, Loading, Panel, Source, type Tone } from '../components/ui'
 import ui from '../components/ui.module.css'
-import { formatNumber, formatValue } from '../lib/format'
+import { formatNumber, formatValue, symptomWindow } from '../lib/format'
 import { similar } from '../lib/knowledge'
 import {
   actionNames,
@@ -243,7 +243,7 @@ function SymptomRow({ s, pos }: { s: RuleSymptom; pos: (t: number) => string }) 
           {s.impact && <Chip tone="red">влияние</Chip>}
         </span>
         <span className="muted" style={{ fontSize: 12.5 }}>
-          {symptomKindNames[s.kind]} на: {roleNames[s.role] ?? s.role}
+          {symptomKindNames[s.kind]} на: {roleNames[s.role] ?? s.role} · {symptomWindow(w)}
           {details(s) && ` · ${details(s)}`}
         </span>
         <Key>{s.names.join(' | ')}</Key>
@@ -261,7 +261,7 @@ function SymptomRow({ s, pos }: { s: RuleSymptom; pos: (t: number) => string }) 
         />
         {w ? (
           <span
-            title={`[${w[0]}, ${w[1]}] с`}
+            title={symptomWindow(w)}
             style={{
               position: 'absolute',
               top: 14,

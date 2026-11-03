@@ -1,6 +1,6 @@
 import { Link } from 'react-router'
 import type { FoundSymptom, Hypothesis as H } from '../api/types'
-import { confidence, dayClock, formatNumber } from '../lib/format'
+import { confidence, dayClock, formatNumber, symptomWindow } from '../lib/format'
 import {
   actionNames,
   causeNames,
@@ -57,11 +57,6 @@ const STRENGTH_TONE: Record<string, Tone> = {
   contradicting: 'red',
 }
 
-function windowText(w: [number, number] | null): string {
-  if (!w) return 'ведущий симптом'
-  return `окно [${w[0]}, ${w[1]}] с от ведущего`
-}
-
 export function Symptom({ s, host, offset }: { s: FoundSymptom; host: string; offset: number | null }) {
   const found = s.status === 'matched'
   return (
@@ -77,7 +72,7 @@ export function Symptom({ s, host, offset }: { s: FoundSymptom; host: string; of
           {s.impact && <Chip tone="red">влияние</Chip>}
         </div>
         <span className={styles.faint} style={{ fontSize: 12.5 }}>
-          на: {roleNames[s.role] ?? s.role} · {windowText(s.window)} · <Key>{s.names.join(' | ')}</Key>
+          на: {roleNames[s.role] ?? s.role} · {symptomWindow(s.window)} · <Key>{s.names.join(' | ')}</Key>
         </span>
       </div>
       <div className={styles.evidence}>
