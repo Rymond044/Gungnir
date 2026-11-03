@@ -1,6 +1,6 @@
 import { useParams, useSearchParams } from 'react-router'
-import { useDiagnosis, useOverview, useRuns, type DiagnosisRequest } from '../api/hooks'
-import type { Diagnosis } from '../api/types'
+import { useDiagnosis, useKnowledge, useOverview, useRuns, type DiagnosisRequest } from '../api/hooks'
+import type { Diagnosis, EvidenceItem, SignalInfo } from '../api/types'
 import Evidence from '../components/Evidence'
 import Hypothesis from '../components/Hypothesis'
 import { Empty, Failure, Key, Loading, Panel, Segmented, Source } from '../components/ui'
@@ -26,6 +26,8 @@ export default function Analysis() {
   const now = useNow()
   const overview = useOverview(host)
   const runs = useRuns(host)
+  const kb = useKnowledge(host)
+  const signals = new Map((kb.data?.signals ?? []).map((s) => [s.name, s]))
   const offset = overview.data?.host.utc_offset_s ?? null
 
   const since = params.get('since')
@@ -103,14 +105,26 @@ export default function Analysis() {
         // Keyed by place, not by time: the live interval moves with every poll,
         // and a new key would remount the span and close what the operator opened.
         diagnosis.data.map((d, i) => (
-          <Span key={`${i}-${d.label}`} d={d} host={host} offset={offset} now={now} />
+          <Span key={`${i}-${d.label}`} d={d} host={host} offset={offset} now={now} signals={signals} />
         ))
       )}
     </div>
   )
 }
 
-function Span({ d, host, offset, now }: { d: Diagnosis; host: string; offset: number | null; now: number }) {
+function Span({
+  d,
+  host,
+  offset,
+  now,
+  signals,
+}: {
+  d: Diagnosis
+  host: string
+  offset: number | null
+  now: number
+  signals: Map<string, SignalInfo>
+}) {
   const title = d.label ? `Фаза ${d.label}` : 'Интервал'
   const e = d.evidence
   return (
@@ -165,16 +179,31 @@ function Span({ d, host, offset, now }: { d: Diagnosis; host: string; offset: nu
         </Panel>
       )}
       {d.advisories.length > 0 && (
-        <Panel title="Рекомендации" aside="когда влияние есть, а причина не найдена">
-          {d.advisories.map((a, i) => (
-            <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <span style={{ fontWeight: 500 }}>
-                {a.cause ? named(causeNames, a.cause) : named(resourceNames, a.resource)}
-              </span>
-              <span>{a.text}</span>
-              <Source source={a.source} />
-            </div>
-          ))}
+        <Panel title="Рекомендации" aside="влияние есть, а причина не найдена">
+          {d.advisories.map((a, i) => {
+            const why = a.resource ? impactOn(a.resource, d.unexplained, signals) : []
+            return (
+              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={{ fontWeight: 500 }}>
+                  {a.cause ? named(causeNames, a.cause) : named(resourceNames, a.resource)}
+                </span>
+                <span>{a.text}</span>
+                {why.length > 0 && (
+                  <span className="muted" style={{ fontSize: 13 }}>
+                    Влияние:{' '}
+                    {why.slice(0, SHOWN_WHY).map((item, j) => (
+                      <span key={j}>
+                        {j > 0 && '; '}
+                        <Evidence item={item} host={host} offset={offset} withName />
+                      </span>
+                    ))}
+                    {why.length > SHOWN_WHY && `; ещё ${why.length - SHOWN_WHY}`}
+                  </span>
+                )}
+                <Source source={a.source} />
+              </div>
+            )
+          })}
         </Panel>
       )}
       {(d.unexplained.length > 0 || d.expected.length > 0) && (
@@ -210,6 +239,20 @@ function Span({ d, host, offset, now }: { d: Diagnosis; host: string; offset: nu
   )
 }
 
+const SHOWN_WHY = 3
+
+/**
+ * The records that raised an advisory: impact, or an anomaly of a signal that
+ * measures impact, on the advisory's resource (server inference._advisories).
+ */
+function impactOn(resource: string, items: EvidenceItem[], signals: Map<string, SignalInfo>): EvidenceItem[] {
+  return items.filter((item) => {
+    if (item.type !== 'record') return false
+    const s = signals.get(item.signal)
+    return s?.resource === resource && (item.kind === 'impact' || s.impact)
+  })
+}
+
 function plural(n: number, one: string, few: string, many: string): string {
   const m10 = n % 10
   const m100 = n % 100
@@ -225,7 +268,7 @@ function reasonText(h: Diagnosis['near'][number]): string {
     .map((s) => symptomNames(s.kind, s.names))
   switch (h.reason) {
     case 'no impact':
-      return 'никто не ждёт ресурс: необычно, но не вредит'
+      return 'её симптомы влияния не найдены: необычно, но никому не мешает'
     case 'characteristic missing':
       return `нет обязательного симптома: ${missing.join(', ')}`
     case 'contradicted':
