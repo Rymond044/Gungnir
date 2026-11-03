@@ -1,4 +1,4 @@
-import { useParams, useSearchParams } from 'react-router'
+import { Link, useParams, useSearchParams } from 'react-router'
 import { useDiagnosis, useKnowledge, useOverview, useRuns, type DiagnosisRequest } from '../api/hooks'
 import type { Diagnosis, EvidenceItem, SignalInfo } from '../api/types'
 import Evidence from '../components/Evidence'
@@ -205,7 +205,14 @@ function Span({
         <Panel title="Без объяснения" aside={`${d.unexplained.length} свидетельств`}>
           {d.expected.length > 0 && (
             <span className="muted">
-              Ожидаемое поведение объясняет записи: {d.expected.map((id) => `#${id}`).join(', ')}.
+              Ожидаемое поведение объясняет записи:{' '}
+              {d.expected.map((id, i) => (
+                <span key={id}>
+                  {i > 0 && ', '}
+                  <Link to={`/hosts/${host}/anomalies/${id}`}>#{id}</Link>
+                </span>
+              ))}
+              .
             </span>
           )}
           {d.unexplained.length > 0 && (
