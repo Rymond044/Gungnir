@@ -380,7 +380,10 @@ function FsRow({ fs, used, free }: { fs: string; used?: number; free?: number })
 
 function Processes({ host, offset }: { host: string; offset: number | null }) {
   const processes = useProcesses(host)
-  const rows = processes.data ?? []
+  // CPU in steps of a twentieth of a core, then memory: idle programs keep
+  // their places between snapshots instead of trading them on noise.
+  const step = (p: { cpu_cores: number }) => Math.floor(p.cpu_cores / 0.05)
+  const rows = [...(processes.data ?? [])].sort((a, b) => step(b) - step(a) || b.rss_bytes - a.rss_bytes)
   return (
     <Panel title="Процессы" aside={rows[0] ? `снимок ${clock(ms(rows[0].ts), offset)}` : undefined}>
       {processes.isError ? (
