@@ -3,10 +3,10 @@ a parameter relative to the target's consumption, read from
 `knowledge/policy/*.toml` together with advisories and contraindications.
 
 The loader uses the ontology and the causal rules to check each entry:
-the action targets the kind of entity the cause's culprit is, controls a
+the action targets the entity type the cause's culprit is, controls a
 resource the cause concerns, takes its parameter from a signal of that
 kind, and is not contraindicated for the cause. An advisory is given for a
-cause, or for a resource when harm is seen and no hypothesis explains it
+cause, or for a resource when impact is seen and no hypothesis explains it
 (slice S5); every resource that impact is measured on needs one.
 """
 
@@ -38,7 +38,7 @@ class Entry:
     cause: str
     action: str
     target: str
-    # The culprit manifestation's alternative that must have matched.
+    # The culprit symptom's alternative that must have matched.
     when: str | None
     # The parameter is `share` of the target's current value of `signal`,
     # or of the action's own current setting (a weight) when there is none.
@@ -121,8 +121,8 @@ def load(onto: Ontology, rules: dict[str, Rule], root: Path | None = None) -> Po
         advisories.append(
             Advisory(item.get("cause"), item.get("resource"), item["text"], item["provenance"]["source"])
         )
-    harmed = {s.resource for s in onto.signals.values() if s.impact}
-    for resource in sorted(harmed - {a.resource for a in advisories}):
+    impacted = {s.resource for s in onto.signals.values() if s.impact}
+    for resource in sorted(impacted - {a.resource for a in advisories}):
         problems.append(f"impact is measured on {resource}, which has no advisory of its own")
 
     checker = _EntryChecker(onto, rules, contraindicated, problems)
@@ -167,12 +167,12 @@ class _EntryChecker:
         if when is not None:
             culprit_signals = {
                 n
-                for m in self.rules[cause.name].manifestations
+                for m in self.rules[cause.name].symptoms
                 if m.role == "culprit" and m.kind == "anomaly"
                 for n in m.names
             }
             if when not in culprit_signals:
-                fail(f"{where}: when = {when} is not a signal of the rule's culprit manifestations")
+                fail(f"{where}: when = {when} is not a signal of the rule's culprit symptoms")
 
         param = item.get("parameter")
         signal, share = None, None
@@ -221,7 +221,7 @@ class _EntryChecker:
         )
 
     def conditions(self, where: str, table, field: str) -> dict[str, frozenset[str]]:
-        """Context facts only: whether an action can work depends on the
+        """Facts only: whether an action can work depends on the
         host, not on the culprit's class."""
         if not isinstance(table, dict):
             self.problems.append(f"{where}: {field} must be a table")

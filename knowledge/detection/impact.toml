@@ -59,7 +59,7 @@ above = 50
 provenance = { source = "initial value, to be measured in scenarios (ADR 0025)", grade = "unverified" }
 
 # A full filesystem harms whoever writes to it: writes slow down, then fail
-# (Gregg, Systems Performance, 2nd ed., p. 371). It is the harm of the disk
+# (Gregg, Systems Performance, 2nd ed., p. 371). It is the impact of the disk
 # causes "filesystem filled" and "filesystem full" (docs/research/disk-io.md).
 [[impact]]
 signal = "fs.used_ratio"
@@ -68,7 +68,7 @@ above = 0.90
 samples = 60
 provenance = { source = "Zabbix template Linux by Zabbix agent: Space is critically low, {$VFS.FS.PUSED.MAX.CRIT} = 90 (%), min over 5m", grade = "documented" }
 
-# A killed process is harm whatever else happens, so one sample opens the
+# A killed process is impact whatever else happens, so one sample opens the
 # record (docs/research/memory.md MG2). Reaching memory.max means reclaim
 # and stalls inside the group; memory.high events are not impact, since
 # gungnIR's own action sets memory.high.

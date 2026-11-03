@@ -92,8 +92,8 @@ role = "host"
 direction = "up"
 at = 0
 
-[[case.sign]]
-sign = "ksoftirqd"
+[[case.process]]
+process = "ksoftirqd"
 role = "host"
 at = 5
 

@@ -3,7 +3,7 @@ import dataclasses
 import pytest
 
 from gungnir_server import base
-from gungnir_server.evidence import HOST, Evidence, Record, Sign, Value
+from gungnir_server.evidence import HOST, Evidence, Record, SeenProcess, Value
 from gungnir_server.inference import MATCHED, MISSING, PENDING, UNOBSERVABLE, RuleEngine
 from gungnir_server.params import Params
 
@@ -22,7 +22,7 @@ def engine():
 @pytest.fixture(scope="module")
 def gate():
     """Shows every hypothesis that passes the gate, however weak: a few
-    records leave many typical manifestations missing."""
+    records leave many typical symptoms missing."""
     return RuleEngine(base.load(), Params(hypothesis_cutoff=0.0))
 
 
@@ -44,7 +44,7 @@ def ev(*items, **context) -> Evidence:
     return Evidence(
         records=tuple(i for i in items if isinstance(i, Record)),
         values=tuple(i for i in items if isinstance(i, Value)),
-        signs=tuple(i for i in items if isinstance(i, Sign)),
+        processes=tuple(i for i in items if isinstance(i, SeenProcess)),
         facts=context.get("facts", {}),
         group_class=context.get("classes", {}),
         until=context.get("until", float("inf")),
@@ -65,10 +65,10 @@ def copy(writer=WRITER, victim=READER, at=100):
 def test_a_rule_needs_its_manifestations_in_their_windows(engine):
     seen = copy()
     assert "bulk_sequential_writer" in engine.diagnose(ev(*seen)).causes()
-    # The harm long after the writes is not this cause.
+    # The impact long after the writes is not this cause.
     late = dataclasses.replace(seen[3], start=400.0)
     assert engine.diagnose(ev(*seen[:3], late)).causes() == []
-    # Small requests contradict a characteristic manifestation.
+    # Small requests contradict a characteristic symptom.
     small = dataclasses.replace(seen[2], value=4096)
     assert "bulk_sequential_writer" not in engine.diagnose(ev(seen[0], seen[1], small, seen[3])).causes()
     # A maintenance culprit makes it filesystem maintenance instead.
@@ -103,17 +103,17 @@ def test_an_impact_manifestation_needs_an_impact_record(engine):
 
 def test_a_slow_leak_anchors_on_a_growth_record(gate):
     engine = gate
-    harm = rec("mem.direct_reclaims_per_s", HOST, 3600)
-    assert "memory_leak" not in engine.diagnose(ev(rec("cgroup.mem_bytes", WRITER, 0), harm)).causes()
+    impact = rec("mem.direct_reclaims_per_s", HOST, 3600)
+    assert "memory_leak" not in engine.diagnose(ev(rec("cgroup.mem_bytes", WRITER, 0), impact)).causes()
     growth = rec("cgroup.mem_bytes", WRITER, 0, detector="growth")
-    assert "memory_leak" in engine.diagnose(ev(growth, harm)).causes()
+    assert "memory_leak" in engine.diagnose(ev(growth, impact)).causes()
 
 
 def test_the_deepest_group_is_the_culprit_and_its_ancestors_are_not_the_others(engine):
     # A slice writes whatever its children write.
     writes = [rec("cgroup.write_bytes_per_s", g, 100) for g in (WRITER, APPS, "user.slice")]
     seen = writes + copy()[1:3]
-    # The pressure of the slice that holds the writer is not harm to others.
+    # The pressure of the slice that holds the writer is not impact to others.
     on_own_slice = rec("cgroup.io_pressure_some_ratio", APPS, 110)
     assert engine.diagnose(ev(*seen, on_own_slice)).causes() == []
     d = engine.diagnose(ev(*seen, rec("cgroup.io_pressure_some_ratio", READER, 110)))
@@ -169,18 +169,18 @@ def test_contradicting_evidence_rules_a_cause_out(engine):
     ]
     d = engine.diagnose(ev(*seen))
     [h] = [h for h in d.hypotheses if h.cause == "sync_write_storm"]
-    [against] = [f for f in h.found if f.manifestation.strength == "contradicting"]
+    [against] = [f for f in h.found if f.symptom.strength == "contradicting"]
     assert against.status == "absent"
     assert "sync_write_storm" not in engine.diagnose(ev(*seen, rec("mem.dirty_bytes", HOST, 110))).causes()
     # Not yet seen while its window is open.
     open_window = engine.diagnose(ev(*seen, until=120.0))
     [h] = [h for h in open_window.hypotheses if h.cause == "sync_write_storm"]
-    assert [f.status for f in h.found if f.manifestation.strength == "contradicting"] == [PENDING]
+    assert [f.status for f in h.found if f.symptom.strength == "contradicting"] == [PENDING]
 
 
 def test_a_process_sign_on_the_others_is_outside_the_culprits_line(engine):
     seen = copy()[:3]
-    own = Sign("waiting_on_io", "cp", 10, "D", WRITER, 110.0)
+    own = SeenProcess("waiting_on_io", "cp", 10, "D", WRITER, 110.0)
     theirs = dataclasses.replace(own, comm="editor", pid=11, group=READER)
     no_psi = {"cgroup.io_pressure_some_ratio", "cgroup.io_pressure_full_ratio"}
     assert engine.diagnose(ev(*seen, own, unobservable=no_psi)).causes() == []
@@ -196,12 +196,12 @@ def test_a_window_still_open_is_pending_not_missing(engine):
 
     done, running = writer(), writer(until=120.0)
     # disk.read_await_ms may still come until 100 + 60 s.
-    status = {f.manifestation.names[0]: f.status for f in running.found}
+    status = {f.symptom.names[0]: f.status for f in running.found}
     assert status["disk.read_await_ms"] == PENDING
-    assert {f.manifestation.names[0]: f.status for f in done.found}["disk.read_await_ms"] == MISSING
+    assert {f.symptom.names[0]: f.status for f in done.found}["disk.read_await_ms"] == MISSING
     assert running.support == done.support
     assert running.confidence > done.confidence
-    # A characteristic manifestation not yet due does not stop the hypothesis.
+    # A characteristic symptom not yet due does not stop the hypothesis.
     no_device = [seen[0], seen[3]]
     assert "bulk_sequential_writer" in engine.diagnose(ev(*no_device, until=105.0)).causes()
     assert "bulk_sequential_writer" not in engine.diagnose(ev(*no_device)).causes()
@@ -216,7 +216,7 @@ def test_an_unobservable_manifestation_neither_counts_nor_weakens(engine):
         for h in engine.diagnose(ev(*seen, unobservable=hidden)).hypotheses
         if h.cause == "bulk_sequential_writer"
     )
-    assert {f.manifestation.names[0]: f.status for f in h.found}["disk.queue_depth"] == UNOBSERVABLE
+    assert {f.symptom.names[0]: f.status for f in h.found}["disk.queue_depth"] == UNOBSERVABLE
     assert h.support == full.support
     assert h.confidence > full.confidence
 
@@ -231,7 +231,7 @@ def test_harm_alone_does_not_stand_for_an_unobservable_anchor(gate):
     assert "cpu_quota_throttling" in gate.diagnose(ev(throttled, waiting)).causes()
 
 
-def test_one_record_supports_one_manifestation(engine):
+def test_one_record_supports_one_symptom(engine):
     d = engine.diagnose(ev(*copy()))
     for h in d.hypotheses:
         items = [f.item for f in h.with_status(MATCHED)]
@@ -252,7 +252,7 @@ def test_expected_behavior_marks_without_weakening(engine):
     assert not plain.expected and backup.expected
     assert backup.confidence == plain.confidence
     assert seen[0].id in d.expected
-    # Harm is never expected.
+    # Impact is never expected.
     assert seen[3].id not in d.expected
 
 
@@ -265,7 +265,7 @@ def test_harm_without_a_cause_gets_the_advisory_of_its_resource(engine):
     # Unusual but harmless: nothing to advise.
     quiet = engine.diagnose(ev(rec("cgroup.write_bytes_per_s", WRITER, 0)))
     assert quiet.advisories == () and len(quiet.unexplained) == 1
-    # Harm that ended before the interval asked about is only context.
+    # Impact that ended before the interval asked about is only context.
     past = dataclasses.replace(alone, end=60.0)
     assert engine.diagnose(dataclasses.replace(ev(past), since=90.0)).advisories == ()
 

@@ -4,11 +4,11 @@
 # [[policy]]: an action type of the ontology on the entity of `target` (a
 # role; the culprit for now). `parameter` is relative to what the target
 # consumes now: `share` of the current value of `signal` on it. `when`
-# names the alternative of the rule's culprit manifestation that must have
+# names the alternative of the rule's culprit symptom that must have
 # matched, where a rule allows reads or writes. A weight (an action the
 # ontology marks proportional) takes `parameter = { share = ... }`, a share
 # of its current weight. `requires`/`excludes` name
-# context facts as in the rules. Effectiveness and the likelihood of each
+# facts as in the rules. Effectiveness and the likelihood of each
 # side effect are in the words of strength (ADR 0034).
 #
 # The share 0.5 is ADR 0035's initial value, to be calibrated on the S9
@@ -17,7 +17,7 @@
 #
 # [[advisory]]: what to tell the user where no action of the actuator
 # applies or helps; with `resource` instead of `cause`, what to tell when
-# that resource is harmed and no hypothesis explains it (scenario С-9).
+# that resource is impacted and no hypothesis explains it (scenario С-9).
 # [[contraindication]]: actions never proposed for a
 # cause; the loader refuses a policy entry that names one.
 
@@ -279,7 +279,7 @@ cause = "cpu_steal"
 text = "The hypervisor gives this virtual machine's CPUs to others. Check the host's other guests or the instance's CPU limit; move or resize the machine."
 provenance = { source = "docs/research/cpu.md C6; Gregg pp. 595, 604", grade = "documented" }
 
-# Harm without a known cause: the USE method, for the resource whose impact
+# Impact without a known cause: the USE method, for the resource whose impact
 # was measured. These name what the host shows and where to look next.
 
 [[advisory]]

@@ -120,7 +120,9 @@ def main() -> None:
     sm.add_argument("--machine", action="append", help="only these machines")
     sm.add_argument("--out", type=Path)
 
-    dg = commands.add_parser("diagnose", help="ranked hypotheses of an interval, with their derivation trees")
+    dg = commands.add_parser(
+        "diagnose", help="ranked hypotheses of an interval, with their explanation trees"
+    )
     dg.add_argument("name")
     dg.add_argument("--minutes", type=float, default=30, help="the last minutes (30)")
     dg.add_argument("--since", type=datetime.fromisoformat, help="UTC unless an offset is given")
@@ -213,8 +215,8 @@ def check_knowledge(hermit: bool) -> int:
         counts = ", ".join(f"{category} {len(onto.names(category))}" for category in ontology.CATEGORIES)
         print(f"{ontology.path()}: {counts}")
         print(f"detection and workload files: {kb.references} entries name only what the ontology has")
-        shown = sum(len(r.manifestations) for r in kb.rules.values())
-        print(f"rules: {len(kb.rules)} causes, {shown} manifestations")
+        shown = sum(len(r.symptoms) for r in kb.rules.values())
+        print(f"rules: {len(kb.rules)} causes, {shown} symptoms")
         print(f"expected behavior: {len(kb.expected)} entries")
         print(
             f"policy: {len(kb.policy.entries)} actions, {len(kb.policy.advisories)} advisories,"

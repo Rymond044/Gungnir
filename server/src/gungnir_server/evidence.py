@@ -1,5 +1,5 @@
 """What the inference engine sees (slice S5): the records, attached values, events
-and process signs of an interval, with the context facts and the workload
+and process symptoms of an interval, with the facts and the workload
 class of each group. Built from a knowledge test case (`cases.evidence_of`)
 or from the database (`gather.evidence`); times are seconds, from the
 case's start or since the epoch.
@@ -50,11 +50,11 @@ class Event:
 
 
 @dataclass(frozen=True)
-class Sign:
-    """A process of the snapshot that matches a process sign (ADR 0038),
+class SeenProcess:
+    """A process of the snapshot that matches a process symptom (ADR 0038),
     at the first snapshot it was seen in."""
 
-    sign: str
+    symptom: str
     comm: str
     pid: int
     state: str
@@ -63,7 +63,7 @@ class Sign:
     at: float
 
 
-Item = Record | Value | Event | Sign
+Item = Record | Value | Event | SeenProcess
 
 
 @dataclass(frozen=True)
@@ -71,7 +71,7 @@ class Evidence:
     records: tuple[Record, ...] = ()
     values: tuple[Value, ...] = ()
     events: tuple[Event, ...] = ()
-    signs: tuple[Sign, ...] = ()
+    processes: tuple[SeenProcess, ...] = ()
     facts: dict[str, str] = field(default_factory=dict)
     # The workload class whose rules match a group; groups without one are
     # absent.
@@ -81,7 +81,7 @@ class Evidence:
     # A window that closes after `until` is still pending.
     since: float = float("-inf")
     until: float = float("inf")
-    # Signals, event types and process signs the host does not provide.
+    # Signals, event types and process symptoms the host does not provide.
     unobservable: frozenset[str] = frozenset()
 
 

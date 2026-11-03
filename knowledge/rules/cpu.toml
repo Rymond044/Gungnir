@@ -4,7 +4,7 @@
 #
 # CPU pressure appears only when runnable threads reach the CPU count
 # (Gregg p. 257); host pressure includes the culprit's own threads, so with
-# a culprit the harm is read on the others. `cpu.iowait_ratio` and
+# a culprit the impact is read on the others. `cpu.iowait_ratio` and
 # `cpu.blocked_tasks` reflect waiting on the disk and memory and cannot be
 # evidence here (cross-effects dossier; the loader refuses them).
 
@@ -16,15 +16,15 @@
 cause = "cpu_hog"
 provenance = { source = "docs/research/cpu.md C1; Gregg pp. 222, 226, 257; Love p. 45", grade = "documented" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cgroup.cpu_cores"
 direction = "up"
 role = "culprit"
-anchor = true
+leading = true
 strength = "characteristic"
 provenance = { source = "admin-guide/cgroup-v2 cpu.stat usage_usec", grade = "documented" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cpu.idle_ratio"
 direction = "down"
 role = "host"
@@ -32,7 +32,7 @@ window = [-15, 30]
 strength = "characteristic"
 provenance = { source = "Gregg p. 226: at 100 % utilization threads wait to run", grade = "documented" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cpu.runnable_tasks"
 direction = "up"
 role = "host"
@@ -40,16 +40,16 @@ window = [-15, 30]
 strength = "typical"
 provenance = { source = "Gregg p. 258; calibration run 20261029T114359Z cpu-100: 19 runnable", grade = "documented" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cgroup.cpu_pressure_some_ratio"
 direction = "up"
 role = "others"
 window = [-15, 60]
 strength = "characteristic"
-harm = true
+impact = true
 provenance = { source = "accounting/psi; calibration run 20261029T114359Z cpu-100: others up to 0.029", grade = "documented" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cpu.pressure_some_ratio"
 direction = "up"
 role = "host"
@@ -57,7 +57,7 @@ window = [-15, 60]
 strength = "typical"
 provenance = { source = "Gregg p. 257, table 6.10", grade = "documented" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cpu.temperature_c"
 direction = "up"
 role = "host"
@@ -73,15 +73,15 @@ provenance = { source = "docs/research/cpu.md C1, inferred from Gregg p. 230", g
 cause = "process_churn"
 provenance = { source = "docs/research/cpu.md C2; Gregg pp. 207, 250, 262", grade = "documented" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cpu.forks_per_s"
 direction = "up"
 role = "host"
-anchor = true
+leading = true
 strength = "characteristic"
 provenance = { source = "proc_stat(5) processes; overhead run 20261028T195813Z fork: 12 k/s", grade = "documented" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cpu.system_ratio"
 direction = "up"
 role = "host"
@@ -89,7 +89,7 @@ window = [-15, 30]
 strength = "characteristic"
 provenance = { source = "Gregg p. 250 (execve in the kernel); overhead run 20261028T195813Z fork: 0.22 against 0.004", grade = "documented" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cpu.context_switches_per_s"
 direction = "up"
 role = "host"
@@ -97,7 +97,7 @@ window = [-15, 30]
 strength = "typical"
 provenance = { source = "overhead run 20261028T195813Z fork: 62 k/s against 6 k/s", grade = "measured" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cgroup.cpu_cores"
 direction = "up"
 role = "culprit"
@@ -105,16 +105,16 @@ window = [-15, 30]
 strength = "characteristic"
 provenance = { source = "admin-guide/cgroup-v2 cpu.stat; fork and exec are charged to the forking group", grade = "documented" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cgroup.cpu_pressure_some_ratio"
 direction = "up"
 role = "others"
 window = [-15, 60]
 strength = "characteristic"
-harm = true
+impact = true
 provenance = { source = "accounting/psi", grade = "documented" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 event = "unit_failed"
 window = [-300, 60]
 strength = "possible"
@@ -128,22 +128,22 @@ provenance = { source = "docs/research/cpu.md C2, inferred: a crash-restart loop
 cause = "interrupt_storm"
 provenance = { source = "docs/research/cpu.md C3; Gregg pp. 259, 261, 281", grade = "documented" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cpu.irq_ratio"
 direction = "up"
 role = "host"
-anchor = true
+leading = true
 strength = "characteristic"
 provenance = { source = "proc_stat(5) irq and softirq; Gregg p. 259", grade = "documented" }
 
-[[rule.manifestation]]
-sign = "ksoftirqd"
+[[rule.symptom]]
+process = "ksoftirqd"
 role = "host"
 window = [-15, 60]
 strength = "typical"
 provenance = { source = "Gregg p. 261", grade = "documented" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cpu.idle_ratio"
 direction = "down"
 role = "host"
@@ -151,22 +151,22 @@ window = [-15, 30]
 strength = "possible"
 provenance = { source = "docs/research/cpu.md C3, inferred", grade = "unverified" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cpu.pressure_some_ratio"
 direction = "up"
 role = "host"
 window = [-15, 60]
 strength = "typical"
-harm = true
+impact = true
 provenance = { source = "docs/research/cpu.md C3, inferred (no culprit, so the host's stall is the others')", grade = "unverified" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cgroup.cpu_pressure_some_ratio"
 direction = "up"
 role = "others"
 window = [-15, 60]
 strength = "typical"
-harm = true
+impact = true
 provenance = { source = "docs/research/cpu.md C3, inferred", grade = "unverified" }
 
 #################################################################
@@ -177,22 +177,22 @@ provenance = { source = "docs/research/cpu.md C3, inferred", grade = "unverified
 cause = "cpu_quota_throttling"
 provenance = { source = "docs/research/cpu.md C4; admin-guide/cgroup-v2 cpu.max; Gregg pp. 226, 246, 622", grade = "documented" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cgroup.throttled_ratio"
 direction = "up"
 role = "others"
-anchor = true
+leading = true
 strength = "characteristic"
-harm = true
+impact = true
 provenance = { source = "admin-guide/cgroup-v2 cpu.stat nr_throttled: throttling by the group's own limit; Gregg p. 622", grade = "documented" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cgroup.cpu_pressure_some_ratio"
 direction = "up"
 role = "others"
 window = [-15, 60]
 strength = "typical"
-harm = true
+impact = true
 provenance = { source = "accounting/psi; Gregg p. 226: runnable threads wait at the limit", grade = "documented" }
 
 #################################################################
@@ -203,15 +203,15 @@ provenance = { source = "accounting/psi; Gregg p. 226: runnable threads wait at 
 cause = "thermal_throttling"
 provenance = { source = "docs/research/cpu.md C5; Gregg pp. 230-231, 245; drivers/thermal/intel/therm_throt.c", grade = "documented" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cpu.thermal_throttles"
 direction = "up"
 role = "host"
-anchor = true
+leading = true
 strength = "characteristic"
 provenance = { source = "drivers/thermal/intel/therm_throt.c: a counter of thermal events", grade = "documented" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cpu.temperature_c"
 direction = "up"
 role = "host"
@@ -219,22 +219,22 @@ window = [-120, 60]
 strength = "typical"
 provenance = { source = "Gregg p. 230: clock rates follow the temperature envelope", grade = "documented" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cpu.pressure_some_ratio"
 direction = "up"
 role = "host"
 window = [-15, 120]
 strength = "typical"
-harm = true
+impact = true
 provenance = { source = "docs/research/cpu.md C5, inferred: the same work on a slower clock", grade = "unverified" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cgroup.cpu_pressure_some_ratio"
 direction = "up"
 role = "others"
 window = [-15, 120]
 strength = "typical"
-harm = true
+impact = true
 provenance = { source = "docs/research/cpu.md C5, inferred", grade = "unverified" }
 
 #################################################################
@@ -245,28 +245,28 @@ provenance = { source = "docs/research/cpu.md C5, inferred", grade = "unverified
 cause = "cpu_steal"
 provenance = { source = "docs/research/cpu.md C6; Gregg pp. 258, 585, 595, 604", grade = "documented" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cpu.steal_ratio"
 direction = "up"
 role = "host"
-anchor = true
+leading = true
 strength = "characteristic"
 provenance = { source = "Gregg p. 604: stolen time is CPU time not available to the guest", grade = "documented" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cpu.pressure_some_ratio"
 direction = "up"
 role = "host"
 window = [-15, 60]
 strength = "typical"
-harm = true
+impact = true
 provenance = { source = "docs/research/cpu.md C6, inferred", grade = "unverified" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cgroup.cpu_pressure_some_ratio"
 direction = "up"
 role = "others"
 window = [-15, 60]
 strength = "typical"
-harm = true
+impact = true
 provenance = { source = "docs/research/cpu.md C6, inferred", grade = "unverified" }

@@ -15,8 +15,8 @@ role = "culprit"
 direction = "up"
 at = -120
 
-[[case.sign]]
-sign = "kswapd"
+[[case.process]]
+process = "kswapd"
 role = "host"
 at = -10
 
@@ -75,8 +75,8 @@ role = "host"
 direction = "down"
 at = -120
 
-[[case.sign]]
-sign = "kswapd"
+[[case.process]]
+process = "kswapd"
 role = "host"
 at = -10
 
@@ -146,7 +146,7 @@ at = 14_440
 [[case]]
 name = "idle pages go to swap and nobody waits"
 facts = { "swap.enabled" = "yes" }
-provenance = { source = "Gregg p. 307: anonymous page-outs may not affect application performance directly, as the kernel performs them asynchronously; ADR 0034 (no harm, no cause)", grade = "documented" }
+provenance = { source = "Gregg p. 307: anonymous page-outs may not affect application performance directly, as the kernel performs them asynchronously; ADR 0034 (no impact, no cause)", grade = "documented" }
 
 [[case.record]]
 signal = "swap.out_pages_per_s"

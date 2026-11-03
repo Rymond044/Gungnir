@@ -31,12 +31,12 @@ G = Namespace(BASE + "#")
 # in the namespace `BASE/<category>#`, so a TOML name resolves within one.
 CATEGORIES = {
     "resource": "Resource",
-    "kind": "EntityKind",
+    "entity": "EntityType",
     "role": "Role",
     "signal": "Signal",
     "event": "EventType",
-    "sign": "ProcessSign",
-    "fact": "ContextFact",
+    "process": "ProcessSymptom",
+    "fact": "Fact",
     "class": "WorkloadClass",
     "cause": "RootCause",
     "action": "ActionType",
@@ -55,7 +55,7 @@ def path() -> Path:
 @dataclass(frozen=True)
 class Role:
     name: str
-    kinds: frozenset[str]
+    entity_types: frozenset[str]
 
 
 @dataclass(frozen=True)
@@ -87,7 +87,7 @@ class EventType:
 
 
 @dataclass(frozen=True)
-class ProcessSign:
+class ProcessSymptom:
     name: str
     resource: str
     pattern: str
@@ -98,7 +98,7 @@ class ProcessSign:
 
 
 @dataclass(frozen=True)
-class ContextFact:
+class Fact:
     name: str
     resource: str
     entity: str
@@ -131,12 +131,12 @@ class ProtectedEntity:
 @dataclass(frozen=True)
 class Ontology:
     resources: frozenset[str]
-    kinds: frozenset[str]
+    entity_types: frozenset[str]
     roles: dict[str, Role]
     signals: dict[str, Signal]
     events: dict[str, EventType]
-    signs: dict[str, ProcessSign]
-    facts: dict[str, ContextFact]
+    process_symptoms: dict[str, ProcessSymptom]
+    facts: dict[str, Fact]
     classes: frozenset[str]
     causes: dict[str, RootCause]
     actions: dict[str, ActionType]
@@ -145,11 +145,11 @@ class Ontology:
     def names(self, category: str):
         return {
             "resource": self.resources,
-            "kind": self.kinds,
+            "entity": self.entity_types,
             "role": self.roles,
             "signal": self.signals,
             "event": self.events,
-            "sign": self.signs,
+            "process": self.process_symptoms,
             "fact": self.facts,
             "class": self.classes,
             "cause": self.causes,
@@ -197,11 +197,11 @@ class _Reader:
                 self._provenance(node)
         onto = Ontology(
             resources=frozenset(self.members["resource"]),
-            kinds=frozenset(self.members["kind"]),
-            roles={n: Role(n, frozenset(self.many(s, "bindsTo", "kind"))) for n, s in self._of("role")},
+            entity_types=frozenset(self.members["entity"]),
+            roles={n: Role(n, frozenset(self.many(s, "bindsTo", "entity"))) for n, s in self._of("role")},
             signals={n: self._signal(n, s) for n, s in self._of("signal")},
             events={n: self._event(n, s) for n, s in self._of("event")},
-            signs={n: self._sign(n, s) for n, s in self._of("sign")},
+            process_symptoms={n: self._process(n, s) for n, s in self._of("process")},
             facts={n: self._fact(n, s) for n, s in self._of("fact")},
             classes=frozenset(self.members["class"]),
             causes={n: self._cause(n, s) for n, s in self._of("cause")},
@@ -209,11 +209,11 @@ class _Reader:
             protected={n: self._protected(n, s) for n, s in self._of("protected")},
         )
         for role in onto.roles.values():
-            if not role.kinds:
-                self.errors.append(f"{self.file}: role {role.name} binds to no kind of entity")
+            if not role.entity_types:
+                self.errors.append(f"{self.file}: role {role.name} binds to no entity type")
         culprit = onto.roles.get("culprit")
         for cause in onto.causes.values():
-            if cause.culprit and culprit and cause.culprit not in culprit.kinds:
+            if cause.culprit and culprit and cause.culprit not in culprit.entity_types:
                 self.errors.append(
                     f"{self.file}: cause {cause.name}: the culprit role cannot bind to {cause.culprit}"
                 )
@@ -303,7 +303,7 @@ class _Reader:
         return Signal(
             name=name,
             resource=self.one(node, "measures", "resource"),
-            entity=self.one(node, "observedOn", "kind"),
+            entity=self.one(node, "observedOn", "entity"),
             unit=self.one(node, "unit"),
             kind=self._choice(node, "signalKind", SIGNAL_KINDS),
             impact=bool(self.one(node, "isImpact", required=False)),
@@ -329,22 +329,22 @@ class _Reader:
             pattern=pattern,
         )
 
-    def _sign(self, name: str, node: URIRef) -> ProcessSign:
+    def _process(self, name: str, node: URIRef) -> ProcessSymptom:
         pattern = self.one(node, "namePattern")
         if pattern is not None and not pattern.strip():
             self.errors.append(f"{self._where(node)}: empty namePattern")
-        return ProcessSign(
+        return ProcessSymptom(
             name=name,
             resource=self.one(node, "indicates", "resource"),
             pattern=pattern or "",
             state=self._choice(node, "state", STATES, required=False),
         )
 
-    def _fact(self, name: str, node: URIRef) -> ContextFact:
-        return ContextFact(
+    def _fact(self, name: str, node: URIRef) -> Fact:
+        return Fact(
             name=name,
             resource=self.one(node, "concerns", "resource"),
-            entity=self.one(node, "observedOn", "kind"),
+            entity=self.one(node, "observedOn", "entity"),
             values=frozenset(self.many(node, "allowedValue")),
         )
 
@@ -352,12 +352,12 @@ class _Reader:
         resources = frozenset(self.many(node, "concerns", "resource"))
         if not resources:
             self.errors.append(f"{self._where(node)}: concerns no resource")
-        return RootCause(name, resources, self.one(node, "culpritKind", "kind", required=False))
+        return RootCause(name, resources, self.one(node, "culpritType", "entity", required=False))
 
     def _action(self, name: str, node: URIRef) -> ActionType:
         return ActionType(
             name,
-            self.one(node, "targets", "kind"),
+            self.one(node, "targets", "entity"),
             self.one(node, "controls", "resource"),
             bool(self.one(node, "proportional", required=False)),
         )

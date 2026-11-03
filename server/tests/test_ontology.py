@@ -26,7 +26,7 @@ def test_shipped_ontology_loads(onto):
     assert onto.signals["cgroup.io_pressure_some_ratio"].impact
     assert onto.causes["device_errors"].culprit is None
     assert onto.causes["swap_io"].resources == {"memory", "disk"}
-    assert onto.roles["culprit"].kinds == {"control_group", "process"}
+    assert onto.roles["culprit"].entity_types == {"control_group", "process"}
 
 
 def test_workload_classes_are_the_ontology_ones(onto):
@@ -88,7 +88,7 @@ def test_event_matching_needs_source_and_message_id(onto):
 
 
 @pytest.mark.parametrize(
-    ("comm", "state", "signs"),
+    ("comm", "state", "symptoms"),
     [
         # Names and states seen in the laptop's process snapshots.
         ("kworker/u73:2+flush-btrfs-1", "D", {"writeback_flusher", "waiting_on_io"}),
@@ -100,35 +100,35 @@ def test_event_matching_needs_source_and_message_id(onto):
         ("firefox", "S", set()),
     ],
 )
-def test_process_signs(onto, comm, state, signs):
-    assert {s.name for s in onto.signs.values() if s.matches(comm, state)} == signs
+def test_process_symptoms(onto, comm, state, symptoms):
+    assert {s.name for s in onto.process_symptoms.values() if s.matches(comm, state)} == symptoms
 
 
 @pytest.mark.parametrize(
     ("extra", "complaint"),
     [
         (
-            'signal:x.y a g:Signal ; g:observedOn kind:host ; g:unit "1" ; g:signalKind "ratio" ;'
+            'signal:x.y a g:Signal ; g:observedOn entity:host ; g:unit "1" ; g:signalKind "ratio" ;'
             ' g:source "s" ; g:grade "documented" .',
             "signal:x.y: no measures",
         ),
         (
-            'signal:x.y a g:Signal ; g:measures kind:host ; g:observedOn kind:host ; g:unit "1" ;'
+            'signal:x.y a g:Signal ; g:measures entity:host ; g:observedOn entity:host ; g:unit "1" ;'
             ' g:signalKind "ratio" ; g:source "s" ; g:grade "documented" .',
             "measures must name a Resource",
         ),
         (
-            'signal:x.y a g:Signal ; g:measure res:cpu ; g:observedOn kind:host ; g:unit "1" ;'
+            'signal:x.y a g:Signal ; g:measure res:cpu ; g:observedOn entity:host ; g:unit "1" ;'
             ' g:signalKind "ratio" ; g:source "s" ; g:grade "documented" .',
             "ontology#measure is used but not declared",
         ),
         (
-            'signal:x.y a g:Signal ; g:measures res:cpu ; g:observedOn kind:host ; g:unit "1" ;'
+            'signal:x.y a g:Signal ; g:measures res:cpu ; g:observedOn entity:host ; g:unit "1" ;'
             ' g:signalKind "ratio" ; g:grade "documented" .',
             "signal:x.y: no provenance source",
         ),
         (
-            'signal:x.y a g:Signal ; g:measures res:cpu ; g:observedOn kind:host ; g:unit "1" ;'
+            'signal:x.y a g:Signal ; g:measures res:cpu ; g:observedOn entity:host ; g:unit "1" ;'
             ' g:signalKind "gauge" ; g:source "s" ; g:grade "documented" .',
             "signalKind must be one of",
         ),
@@ -142,7 +142,7 @@ def test_process_signs(onto, comm, state, signs):
             "is a Signal but not in the namespace",
         ),
         (
-            "cause:x a g:RootCause ; g:concerns res:disk ; g:culpritKind kind:block_device ;"
+            "cause:x a g:RootCause ; g:concerns res:disk ; g:culpritType entity:block_device ;"
             ' g:source "s" ; g:grade "documented" .',
             "the culprit role cannot bind to block_device",
         ),
@@ -170,7 +170,7 @@ def test_hermit_finds_the_ontology_consistent_and_classifies_causes():
 def test_hermit_rejects_a_signal_that_measures_two_resources(tmp_path):
     hermit()
     extra = (
-        'signal:x.y a g:Signal ; g:measures res:cpu , res:memory ; g:observedOn kind:host ; g:unit "1" ;'
+        'signal:x.y a g:Signal ; g:measures res:cpu , res:memory ; g:observedOn entity:host ; g:unit "1" ;'
         ' g:signalKind "ratio" ; g:source "s" ; g:grade "documented" .'
     )
     with pytest.raises(KnowledgeError, match="inconsistent"):

@@ -1,4 +1,4 @@
-"""Causal rules (ADR 0034): a root cause and the manifestations it is
+"""Causal rules (ADR 0034): a root cause and the symptoms it is
 expected to produce, read from `knowledge/rules/*.toml`.
 
 Loading checks every rule against the ontology and the semantics of ADR
@@ -13,7 +13,7 @@ from gungnir_server import frame, knowledge
 from gungnir_server.knowledge import KnowledgeError
 from gungnir_server.ontology import Ontology
 
-KINDS = ("anomaly", "value", "event", "sign")
+KINDS = ("anomaly", "value", "event", "process")
 # The words of ADR 0034; the inference engine maps them to numbers.
 STRENGTHS = ("characteristic", "typical", "possible")
 # Evidence against the cause (ADR 0049): when it is seen in its window, the
@@ -21,34 +21,34 @@ STRENGTHS = ("characteristic", "typical", "possible")
 CONTRADICTING = "contradicting"
 DIRECTIONS = ("up", "down")
 RECORDS = ("any", "anomaly", "impact")
-# Detectors an anomaly manifestation may name; a record of "robust.mad" or
+# Detectors an anomaly symptom may name; a record of "robust.mad" or
 # "robust.ewma" counts as "robust".
 DETECTORS = ("threshold", "robust", "iforest", "growth")
 LEVELS = ("noticeable", "severe")
 # The workload class of the culprit's group, a condition beside the facts.
 CULPRIT_CLASS = "culprit_class"
-SIGN_ROLES = ("culprit", "others", "host")
+PROCESS_ROLES = ("culprit", "others", "host")
 # Where each kind looks its names up in the ontology.
-CATEGORY = {"anomaly": "signal", "value": "signal", "event": "event", "sign": "sign"}
+CATEGORY = {"anomaly": "signal", "value": "signal", "event": "event", "process": "process"}
 FIELDS = {
     "anomaly": {"direction", "record", "level", "detector"},
     "value": {"at_most", "above"},
     "event": set(),
-    "sign": set(),
+    "process": set(),
 }
-COMMON = {"role", "anchor", "window", "strength", "harm", "provenance"}
+COMMON = {"role", "leading", "window", "strength", "impact", "provenance"}
 
 
 @dataclass(frozen=True)
-class Manifestation:
+class Symptom:
     kind: str
     # Any one of them matches; it counts once.
     names: tuple[str, ...]
     role: str
     strength: str
-    anchor: bool
-    harm: bool
-    # Seconds from the anchor's start; None for the anchor itself.
+    leading: bool
+    impact: bool
+    # Seconds from the leading symptom's start; None for the leading symptom itself.
     window: tuple[int, int] | None
     direction: str | None = None
     record: str = "any"
@@ -64,7 +64,7 @@ class Manifestation:
 @dataclass(frozen=True)
 class Rule:
     cause: str
-    manifestations: tuple[Manifestation, ...]
+    symptoms: tuple[Symptom, ...]
     # Fact name, or culprit_class -> the values that satisfy it.
     requires: dict[str, frozenset[str]]
     excludes: dict[str, frozenset[str]]
@@ -73,8 +73,8 @@ class Rule:
     where: str
 
     @property
-    def anchor(self) -> Manifestation:
-        return next(m for m in self.manifestations if m.anchor)
+    def leading(self) -> Symptom:
+        return next(m for m in self.symptoms if m.leading)
 
 
 def directory() -> Path:
@@ -134,22 +134,22 @@ class _Checker:
             self.fail(f"unknown cause '{item.get('cause')}'")
             return None
         self.where = f"{self.where} ({cause.name})"
-        unknown = set(item) - {"cause", "requires", "excludes", "manifestation", "provenance"}
+        unknown = set(item) - {"cause", "requires", "excludes", "symptom", "provenance"}
         if unknown:
             self.fail(f"unknown fields {', '.join(sorted(unknown))}")
-        items = item.get("manifestation", [])
-        found = [self.manifestation(m, n) for n, m in enumerate(items, 1)]
-        manifestations = tuple(m for m in found if m is not None)
+        items = item.get("symptom", [])
+        found = [self.symptom(m, n) for n, m in enumerate(items, 1)]
+        symptoms = tuple(m for m in found if m is not None)
         requires = self.conditions(item.get("requires", {}), "requires")
         excludes = self.conditions(item.get("excludes", {}), "excludes")
-        if len(manifestations) == len(items):
-            self.whole(manifestations, cause.culprit, requires | excludes)
-            self.reflected(manifestations, cause.resources)
+        if len(symptoms) == len(items):
+            self.whole(symptoms, cause.culprit, requires | excludes)
+            self.reflected(symptoms, cause.resources)
         if len(self.problems) > before:
             return None
         return Rule(
             cause.name,
-            manifestations,
+            symptoms,
             requires,
             excludes,
             item["provenance"]["source"],
@@ -157,8 +157,8 @@ class _Checker:
             self.where,
         )
 
-    def manifestation(self, m: dict, n: int) -> Manifestation | None:
-        where = f"manifestation #{n}"
+    def symptom(self, m: dict, n: int) -> Symptom | None:
+        where = f"symptom #{n}"
         before = len(self.problems)
         problem = knowledge.provenance_problem(m, f"{self.where}: {where}")
         if problem:
@@ -184,21 +184,21 @@ class _Checker:
         strength = m.get("strength")
         if strength not in (*STRENGTHS, CONTRADICTING):
             self.fail(f"{where}: strength must be one of {', '.join((*STRENGTHS, CONTRADICTING))}")
-        anchor, harm = m.get("anchor", False), m.get("harm", False)
-        if not isinstance(anchor, bool) or not isinstance(harm, bool):
-            self.fail(f"{where}: anchor and harm are true or false")
-        if strength == CONTRADICTING and (anchor or harm):
-            self.fail(f"{where}: a contradicting manifestation is neither the anchor nor harm")
-        window = self.window(m.get("window"), anchor, where)
+        leading, impact = m.get("leading", False), m.get("impact", False)
+        if not isinstance(leading, bool) or not isinstance(impact, bool):
+            self.fail(f"{where}: leading and impact are true or false")
+        if strength == CONTRADICTING and (leading or impact):
+            self.fail(f"{where}: a contradicting symptom is neither the leading symptom nor impact")
+        window = self.window(m.get("window"), leading, where)
         if len(self.problems) > before:
             return None
-        out = Manifestation(
+        out = Symptom(
             kind,
             names,
             role,
             strength,
-            anchor,
-            harm,
+            leading,
+            impact,
             window,
             source=m["provenance"]["source"],
             grade=m["provenance"]["grade"],
@@ -207,10 +207,10 @@ class _Checker:
         out = check(m, out, where)
         return None if len(self.problems) > before else out
 
-    def window(self, window, anchor: bool, where: str) -> tuple[int, int] | None:
-        if anchor:
+    def window(self, window, leading: bool, where: str) -> tuple[int, int] | None:
+        if leading:
             if window is not None:
-                self.fail(f"{where}: the anchor has no window, the others are counted from it")
+                self.fail(f"{where}: the leading symptom has no window, the others are counted from it")
             return None
         if (
             not isinstance(window, list)
@@ -222,16 +222,16 @@ class _Checker:
             return None
         return (window[0], window[1])
 
-    def _signals(self, out: Manifestation, where: str) -> None:
-        """A signal is expected on its role's kind of entity."""
-        kinds = self.onto.roles[out.role].kinds
+    def _signals(self, out: Symptom, where: str) -> None:
+        """A signal is expected on its role's entity type."""
+        kinds = self.onto.roles[out.role].entity_types
         for name in out.names:
             entity = self.onto.signals[name].entity
             if entity not in kinds:
                 binds = ", ".join(sorted(kinds))
                 self.fail(f"{where}: {name} is observed on a {entity}; role {out.role} binds to {binds}")
 
-    def _anomaly(self, m: dict, out: Manifestation, where: str) -> Manifestation:
+    def _anomaly(self, m: dict, out: Symptom, where: str) -> Symptom:
         self._signals(out, where)
         direction, record, level = m.get("direction"), m.get("record", "any"), m.get("level")
         if direction not in DIRECTIONS:
@@ -252,7 +252,7 @@ class _Checker:
             self.fail(f"{where}: impact records come from the impact detector only")
         return replace(out, direction=direction, record=record, level=level, detectors=detectors)
 
-    def _value(self, m: dict, out: Manifestation, where: str) -> Manifestation:
+    def _value(self, m: dict, out: Symptom, where: str) -> Symptom:
         self._signals(out, where)
         for name in out.names:
             if name not in frame.CONTEXT_SIGNALS:
@@ -264,14 +264,14 @@ class _Checker:
             self.fail(f"{where}: the bound must be a number")
         return replace(out, at_most=at_most, above=above)
 
-    def _event(self, m: dict, out: Manifestation, where: str) -> Manifestation:
+    def _event(self, m: dict, out: Symptom, where: str) -> Symptom:
         if out.role != "host":
             self.fail(f"{where}: events are seen on the host")
         return out
 
-    def _sign(self, m: dict, out: Manifestation, where: str) -> Manifestation:
-        if out.role not in SIGN_ROLES:
-            self.fail(f"{where}: a process sign is looked for on {', '.join(SIGN_ROLES)}")
+    def _process(self, m: dict, out: Symptom, where: str) -> Symptom:
+        if out.role not in PROCESS_ROLES:
+            self.fail(f"{where}: a process symptom is looked for on {', '.join(PROCESS_ROLES)}")
         return out
 
     def conditions(self, table, field: str) -> dict[str, frozenset[str]]:
@@ -286,7 +286,7 @@ class _Checker:
             elif name in self.onto.facts:
                 allowed = self.onto.facts[name].values
             else:
-                self.fail(f"{field}: '{name}' is neither a context fact nor {CULPRIT_CLASS}")
+                self.fail(f"{field}: '{name}' is neither a fact nor {CULPRIT_CLASS}")
                 continue
             bad = [v for v in values if v not in allowed] if values else [repr(value)]
             if bad:
@@ -295,7 +295,7 @@ class _Checker:
             out[name] = frozenset(values)
         return out
 
-    def reflected(self, ms: tuple[Manifestation, ...], resources: frozenset[str]) -> None:
+    def reflected(self, ms: tuple[Symptom, ...], resources: frozenset[str]) -> None:
         """A signal driven by waiting on another resource is evidence only
         for a cause that concerns that resource (cross-effects dossier)."""
         for m in ms:
@@ -307,22 +307,22 @@ class _Checker:
                     waits = ", ".join(sorted(reflects))
                     self.fail(f"{name} reflects waiting on {waits}, which this cause does not concern")
 
-    def whole(self, ms: tuple[Manifestation, ...], culprit: str | None, conditions: dict) -> None:
+    def whole(self, ms: tuple[Symptom, ...], culprit: str | None, conditions: dict) -> None:
         """What ADR 0034 asks of a rule as a whole."""
-        anchors = [m for m in ms if m.anchor]
-        if len(anchors) != 1:
-            self.fail("needs exactly one anchor")
-        elif anchors[0].strength != "characteristic":
-            self.fail("the anchor marks the mechanism, so it is characteristic")
-        if not any(m.harm for m in ms):
-            self.fail("no harm: without it the same activity is expected behavior")
+        leading = [m for m in ms if m.leading]
+        if len(leading) != 1:
+            self.fail("needs exactly one leading symptom")
+        elif leading[0].strength != "characteristic":
+            self.fail("the leading symptom marks the mechanism, so it is characteristic")
+        if not any(m.impact for m in ms):
+            self.fail("no impact: without it the same activity is expected behavior")
         on_culprit = [m for m in ms if m.role == "culprit"]
-        if any(m.harm for m in on_culprit):
-            self.fail("harm is done to the others, the device, the filesystem or the host, not the culprit")
+        if any(m.impact for m in on_culprit):
+            self.fail("impact is done to the others, the device, the filesystem or the host, not the culprit")
         if culprit is None:
             if on_culprit:
-                self.fail("the cause has no culprit, so no manifestation can be on one")
+                self.fail("the cause has no culprit, so no symptom can be on one")
             if CULPRIT_CLASS in conditions:
                 self.fail(f"the cause has no culprit, so no {CULPRIT_CLASS}")
         elif not on_culprit:
-            self.fail("the cause has a culprit but no manifestation of its activity")
+            self.fail("the cause has a culprit but no symptom of its activity")

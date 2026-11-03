@@ -1,10 +1,10 @@
 # Expected behavior (ADR 0002): unusual activity that the workload class
-# explains. While the host is in `class`, an anomaly record of one of
+# explains. While the host is in `class`, an anomaly of one of
 # `signals` in `direction` is marked expected. `on = "members"` narrows
 # group signals to the groups the class's rules match (workload_classes.toml);
 # host and device signals take no `on`.
 #
-# Impact records are never expected: harm opens an incident whatever its
+# Impact records are never expected: impact opens an incident whatever its
 # context, and the causal rules then explain it (D9 for maintenance).
 
 [[expected]]

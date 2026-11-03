@@ -245,7 +245,7 @@ MARKS = {"matched": "+", "missing": "-", "pending": "?", "unobservable": ".", "a
 
 
 def render_diagnosis(d, zone: timezone, title: str) -> str:
-    """Ranked hypotheses with their derivation trees, then what nothing
+    """Ranked hypotheses with their explanation trees, then what nothing
     explains and the advisory; `d` is a Diagnosis of the inference engine."""
 
     def when(t: float) -> str:
@@ -283,16 +283,18 @@ def render_diagnosis(d, zone: timezone, title: str) -> str:
         lines.append("  ".join(x for x in (head, bound, flag.strip()) if x))
         if h.binding.culprit:
             lines.append(f"   culprit: {h.binding.culprit}")
-        lines.append(f"   rule: {h.rule.source} [{h.rule.grade}]; windows from {when(h.anchor_at)}")
+        lines.append(f"   rule: {h.rule.source} [{h.rule.grade}]; windows from {when(h.leading_at)}")
         for f in h.found:
-            m = f.manifestation
+            m = f.symptom
             what = " | ".join(m.names) + (f" {m.direction}" if m.direction else "")
             if m.kind == "value":
                 what += f" <= {m.at_most:g}" if m.at_most is not None else f" > {m.above:g}"
-            window = "anchor" if m.anchor else f"[{m.window[0]}, {m.window[1]}] s"
-            harm = ", harm" if m.harm else ""
+            window = "leading" if m.leading else f"[{m.window[0]}, {m.window[1]}] s"
+            impact = ", impact" if m.impact else ""
             seen = item(f.item) if f.item else f.status
-            lines.append(f"   {MARKS[f.status]} {m.strength:<14} {what} on {m.role}, {window}{harm}: {seen}")
+            lines.append(
+                f"   {MARKS[f.status]} {m.strength:<14} {what} on {m.role}, {window}{impact}: {seen}"
+            )
         lines.append("")
     if d.unexplained:
         lines.append(f"Unexplained ({len(d.unexplained)}):")

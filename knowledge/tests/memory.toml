@@ -65,8 +65,8 @@ role = "host"
 direction = "down"
 at = 10
 
-[[case.sign]]
-sign = "kswapd"
+[[case.process]]
+process = "kswapd"
 role = "host"
 at = 10
 
@@ -243,7 +243,7 @@ role = "host"
 direction = "up"
 at = 20_000
 
-# Negative cases: memory used, nobody harmed.
+# Negative cases: memory used, nobody impacted.
 
 [[case]]
 name = "a large allocation that fits"

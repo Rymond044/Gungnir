@@ -2,11 +2,11 @@
 from the evidence of an interval and the knowledge base.
 
 Each culprit candidate of a rule gives a hypothesis when the rule's
-conditions hold, its anchor is matched, every characteristic manifestation
-is matched, pending or unobservable, some harm is matched and no
-contradicting manifestation is; without its anchor it must also match
-something besides the harm. Confidence
-combines the weights of the matched manifestations as 1 - Π(1 - w) and
+conditions hold, its leading symptom is matched, every characteristic symptom
+is matched, pending or unobservable, some impact is matched and no
+contradicting symptom is; without its leading symptom it must also match
+something besides the impact. Confidence
+combines the weights of the matched symptoms as 1 - Π(1 - w) and
 lowers it by 1 - alpha * w for each missing one. The inference engine sees
 records, never samples (ADR 0001), and reads no database.
 """
@@ -21,7 +21,7 @@ from gungnir_server.evidence import (
     Evidence,
     Item,
     Record,
-    Sign,
+    SeenProcess,
     Value,
     at,
     inside,
@@ -30,15 +30,15 @@ from gungnir_server.evidence import (
 )
 from gungnir_server.params import Params
 from gungnir_server.policy import Advisory
-from gungnir_server.rules import CONTRADICTING, CULPRIT_CLASS, STRENGTHS, Manifestation, Rule
+from gungnir_server.rules import CONTRADICTING, CULPRIT_CLASS, STRENGTHS, Rule, Symptom
 
 if TYPE_CHECKING:
     from gungnir_server.base import Base
 
 MATCHED, MISSING, PENDING, UNOBSERVABLE = "matched", "missing", "pending", "unobservable"
-# A contradicting manifestation that was looked for and not seen.
+# A contradicting symptom that was looked for and not seen.
 ABSENT = "absent"
-# Order in which manifestations take evidence: the anchor, then by strength.
+# Order in which symptoms take evidence: the leading symptom, then by strength.
 ORDER = (*STRENGTHS, CONTRADICTING)
 
 
@@ -53,9 +53,9 @@ class Binding:
 
 @dataclass(frozen=True)
 class Found:
-    """What became of one manifestation of the rule."""
+    """What became of one symptom of the rule."""
 
-    manifestation: Manifestation
+    symptom: Symptom
     status: str
     item: Item | None = None
 
@@ -66,11 +66,11 @@ class Hypothesis:
     binding: Binding
     # C' of ADR 0005: ranked and shown by it.
     confidence: float
-    # C, before missing manifestations lowered it.
+    # C, before missing symptoms lowered it.
     support: float
     # Where the windows are counted from.
-    anchor_at: float
-    # In the rule's order: the derivation tree below the rule.
+    leading_at: float
+    # In the rule's order: the explanation tree below the rule.
     found: tuple[Found, ...]
     rule: Rule
     # The culprit's workload class explains its activity (ADR 0002).
@@ -88,7 +88,7 @@ class Diagnosis:
     unexplained: tuple[Record | Event, ...]
     # Ids of the records the expected behavior layer explains.
     expected: tuple[str, ...]
-    # By the harmed resource, when no hypothesis is shown.
+    # By the impacted resource, when no hypothesis is shown.
     advisories: tuple[Advisory, ...]
 
     def causes(self) -> list[str]:
@@ -154,12 +154,12 @@ class RuleEngine:
         return self._evaluate(rule, ev, b) if self._conditions_hold(rule, ev, b) else None
 
     def _culprits(self, rule: Rule, ev: Evidence) -> list[str | None]:
-        """Groups that match the anchor, or any culprit manifestation when
-        the anchor is elsewhere; of a group and its ancestor, the deepest."""
-        on_culprit = [m for m in rule.manifestations if m.role == "culprit"]
+        """Groups that match the leading symptom, or any culprit symptom when
+        the leading symptom is elsewhere; of a group and its ancestor, the deepest."""
+        on_culprit = [m for m in rule.symptoms if m.role == "culprit"]
         if not on_culprit:
             return [None]
-        source = [rule.anchor] if rule.anchor.role == "culprit" else on_culprit
+        source = [rule.leading] if rule.leading.role == "culprit" else on_culprit
         groups = {
             group
             for m in source
@@ -171,7 +171,7 @@ class RuleEngine:
 
     def _most_matched(self, rule: Rule, ev: Evidence, role: str) -> str | None:
         counts: dict[str, int] = {}
-        for m in rule.manifestations:
+        for m in rule.symptoms:
             if m.role != role:
                 continue
             for entity in {item.entity for item in self._items(m, ev) if self._matches(m, item, Binding())}:
@@ -191,10 +191,12 @@ class RuleEngine:
     # Matching
 
     @staticmethod
-    def _items(m: Manifestation, ev: Evidence) -> tuple[Item, ...]:
-        return {"anomaly": ev.records, "value": ev.values, "event": ev.events, "sign": ev.signs}[m.kind]
+    def _items(m: Symptom, ev: Evidence) -> tuple[Item, ...]:
+        return {"anomaly": ev.records, "value": ev.values, "event": ev.events, "process": ev.processes}[
+            m.kind
+        ]
 
-    def _matches(self, m: Manifestation, item: Item, b: Binding) -> bool:
+    def _matches(self, m: Symptom, item: Item, b: Binding) -> bool:
         if m.kind == "anomaly":
             assert isinstance(item, Record)
             if item.signal not in m.names or item.direction != m.direction:
@@ -211,26 +213,26 @@ class RuleEngine:
             return item.value <= m.at_most if m.at_most is not None else item.value > m.above
         if m.kind == "event":
             return item.type in m.names
-        assert isinstance(item, Sign)
-        return item.sign in m.names and _sign_on(m.role, item.group, b)
+        assert isinstance(item, SeenProcess)
+        return item.symptom in m.names and _process_on(m.role, item.group, b)
 
-    def _observable(self, m: Manifestation, ev: Evidence) -> bool:
+    def _observable(self, m: Symptom, ev: Evidence) -> bool:
         return any(name not in ev.unobservable for name in m.names)
 
     # The gate and the confidence (ADR 0043)
 
     def _evaluate(self, rule: Rule, ev: Evidence, b: Binding) -> Hypothesis | None:
-        anchor = rule.anchor
-        starts = sorted({at(i) for i in self._items(anchor, ev) if self._matches(anchor, i, b)})
-        anchored = bool(starts)
-        if not anchored:
-            if self._observable(anchor, ev):
+        leading = rule.leading
+        starts = sorted({at(i) for i in self._items(leading, ev) if self._matches(leading, i, b)})
+        has_leading = bool(starts)
+        if not has_leading:
+            if self._observable(leading, ev):
                 return None
-            # Windows then count from the earliest matched manifestation.
+            # Windows then count from the earliest matched symptom.
             times = [
                 at(i)
-                for m in rule.manifestations
-                if not m.anchor
+                for m in rule.symptoms
+                if not m.leading
                 for i in self._items(m, ev)
                 if self._matches(m, i, b)
             ]
@@ -239,27 +241,29 @@ class RuleEngine:
             starts = [min(times)]
         best = None
         for t0 in starts:
-            hypothesis = self._assign(rule, ev, b, t0, anchored)
+            hypothesis = self._assign(rule, ev, b, t0, has_leading)
             if hypothesis and (best is None or hypothesis.confidence > best.confidence):
                 best = hypothesis
         return best
 
-    def _assign(self, rule: Rule, ev: Evidence, b: Binding, t0: float, anchored: bool) -> Hypothesis | None:
-        """Gives each manifestation the earliest unused item inside its
-        window: the anchor first, then by strength."""
+    def _assign(
+        self, rule: Rule, ev: Evidence, b: Binding, t0: float, has_leading: bool
+    ) -> Hypothesis | None:
+        """Gives each symptom the earliest unused item inside its
+        window: the leading symptom first, then by strength."""
         used: set = set()
         outcome: dict[int, Found] = {}
         order = sorted(
-            range(len(rule.manifestations)),
+            range(len(rule.symptoms)),
             key=lambda i: (
-                not rule.manifestations[i].anchor,
-                ORDER.index(rule.manifestations[i].strength),
+                not rule.symptoms[i].leading,
+                ORDER.index(rule.symptoms[i].strength),
             ),
         )
         for i in order:
-            m = rule.manifestations[i]
+            m = rule.symptoms[i]
             lo, hi = m.window or (0, 0)
-            if m.anchor and not anchored:
+            if m.leading and not has_leading:
                 outcome[i] = Found(m, UNOBSERVABLE)
                 continue
             fits = sorted(
@@ -281,16 +285,16 @@ class RuleEngine:
                 outcome[i] = Found(m, PENDING)
             else:
                 outcome[i] = Found(m, ABSENT if m.strength == CONTRADICTING else MISSING)
-        found = tuple(outcome[i] for i in range(len(rule.manifestations)))
+        found = tuple(outcome[i] for i in range(len(rule.symptoms)))
 
-        if any(f.status == MISSING and f.manifestation.strength == "characteristic" for f in found):
+        if any(f.status == MISSING and f.symptom.strength == "characteristic" for f in found):
             return None
-        harm = [f for f in found if f.manifestation.harm]
-        if not any(f.status == MATCHED for f in harm) and not all(f.status == UNOBSERVABLE for f in harm):
+        impact = [f for f in found if f.symptom.impact]
+        if not any(f.status == MATCHED for f in impact) and not all(f.status == UNOBSERVABLE for f in impact):
             return None
-        # Without its anchor a cause must still show something besides the
-        # harm, or any harm of the resource would name it.
-        if not anchored and not any(f.status == MATCHED and not f.manifestation.harm for f in found):
+        # Without its leading symptom a cause must still show something besides the
+        # impact, or any impact of the resource would name it.
+        if not has_leading and not any(f.status == MATCHED and not f.symptom.impact for f in found):
             return None
         support = 1 - math.prod(1 - self._weight(f) for f in found if f.status == MATCHED)
         confidence = support * math.prod(
@@ -299,7 +303,7 @@ class RuleEngine:
         return Hypothesis(rule.cause, b, confidence, support, t0, found, rule)
 
     def _weight(self, f: Found) -> float:
-        return self.weights[f.manifestation.strength]
+        return self.weights[f.symptom.strength]
 
     # Expected behavior and advisories
 
@@ -318,23 +322,23 @@ class RuleEngine:
         activity = [
             f.item
             for f in h.with_status(MATCHED)
-            if f.manifestation.role == "culprit" and not f.manifestation.harm and isinstance(f.item, Record)
+            if f.symptom.role == "culprit" and not f.symptom.impact and isinstance(f.item, Record)
         ]
         return bool(activity) and all(r.id in explained for r in activity)
 
     def _advisories(self, ev: Evidence) -> tuple[Advisory, ...]:
-        harmed = {
+        impacted = {
             self.onto.signals[r.signal].resource
             for r in ev.records
             if inside(r, ev)
             and r.signal in self.onto.signals
             and (r.kind == "impact" or self.onto.signals[r.signal].impact)
         }
-        return tuple(a for a in self.base.policy.advisories if a.resource in harmed)
+        return tuple(a for a in self.base.policy.advisories if a.resource in impacted)
 
 
 def as_dict(d: Diagnosis) -> dict:
-    """The diagnosis with its derivation trees, for JSON."""
+    """The diagnosis with its explanation trees, for JSON."""
     return {
         "hypotheses": [_hypothesis_dict(h) for h in d.hypotheses],
         "unexplained": [_item_dict(i) for i in d.unexplained],
@@ -352,18 +356,18 @@ def _hypothesis_dict(h: Hypothesis) -> dict:
         "confidence": round(h.confidence, 4),
         "support": round(h.support, 4),
         "expected": h.expected,
-        "anchor_at": h.anchor_at,
+        "leading_at": h.leading_at,
         "rule": {"source": h.rule.source, "grade": h.rule.grade},
-        "manifestations": [
+        "symptoms": [
             {
-                "kind": f.manifestation.kind,
-                "names": list(f.manifestation.names),
-                "role": f.manifestation.role,
-                "strength": f.manifestation.strength,
-                "window": list(f.manifestation.window) if f.manifestation.window else None,
-                "anchor": f.manifestation.anchor,
-                "harm": f.manifestation.harm,
-                "source": f.manifestation.source,
+                "kind": f.symptom.kind,
+                "names": list(f.symptom.names),
+                "role": f.symptom.role,
+                "strength": f.symptom.strength,
+                "window": list(f.symptom.window) if f.symptom.window else None,
+                "leading": f.symptom.leading,
+                "impact": f.symptom.impact,
+                "source": f.symptom.source,
                 "status": f.status,
                 "evidence": _item_dict(f.item) if f.item else None,
             }
@@ -373,7 +377,7 @@ def _hypothesis_dict(h: Hypothesis) -> dict:
 
 
 def _culprit_items(h: Hypothesis) -> list[Item]:
-    return [f.item for f in h.with_status(MATCHED) if f.manifestation.role == "culprit" and f.item]
+    return [f.item for f in h.with_status(MATCHED) if f.symptom.role == "culprit" and f.item]
 
 
 def _culprit_score(h: Hypothesis) -> float:
@@ -384,12 +388,12 @@ def _culprit_score(h: Hypothesis) -> float:
 
 
 def _item_dict(item: Item) -> dict:
-    kind = {Record: "record", Value: "value", Event: "event", Sign: "sign"}[type(item)]
+    kind = {Record: "record", Value: "value", Event: "event", SeenProcess: "process"}[type(item)]
     return {"type": kind, **{k: v for k, v in item.__dict__.items() if v is not None}}
 
 
 def _group(item: Item) -> str | None:
-    if isinstance(item, Sign):
+    if isinstance(item, SeenProcess):
         return item.group
     if isinstance(item, Record | Value) and item.entity != HOST:
         return item.entity
@@ -409,7 +413,7 @@ def _on(role: str, entity: str, b: Binding) -> bool:
     return bound is None or entity == bound
 
 
-def _sign_on(role: str, group: str | None, b: Binding) -> bool:
+def _process_on(role: str, group: str | None, b: Binding) -> bool:
     if role == "host":
         return True
     if group is None:

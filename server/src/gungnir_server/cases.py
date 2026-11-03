@@ -1,5 +1,5 @@
 """Knowledge tests (ADR 0033, slice S4): synthetic cases of records, values,
-events, process signs and facts, with the root cause the base must
+events, process symptoms and facts, with the root cause the base must
 return. Read from `knowledge/tests/*.toml`; the format is described at the
 top of `knowledge/tests/disk.toml`.
 
@@ -13,12 +13,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from gungnir_server import knowledge
-from gungnir_server.evidence import HOST, Event, Evidence, Record, Sign, Value
+from gungnir_server.evidence import HOST, Event, Evidence, Record, SeenProcess, Value
 from gungnir_server.knowledge import KnowledgeError
 from gungnir_server.ontology import Ontology
 from gungnir_server.rules import CULPRIT_CLASS, DETECTORS, DIRECTIONS, LEVELS, Rule
 
-ITEMS = ("record", "value", "event", "sign")
+ITEMS = ("record", "value", "event", "process")
 FIELDS = {
     "name",
     "expect",
@@ -45,7 +45,7 @@ ENTITIES = {
 class Item:
     """One thing seen in a case, `at` seconds from the case's start."""
 
-    kind: str  # record (an anomaly or impact record), value, event, sign
+    kind: str  # record (an anomaly or impact record), value, event, process
     name: str
     role: str
     at: int
@@ -72,7 +72,7 @@ class Case:
     domain: str
     # The top hypothesis must be marked expected behavior.
     expected: bool = False
-    # Signals, event types and process signs the host does not provide.
+    # Signals, event types and process symptoms the host does not provide.
     unavailable: frozenset[str] = frozenset()
 
 
@@ -128,8 +128,8 @@ def _read(
         fail(f"{where}: expected is true or false, and needs an expected cause")
     unavailable = item.get("unavailable", [])
     for unseen in unavailable if isinstance(unavailable, list) else [None]:
-        if not any(unseen in onto.names(c) for c in ("signal", "event", "sign")):
-            fail(f"{where}: unavailable: '{unseen}' is not a signal, event type or process sign")
+        if not any(unseen in onto.names(c) for c in ("signal", "event", "process")):
+            fail(f"{where}: unavailable: '{unseen}' is not a signal, event type or process symptom")
     culprit_class = item.get(CULPRIT_CLASS)
     if culprit_class is not None and culprit_class not in onto.classes:
         fail(f"{where}: unknown class '{culprit_class}'")
@@ -161,7 +161,7 @@ def _read(
 def _item(onto: Ontology, kind: str, raw: dict, where: str, problems: list[str]) -> Item | None:
     before = len(problems)
     fail = problems.append
-    category = {"record": "signal", "value": "signal", "event": "event", "sign": "sign"}[kind]
+    category = {"record": "signal", "value": "signal", "event": "event", "process": "process"}[kind]
     key = "signal" if category == "signal" else kind
     name = str(raw.get(key))
     problem = onto.missing(category, name, where)
@@ -170,7 +170,11 @@ def _item(onto: Ontology, kind: str, raw: dict, where: str, problems: list[str])
     role = raw.get("role", "host")
     if role not in onto.roles:
         fail(f"{where}: unknown role '{role}'")
-    elif category == "signal" and not problem and onto.signals[name].entity not in onto.roles[role].kinds:
+    elif (
+        category == "signal"
+        and not problem
+        and onto.signals[name].entity not in onto.roles[role].entity_types
+    ):
         fail(f"{where}: {name} cannot be seen on the {role}")
     at = raw.get("at")
     if not isinstance(at, int) or isinstance(at, bool):
@@ -197,7 +201,7 @@ def _item(onto: Ontology, kind: str, raw: dict, where: str, problems: list[str])
 def evidence_of(case: Case) -> Evidence:
     """The case as the inference engine sees it: each role is one entity, and every
     window has closed."""
-    records, values, events, signs = [], [], [], []
+    records, values, events, processes = [], [], [], []
     for n, it in enumerate(case.items):
         entity = ENTITIES[it.role]
         if it.kind == "record":
@@ -220,13 +224,13 @@ def evidence_of(case: Case) -> Evidence:
             events.append(Event(f"e{n}", it.name, float(it.at)))
         else:
             group = None if it.role == "host" else entity
-            signs.append(Sign(it.name, it.name, n, "R", group, float(it.at)))
+            processes.append(SeenProcess(it.name, it.name, n, "R", group, float(it.at)))
     classes = {ENTITIES["culprit"]: case.culprit_class} if case.culprit_class else {}
     return Evidence(
         tuple(records),
         tuple(values),
         tuple(events),
-        tuple(signs),
+        tuple(processes),
         dict(case.facts),
         classes,
         unobservable=case.unavailable,

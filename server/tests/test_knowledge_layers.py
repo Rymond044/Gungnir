@@ -19,21 +19,21 @@ GOOD_RULE = """
 cause = "bulk_sequential_writer"
 provenance = { source = "test", grade = "documented" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cgroup.write_bytes_per_s"
 direction = "up"
 role = "culprit"
-anchor = true
+leading = true
 strength = "characteristic"
 provenance = { source = "test", grade = "documented" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cgroup.io_pressure_some_ratio"
 direction = "up"
 role = "others"
 window = [-15, 60]
 strength = "characteristic"
-harm = true
+impact = true
 provenance = { source = "test", grade = "documented" }
 """
 
@@ -53,8 +53,8 @@ def test_the_shipped_base_loads_and_its_tests_pass():
 
 def test_a_good_rule_loads(onto, tmp_path):
     [rule] = load_rule(onto, tmp_path, GOOD_RULE).values()
-    assert rule.anchor.names == ("cgroup.write_bytes_per_s",)
-    assert rule.manifestations[1].window == (-15, 60)
+    assert rule.leading.names == ("cgroup.write_bytes_per_s",)
+    assert rule.symptoms[1].window == (-15, 60)
 
 
 @pytest.mark.parametrize(
@@ -62,8 +62,8 @@ def test_a_good_rule_loads(onto, tmp_path):
     [
         ('anomaly = "cgroup.write_bytes_per_s"', 'anomaly = "cgroup.write_bytes"', "unknown signal"),
         ('role = "culprit"', 'role = "device"', "role device binds to block_device"),
-        ("window = [-15, 60]", "anchor = true", "exactly one anchor"),
-        ("harm = true", "harm = false", "no harm"),
+        ("window = [-15, 60]", "leading = true", "exactly one leading symptom"),
+        ("impact = true", "impact = false", "no impact"),
         ('role = "others"', 'role = "culprit"', "not the culprit"),
         ("window = [-15, 60]", "window = [60, -15]", "min <= max"),
         ('strength = "characteristic"\nprovenance', 'strength = "strong"\nprovenance', "strength must be"),
@@ -87,7 +87,7 @@ def test_a_good_rule_loads(onto, tmp_path):
         (
             "provenance = { source",
             'requires = { "swap" = "yes" }\nprovenance = { source',
-            "neither a context fact",
+            "neither a fact",
         ),
     ],
 )
@@ -97,7 +97,7 @@ def test_a_broken_rule_is_refused(onto, tmp_path, old, new, complaint):
 
 
 AGAINST = """
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "mem.dirty_bytes"
 direction = "up"
 role = "host"
@@ -107,20 +107,20 @@ provenance = { source = "test", grade = "documented" }
 """
 
 
-def test_a_contradicting_manifestation_is_neither_anchor_nor_harm(onto, tmp_path):
+def test_a_contradicting_manifestation_is_neither_anchor_nor_impact(onto, tmp_path):
     [rule] = load_rule(onto, tmp_path, GOOD_RULE + AGAINST).values()
-    assert rule.manifestations[2].strength == "contradicting"
+    assert rule.symptoms[2].strength == "contradicting"
     for old, new in (
-        ("window = [-15, 60]", "anchor = true"),
-        ('role = "host"', 'role = "host"\nharm = true'),
+        ("window = [-15, 60]", "leading = true"),
+        ('role = "host"', 'role = "host"\nimpact = true'),
     ):
-        with pytest.raises(KnowledgeError, match="contradicting manifestation"):
+        with pytest.raises(KnowledgeError, match="contradicting symptom"):
             load_rule(onto, tmp_path, GOOD_RULE + AGAINST.replace(old, new))
 
 
 def test_a_rule_without_provenance_on_a_manifestation_is_refused(onto, tmp_path):
     head = GOOD_RULE.rsplit("provenance", 1)[0]
-    with pytest.raises(KnowledgeError, match="manifestation #2 has no provenance"):
+    with pytest.raises(KnowledgeError, match="symptom #2 has no provenance"):
         load_rule(onto, tmp_path, head + "\n")
 
 
@@ -242,21 +242,21 @@ CPU_RULE = """
 cause = "cpu_hog"
 provenance = { source = "test", grade = "documented" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cgroup.cpu_cores"
 direction = "up"
 role = "culprit"
-anchor = true
+leading = true
 strength = "characteristic"
 provenance = { source = "test", grade = "documented" }
 
-[[rule.manifestation]]
+[[rule.symptom]]
 anomaly = "cpu.iowait_ratio"
 direction = "up"
 role = "host"
 window = [0, 30]
 strength = "typical"
-harm = true
+impact = true
 provenance = { source = "test", grade = "documented" }
 """
 
@@ -270,7 +270,7 @@ def test_a_signal_that_reflects_the_disk_is_no_evidence_for_the_cpu(onto, tmp_pa
         tmp_path,
         CPU_RULE.replace("cpu_hog", "bulk_reader").replace("cgroup.cpu_cores", "cgroup.read_bytes_per_s"),
     ).values()
-    assert rule.manifestations[1].names == ("cpu.iowait_ratio",)
+    assert rule.symptoms[1].names == ("cpu.iowait_ratio",)
 
 
 def test_an_anomaly_may_name_its_detector(onto, tmp_path, shipped):
@@ -278,7 +278,7 @@ def test_an_anomaly_may_name_its_detector(onto, tmp_path, shipped):
         load_rule(
             onto, tmp_path, GOOD_RULE.replace('direction = "up"', 'direction = "up"\ndetector = "magic"', 1)
         )
-    assert shipped["memory_leak"].anchor.detectors == ("growth",)
+    assert shipped["memory_leak"].leading.detectors == ("growth",)
 
 
 def test_a_weight_takes_a_share_of_its_own_setting(onto, shipped, tmp_path):

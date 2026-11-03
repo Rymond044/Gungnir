@@ -5,14 +5,14 @@
 # (default 1); without it the inference engine may give no hypothesis at all (a
 # negative case). `not` lists causes that must stay below the cut-off.
 # `expected = true` asks that the top hypothesis be marked expected
-# behavior. `unavailable` lists signals, event types or process signs the
+# behavior. `unavailable` lists signals, event types or process symptoms the
 # host does not provide. `facts` and `culprit_class` give the context the
 # conditions read.
 # Seen, each `at` seconds from the case's start:
 #   [[case.record]]  signal, role, direction; record = "impact" with level
 #   [[case.value]]   signal, role, value: a context value on a record
 #   [[case.event]]   event
-#   [[case.sign]]    sign, role
+#   [[case.process]] process, role
 # Values and windows follow the dossier docs/research/disk-io.md and the
 # labeled runs it cites.
 
@@ -59,7 +59,7 @@ direction = "up"
 at = 15
 
 # Scenario С-6: without pressure stall information the others' waiting is
-# unobservable; a process of theirs in state D still shows the harm, and
+# unobservable; a process of theirs in state D still shows the impact, and
 # the hypothesis stands with less confidence.
 [[case]]
 name = "a large copy on a host without pressure stall information"
@@ -92,8 +92,8 @@ role = "device"
 direction = "up"
 at = 15
 
-[[case.sign]]
-sign = "waiting_on_io"
+[[case.process]]
+process = "waiting_on_io"
 role = "others"
 at = 20
 
@@ -135,8 +135,8 @@ role = "others"
 direction = "up"
 at = 10
 
-[[case.sign]]
-sign = "waiting_on_io"
+[[case.process]]
+process = "waiting_on_io"
 role = "others"
 at = 15
 
@@ -232,8 +232,8 @@ role = "device"
 direction = "up"
 at = 5
 
-[[case.sign]]
-sign = "btrfs_transaction"
+[[case.process]]
+process = "btrfs_transaction"
 role = "host"
 at = 10
 
@@ -281,8 +281,8 @@ role = "culprit"
 direction = "up"
 at = 30
 
-[[case.sign]]
-sign = "writeback_flusher"
+[[case.process]]
+process = "writeback_flusher"
 role = "host"
 at = 32
 
@@ -337,8 +337,8 @@ role = "device"
 direction = "up"
 at = 0
 
-[[case.sign]]
-sign = "writeback_flusher"
+[[case.process]]
+process = "writeback_flusher"
 role = "host"
 at = 5
 
@@ -498,7 +498,7 @@ role = "device"
 direction = "up"
 at = 5
 
-# Host pressure includes the culprit's own stall, so it is not harm.
+# Host pressure includes the culprit's own stall, so it is not impact.
 [[case.record]]
 signal = "io.pressure_some_ratio"
 role = "host"

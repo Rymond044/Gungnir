@@ -1,10 +1,10 @@
 """Evidence of a host over an interval, read from the database (slice S5):
 records, the values detection attached to them, events of the types the
-ontology knows, process signs in the snapshots, context facts and the
+ontology knows, process symptoms in the snapshots, facts and the
 workload class of each group.
 
 The interval reaches back by the longest negative window of the rules, so
-that a manifestation may precede the anchor it is counted from.
+that a symptom may precede the leading symptom it is counted from.
 """
 
 from datetime import datetime, timedelta
@@ -13,13 +13,13 @@ import psycopg
 
 from gungnir_server import telemetry, workload
 from gungnir_server.base import Base
-from gungnir_server.evidence import HOST, Event, Evidence, Record, Sign, Value
+from gungnir_server.evidence import HOST, Event, Evidence, Record, SeenProcess, Value
 from gungnir_server.hosts import Host
 
 
 def lookback(base: Base) -> timedelta:
     earliest = min(
-        (m.window[0] for r in base.rules.values() for m in r.manifestations if m.window),
+        (m.window[0] for r in base.rules.values() for m in r.symptoms if m.window),
         default=0,
     )
     return timedelta(seconds=max(0, -earliest))
@@ -37,7 +37,7 @@ def evidence(
     early = since - lookback(base)
     records, values = _records(conn, host, early, until, replay_id, set(onto.signals))
     events = _events(conn, host, base, early, until)
-    signs, snapshots = _signs(conn, host, base, early, until)
+    processes, snapshots = _processes(conn, host, base, early, until)
 
     facts = dict(
         conn.execute(
@@ -47,7 +47,7 @@ def evidence(
         ).fetchall()
     )
     rules = workload.load_rules(host.name)
-    groups = {r.entity for r in records if r.entity != HOST} | {s.group for s in signs if s.group}
+    groups = {r.entity for r in records if r.entity != HOST} | {p.group for p in processes if p.group}
     classes = {g: cls for g in groups if (cls := _class_of(rules, g))}
 
     seen = {
@@ -58,13 +58,13 @@ def evidence(
     if states.get("journal") in (None, "disabled"):
         unobservable |= set(onto.events)
     if not snapshots:
-        unobservable |= set(onto.signs)
+        unobservable |= set(onto.process_symptoms)
 
     return Evidence(
         tuple(records),
         tuple(values),
         tuple(events),
-        tuple(signs),
+        tuple(processes),
         {name: value for name, value in facts.items() if name in onto.facts},
         classes,
         since.timestamp(),
@@ -121,15 +121,15 @@ def _events(conn, host, base: Base, early, until) -> list[Event]:
     ]
 
 
-def _signs(conn, host, base: Base, early, until) -> tuple[list[Sign], int]:
-    """One sign for each stretch of snapshots a process shows it in, at the
+def _processes(conn, host, base: Base, early, until) -> tuple[list[SeenProcess], int]:
+    """One seen process for each stretch of snapshots a process shows it in, at the
     first snapshot of the stretch; also how many snapshots there were."""
     rows = conn.execute(
         "SELECT ts, pid, comm, state, cgroup FROM process_samples"
         " WHERE host_id = %s AND ts >= %s AND ts <= %s ORDER BY ts",
         (host.id, early, until),
     ).fetchall()
-    signs: list[Sign] = []
+    processes: list[SeenProcess] = []
     previous: set[tuple[str, int]] = set()
     current: set[tuple[str, int]] = set()
     last_ts = None
@@ -138,13 +138,15 @@ def _signs(conn, host, base: Base, early, until) -> tuple[list[Sign], int]:
         if ts != last_ts:
             previous, current, last_ts = current, set(), ts
             snapshots += 1
-        for sign in base.ontology.signs.values():
-            if sign.matches(comm, state):
-                key = (sign.name, pid)
+        for symptom in base.ontology.process_symptoms.values():
+            if symptom.matches(comm, state):
+                key = (symptom.name, pid)
                 if key not in previous and key not in current:
-                    signs.append(Sign(sign.name, comm, pid, state, cgroup or None, ts.timestamp()))
+                    processes.append(
+                        SeenProcess(symptom.name, comm, pid, state, cgroup or None, ts.timestamp())
+                    )
                 current.add(key)
-    return signs, snapshots
+    return processes, snapshots
 
 
 def _class_of(rules: list[workload.Rule], group: str) -> str | None:
