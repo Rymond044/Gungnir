@@ -12,3 +12,5 @@ token
 *.token
 # Outputs of scenario runs on this machine.
 /scenarios/runs/
+# Build output of the web interface.
+/web/dist/

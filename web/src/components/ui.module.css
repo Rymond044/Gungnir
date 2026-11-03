@@ -1,0 +1,197 @@
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.panelHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
+.panelTitle {
+  font-weight: 600;
+}
+
+.panelAside {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  background: var(--chip);
+  color: var(--muted);
+}
+
+.red {
+  background: var(--red-tint);
+  color: var(--red-text);
+}
+.green {
+  background: var(--green-tint);
+  color: var(--green);
+}
+.ochre {
+  background: var(--ochre-tint);
+  color: var(--ochre);
+}
+.blue {
+  background: var(--blue-tint);
+  color: var(--blue);
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.key {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.source {
+  font-size: 12px;
+  color: var(--faint);
+  overflow-wrap: anywhere;
+}
+
+.segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.segmented button {
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 12px;
+  min-height: 30px;
+  background: transparent;
+}
+
+.segmented button[aria-pressed='true'] {
+  background: var(--btn);
+  color: var(--btn-text);
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  text-decoration: none;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.primary {
+  background: var(--btn);
+  color: var(--btn-text);
+  border-color: var(--btn);
+  font-weight: 500;
+}
+
+.primary:hover {
+  color: var(--btn-text);
+}
+
+.state {
+  color: var(--muted);
+  padding: 8px 0;
+}
+
+.error {
+  color: var(--red-text);
+  padding: 8px 0;
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.crumbs {
+  display: flex;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.crumbs a {
+  color: var(--muted);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(380px, 100%), 1fr));
+  gap: 16px;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: minmax(120px, max-content) minmax(0, 1fr);
+  gap: 6px 16px;
+}
+
+.facts > :nth-child(odd) {
+  color: var(--muted);
+}
+
+.scroll {
+  overflow-x: auto;
+}
+
+.tableRow:hover {
+  background: var(--hover);
+}
+
+.tableRow td:first-child {
+  padding-left: 4px;
+}
+
+.empty {
+  color: var(--muted);
+  font-size: 13px;
+}

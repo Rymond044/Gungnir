@@ -1,0 +1,143 @@
+.shell {
+  min-height: 100vh;
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.side {
+  flex: 1 1 208px;
+  max-width: 100%;
+  background: var(--side);
+  color: var(--side-text);
+  padding: 20px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.brand {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding: 0 10px;
+  color: var(--side-text);
+  text-decoration: none;
+}
+
+.brand:hover {
+  color: var(--side-text);
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 10px;
+  border-radius: 6px;
+  text-decoration: none;
+  color: var(--side-text);
+}
+
+.link:hover {
+  background: var(--side-active);
+  color: var(--side-text);
+}
+
+.active {
+  background: var(--side-active);
+  font-weight: 500;
+}
+
+.badge {
+  margin-left: auto;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--red);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.badgeQuiet {
+  background: var(--side-active);
+  color: var(--side-muted);
+}
+
+.foot {
+  margin-top: auto;
+  border-top: 1px solid var(--side-active);
+  padding: 14px 10px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--side-muted);
+}
+
+.foot a {
+  color: var(--side-muted);
+}
+
+.hostName {
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--side-text);
+}
+
+.select {
+  background: var(--side-active);
+  color: var(--side-text);
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+}
+
+.contact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ok);
+  flex: none;
+}
+
+.ledStale {
+  background: var(--red);
+}
+
+.main {
+  flex: 999 1 560px;
+  min-width: 0;
+  padding: 24px 28px 40px;
+}
+
+@media (max-width: 760px) {
+  .main {
+    padding: 16px;
+  }
+  .nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .foot {
+    margin-top: 0;
+  }
+}

@@ -1,0 +1,40 @@
+/* Palette D "stone" of the mockups: light, warm grey, dark navigation.
+   Every colour is a variable, so a dark theme only redefines this block. */
+:root {
+  --bg: #e6e4df;
+  --panel: #f5f4f1;
+  --side: #262422;
+  --side-text: #e7e4de;
+  --side-muted: #a39e95;
+  --side-active: #37342f;
+  --text: #1c1b19;
+  --muted: #666159;
+  --faint: #736d64;
+  --line: #d6d2ca;
+  --divider: #e2ded6;
+  --hover: #eeece7;
+  --chip: #e2dfd8;
+  --code: #e6e4df;
+  --ink: #2a2824;
+  --blue: #2f6db5;
+  --ochre: #a86400;
+  --gray: #aba59b;
+  --red: #b8352b;
+  --red-text: #9a2b22;
+  --red-tint: #f2e0da;
+  --red-line: #e0c3bc;
+  --green: #3c7d55;
+  --green-tint: #dfeadf;
+  --ochre-tint: #f1e5cf;
+  --blue-tint: #dde6f1;
+  --ok: #4cb782;
+  --grid-major: #d3d8cc;
+  --grid-minor: #e7e9e1;
+  --band: rgba(60, 125, 85, 0.13);
+  --btn: #262422;
+  --btn-text: #f5f4f1;
+
+  --font: 'Golos Text', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --radius: 10px;
+}

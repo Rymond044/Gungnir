@@ -1,0 +1,121 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+}
+
+.rank {
+  color: var(--faint);
+  font-size: 13px;
+}
+
+.cause {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.conf {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.confBar {
+  width: 80px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--divider);
+  overflow: hidden;
+}
+
+.confBar span {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+}
+
+.confNum {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.binding {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 14px;
+}
+
+.binding > :nth-child(odd) {
+  color: var(--muted);
+}
+
+.tree {
+  display: flex;
+  flex-direction: column;
+}
+
+.sym {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) minmax(0, 1fr);
+  gap: 4px 10px;
+  align-items: start;
+  padding: 7px 0;
+  border-top: 1px solid var(--divider);
+}
+
+.symMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.symLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.faint {
+  color: var(--faint);
+}
+
+.evidence {
+  font-size: 13px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.icon {
+  margin-top: 2px;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+details > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@media (max-width: 760px) {
+  .sym {
+    grid-template-columns: 18px minmax(0, 1fr);
+  }
+  .evidence {
+    grid-column: 2;
+  }
+}
