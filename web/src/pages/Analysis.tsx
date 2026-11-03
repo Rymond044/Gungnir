@@ -7,7 +7,7 @@ import { Empty, Failure, Key, Loading, Panel, Segmented, Source } from '../compo
 import ui from '../components/ui.module.css'
 import { confidence, dayClock, ms } from '../lib/format'
 import { lastInterval } from '../lib/range'
-import { causeNames, named, resourceNames, symptomName } from '../lib/names'
+import { causeNames, named, resourceNames, symptomNames } from '../lib/names'
 import { useNow } from '../lib/useNow'
 import styles from './Analysis.module.css'
 
@@ -222,7 +222,7 @@ function plural(n: number, one: string, few: string, many: string): string {
 function reasonText(h: Diagnosis['near'][number]): string {
   const missing = h.symptoms
     .filter((s) => s.status === 'missing' && s.strength === 'characteristic')
-    .map((s) => s.names.map((n) => symptomName(s.kind, n)).join(' или '))
+    .map((s) => symptomNames(s.kind, s.names))
   switch (h.reason) {
     case 'no impact':
       return 'никто не ждёт ресурс: необычно, но не вредит'

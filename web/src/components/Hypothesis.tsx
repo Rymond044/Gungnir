@@ -10,7 +10,7 @@ import {
   signalNames,
   statusNames,
   strengthNames,
-  symptomName,
+  symptomNames,
 } from '../lib/names'
 import Evidence from './Evidence'
 import styles from './Hypothesis.module.css'
@@ -65,7 +65,7 @@ export function Symptom({ s, host, offset }: { s: FoundSymptom; host: string; of
       <div className={styles.symMain}>
         <div className={styles.symLine}>
           <span style={{ color: found || s.status === 'absent' ? 'var(--text)' : 'var(--faint)' }}>
-            {s.names.map((n) => symptomName(s.kind, n)).join(' или ')}
+            {symptomNames(s.kind, s.names)}
           </span>
           <Chip tone={STRENGTH_TONE[s.strength]}>{strengthNames[s.strength]}</Chip>
           {s.leading && <Chip tone="ochre">ведущий</Chip>}

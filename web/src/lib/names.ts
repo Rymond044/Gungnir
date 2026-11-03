@@ -109,12 +109,12 @@ export const eventNames: Record<string, string> = {
   block_io_error: 'Ошибка блочного I/O',
   btrfs_device_errors: 'Ошибки устройства Btrfs',
   hung_task: 'Зависшая задача (hung task)',
-  memcg_oom_kill: 'OOM-kill в группе',
+  memcg_oom_kill: 'OOM kill в группе',
   nvme_timeout: 'Таймаут команды NVMe',
-  oom_kill: 'OOM-kill ядра',
+  oom_kill: 'OOM kill ядра',
   unit_failed: 'Юнит упал',
-  unit_oomd_kill: 'Юнит убит systemd-oomd',
-  unit_out_of_memory: 'Юнит убит OOM killer',
+  unit_oomd_kill: 'Юнит завершён systemd-oomd',
+  unit_out_of_memory: 'Юнит завершён за нехватку памяти',
 }
 
 export const processNames: Record<string, string> = {
@@ -302,6 +302,13 @@ export function detectorName(detector: string): string {
 /** A name of a signal, event type or process symptom, whichever it is. */
 export function anyName(name: string): string {
   return signalNames[name] ?? eventNames[name] ?? processNames[name] ?? name
+}
+
+/** A symptom with alternatives (any one of them matches) in words; a long list reads as "one of". */
+export function symptomNames(kind: string, names: string[]): string {
+  const words = names.map((n) => symptomName(kind, n))
+  if (words.length <= 2) return words.join(' или ')
+  return `одно из: ${words.join('; ')}`
 }
 
 /** A symptom's names (one of them matches) in words. */

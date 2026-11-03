@@ -24,7 +24,7 @@ import {
   signalNames,
   strengthNames,
   symptomKindNames,
-  symptomName,
+  symptomNames,
 } from '../lib/names'
 
 const TONE: Record<string, Tone> = {
@@ -237,7 +237,7 @@ function SymptomRow({ s, pos }: { s: RuleSymptom; pos: (t: number) => string }) 
         }}
       >
         <span style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 8px', alignItems: 'baseline' }}>
-          <span>{s.names.map((n) => symptomName(s.kind, n)).join(' или ')}</span>
+          <span>{symptomNames(s.kind, s.names)}</span>
           <Chip tone={TONE[s.strength]}>{strengthNames[s.strength]}</Chip>
           {s.leading && <Chip tone="ochre">ведущий</Chip>}
           {s.impact && <Chip tone="red">влияние</Chip>}
