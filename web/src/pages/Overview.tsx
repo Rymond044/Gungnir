@@ -160,11 +160,17 @@ function plural(n: number, one: string, few: string, many: string): string {
   return many
 }
 
+/** A current value in the head of a card; a card of several lines names each. */
+interface Reading {
+  label?: string
+  value: string
+  red?: boolean
+}
+
 interface ResourceDef {
   title: string
   sub: string
-  now: string
-  nowRed?: boolean
+  now: Reading[]
   series: SeriesSpec[]
   normOf?: { signal: string; entity?: string }
   format: (v: number) => string
@@ -185,7 +191,7 @@ function resources(o: OverviewData, v: Values): ResourceDef[] {
   out.push({
     title: 'CPU',
     sub: 'все ядра',
-    now: idle === undefined ? '—' : percent(1 - idle - (iowait ?? 0)),
+    now: [{ value: idle === undefined ? '—' : percent(1 - idle - (iowait ?? 0)) }],
     series: [
       { signal: 'cpu.user_ratio', name: 'user', color: INK },
       { signal: 'cpu.system_ratio', name: 'system', color: BLUE },
@@ -203,7 +209,7 @@ function resources(o: OverviewData, v: Values): ResourceDef[] {
   out.push({
     title: 'Память',
     sub: total ? `доступно из ${formatBytes(total)}` : 'доступно',
-    now: available === undefined ? '—' : formatBytes(available),
+    now: [{ value: available === undefined ? '—' : formatBytes(available) }],
     series: [
       { signal: 'mem.available_bytes', name: 'доступно', color: INK },
       { signal: 'mem.cached_bytes', name: 'страничный кэш', color: BLUE },
@@ -217,7 +223,7 @@ function resources(o: OverviewData, v: Values): ResourceDef[] {
   out.push({
     title: 'Swap',
     sub: o.swap_bytes ? `из ${formatBytes(o.swap_bytes)}` : 'выключен или пуст',
-    now: swapUsed === undefined ? '—' : formatBytes(swapUsed),
+    now: [{ value: swapUsed === undefined ? '—' : formatBytes(swapUsed) }],
     series: [{ signal: 'swap.used_bytes', name: 'занято', color: INK }],
     normOf: { signal: 'swap.used_bytes' },
     format: formatBytes,
@@ -229,10 +235,10 @@ function resources(o: OverviewData, v: Values): ResourceDef[] {
     out.push({
       title: 'Диск',
       sub: `${dev} · запись и чтение`,
-      now:
-        w === undefined
-          ? '—'
-          : `${formatValue('disk.write_bytes_per_s', w)} / ${formatValue('disk.read_bytes_per_s', r)}`,
+      now: [
+        { label: 'запись', value: formatValue('disk.write_bytes_per_s', w) },
+        { label: 'чтение', value: formatValue('disk.read_bytes_per_s', r) },
+      ],
       series: [
         { signal: 'disk.write_bytes_per_s', entity: dev, name: 'запись', color: INK },
         { signal: 'disk.read_bytes_per_s', entity: dev, name: 'чтение', color: BLUE },
@@ -241,11 +247,13 @@ function resources(o: OverviewData, v: Values): ResourceDef[] {
       format: (x) => formatValue('disk.write_bytes_per_s', x),
       minMax: 1024 * 1024,
     })
-    const wa = v.get(`disk.write_await_ms@${dev}`)
     out.push({
       title: 'Задержка диска',
       sub: `${dev} · await`,
-      now: wa === undefined ? '—' : formatValue('disk.write_await_ms', wa),
+      now: [
+        { label: 'запись', value: formatValue('disk.write_await_ms', v.get(`disk.write_await_ms@${dev}`)) },
+        { label: 'чтение', value: formatValue('disk.read_await_ms', v.get(`disk.read_await_ms@${dev}`)) },
+      ],
       series: [
         { signal: 'disk.write_await_ms', entity: dev, name: 'запись', color: INK },
         { signal: 'disk.read_await_ms', entity: dev, name: 'чтение', color: BLUE },
@@ -255,12 +263,19 @@ function resources(o: OverviewData, v: Values): ResourceDef[] {
       minMax: 1,
     })
   }
-  const io = v.get('io.pressure_some_ratio@host')
+  // Noticeable impact starts at 0.10 for every resource (knowledge base, limits).
+  const pressure = (label: string, signal: string): Reading => {
+    const x = v.get(`${signal}@host`)
+    return { label, value: formatValue(signal, x), red: (x ?? 0) >= 0.1 }
+  }
   out.push({
     title: 'Давление (PSI)',
     sub: 'some, доля времени с ожиданием',
-    now: io === undefined ? '—' : formatValue('io.pressure_some_ratio', io),
-    nowRed: (io ?? 0) >= 0.1,
+    now: [
+      pressure('I/O', 'io.pressure_some_ratio'),
+      pressure('память', 'mem.pressure_some_ratio'),
+      pressure('CPU', 'cpu.pressure_some_ratio'),
+    ],
     series: [
       { signal: 'io.pressure_some_ratio', name: 'I/O', color: RED },
       { signal: 'mem.pressure_some_ratio', name: 'память', color: BLUE },
@@ -306,7 +321,16 @@ function Resources({
               <span className={styles.expandIcon}>⤢</span>
             </Link>
           }
-          aside={<span className={`${styles.now} ${r.nowRed ? styles.nowRed : ''}`}>{r.now}</span>}
+          aside={
+            <span className={`${styles.readings} ${r.now.length > 1 ? styles.several : ''}`}>
+              {r.now.map((n) => (
+                <span key={n.label ?? ''} className={n.red ? styles.nowRed : undefined}>
+                  {n.label && <span className={styles.sub}>{n.label} </span>}
+                  <span className={styles.now}>{n.value}</span>
+                </span>
+              ))}
+            </span>
+          }
         >
           <SignalChart
             host={host}

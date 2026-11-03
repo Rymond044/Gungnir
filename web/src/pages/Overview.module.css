@@ -34,13 +34,24 @@
   min-width: 0;
 }
 
-.now {
-  font-size: 18px;
-  font-weight: 500;
+.readings {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px 14px;
   margin-left: auto;
 }
 
-.nowRed {
+.now {
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.several .now {
+  font-size: 15px;
+}
+
+.nowRed .now {
   color: var(--red);
 }
 
