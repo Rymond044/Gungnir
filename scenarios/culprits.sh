@@ -26,7 +26,7 @@ step_s=${SC_STEP_S:-60}
 # The victim runs alone first, so that its own start is not the culprit's.
 lead_s=20
 # Between scenarios: records close and the windows of the rules (up to two
-# minutes after the anchor) run out.
+# minutes after the leading symptom) run out.
 gap_s=120
 cpus=$(nproc)
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
