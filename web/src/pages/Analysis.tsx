@@ -159,7 +159,7 @@ function Span({ d, host, offset, now }: { d: Diagnosis; host: string; offset: nu
               <summary>
                 <b>{named(causeNames, h.cause)}</b> <Key>{h.cause}</Key> — {reasonText(h)}
               </summary>
-              <Hypothesis h={h} host={host} offset={offset} />
+              <Hypothesis h={h} host={host} offset={offset} withActions={false} />
             </details>
           ))}
         </Panel>

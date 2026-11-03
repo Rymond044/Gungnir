@@ -100,11 +100,14 @@ export default function Hypothesis({
   rank,
   host,
   offset,
+  withActions = true,
 }: {
   h: H
   rank?: number
   host: string
   offset: number | null
+  /** A cause that was not named proposes nothing. */
+  withActions?: boolean
 }) {
   const matched = h.symptoms.filter((s) => s.status === 'matched').length
   return (
@@ -155,7 +158,7 @@ export default function Hypothesis({
         ))}
       </div>
       <Source source={h.rule.source} grade={h.rule.grade} />
-      {h.actions.length > 0 && (
+      {withActions && h.actions.length > 0 && (
         <div className={styles.actions}>
           <span style={{ fontWeight: 600 }}>Действия по политике</span>
           {h.actions.map((a) => (
