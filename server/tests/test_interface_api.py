@@ -124,6 +124,7 @@ def test_diagnosis_of_a_quiet_interval_and_a_bounded_window(client, token):
     (found,) = client.get("/api/v1/hosts/laptop/diagnosis").json()
     assert found["hypotheses"] == [] and found["unexplained"] == []
     assert found["evidence"] == {"records": 0, "events": 0, "processes": 0}
+    assert found["near"] == []
     too_long = client.get(
         "/api/v1/hosts/laptop/diagnosis", params={"since": iso(RECENT - 2 * 86_400_000), "until": iso(RECENT)}
     )

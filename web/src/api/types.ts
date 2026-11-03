@@ -251,6 +251,8 @@ export interface Diagnosis {
   unexplained: (EvidenceItem & Record<string, unknown>)[]
   expected: string[]
   advisories: Advisory[]
+  /** Causes whose leading symptom was seen but that give no hypothesis, with the reason. */
+  near: (Hypothesis & { reason: string })[]
   /** What the inference engine was given inside the interval. */
   evidence: { records: number; events: number; processes: number }
 }

@@ -106,7 +106,7 @@ export default function Hypothesis({
   offset,
 }: {
   h: H
-  rank: number
+  rank?: number
   host: string
   offset: number | null
 }) {
@@ -114,7 +114,7 @@ export default function Hypothesis({
   return (
     <div className={styles.card}>
       <div className={styles.top}>
-        <span className={styles.rank}>{rank}.</span>
+        {rank !== undefined && <span className={styles.rank}>{rank}.</span>}
         <Link to={`/hosts/${host}/knowledge/${h.cause}`} className={styles.cause}>
           {named(causeNames, h.cause)}
         </Link>

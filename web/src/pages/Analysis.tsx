@@ -3,12 +3,13 @@ import { useDiagnosis, useOverview, useRuns, type DiagnosisRequest } from '../ap
 import type { Diagnosis } from '../api/types'
 import Evidence from '../components/Evidence'
 import Hypothesis from '../components/Hypothesis'
-import { Empty, Failure, Loading, Panel, Segmented, Source } from '../components/ui'
+import { Empty, Failure, Key, Loading, Panel, Segmented, Source } from '../components/ui'
 import ui from '../components/ui.module.css'
 import { dayClock, ms } from '../lib/format'
 import { lastInterval } from '../lib/range'
-import { causeNames, named, resourceNames } from '../lib/names'
+import { causeNames, named, resourceNames, symptomName } from '../lib/names'
 import { useNow } from '../lib/useNow'
+import styles from './Analysis.module.css'
 
 type Mode = 'last' | 'interval' | 'run'
 const MINUTES = ['15', '30', '60'] as const
@@ -137,10 +138,11 @@ function Span({ d, host, offset, now }: { d: Diagnosis; host: string; offset: nu
       {d.hypotheses.length === 0 ? (
         <Panel>
           <Empty>
-            Ни одна причина базы знаний не подходит:{' '}
             {d.unexplained.length === 0
-              ? 'свидетельств нет.'
-              : 'свидетельства есть, но правила их не объясняют.'}
+              ? 'Свидетельств нет: хост в норме.'
+              : d.near.length > 0
+                ? 'Причина не названа: ни одно правило не сошлось полностью. Ниже — какие причины были близко и чего им не хватило.'
+                : 'Причина не названа: необычные записи есть, но ни одно правило не узнаёт в них свой ведущий симптом.'}
           </Empty>
         </Panel>
       ) : (
@@ -149,6 +151,18 @@ function Span({ d, host, offset, now }: { d: Diagnosis; host: string; offset: nu
             <Hypothesis h={h} rank={i + 1} host={host} offset={offset} />
           </Panel>
         ))
+      )}
+      {d.near.length > 0 && (
+        <Panel title="Почти подошли" aside="ведущий симптом найден, но правило не сошлось">
+          {d.near.map((h) => (
+            <details key={`${h.cause}${h.culprit}`} className={styles.near}>
+              <summary>
+                <b>{named(causeNames, h.cause)}</b> <Key>{h.cause}</Key> — {reasonText(h)}
+              </summary>
+              <Hypothesis h={h} host={host} offset={offset} />
+            </details>
+          ))}
+        </Panel>
       )}
       {d.advisories.length > 0 && (
         <Panel title="Рекомендации" aside="когда влияние есть, а причина не найдена">
@@ -202,4 +216,25 @@ function plural(n: number, one: string, few: string, many: string): string {
   if (m10 === 1 && m100 !== 11) return one
   if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few
   return many
+}
+
+// Why a cause whose leading symptom was seen is not named (ADR 0055).
+function reasonText(h: Diagnosis['near'][number]): string {
+  const missing = h.symptoms
+    .filter((s) => s.status === 'missing' && s.strength === 'characteristic')
+    .map((s) => s.names.map((n) => symptomName(s.kind, n)).join(' или '))
+  switch (h.reason) {
+    case 'no impact':
+      return 'никто не ждёт ресурс: необычно, но не вредит'
+    case 'characteristic missing':
+      return `нет обязательного симптома: ${missing.join(', ')}`
+    case 'contradicted':
+      return 'найден противоречащий симптом, причина исключена'
+    case 'only impact':
+      return 'видно только влияние, без признаков самой причины'
+    case 'below cut-off':
+      return `уверенность ${h.confidence.toFixed(2)} ниже порога 0.30`
+    default:
+      return h.reason
+  }
 }

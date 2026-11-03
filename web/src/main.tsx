@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createBrowserRouter, RouterProvider } from 'react-router'
+import Crash from './app/Crash'
 import Home from './app/Home'
 import Layout from './app/Layout'
 import Analysis from './pages/Analysis'
@@ -24,16 +25,22 @@ const router = createBrowserRouter([
   {
     path: '/hosts/:host',
     element: <Layout />,
+    errorElement: <Crash />,
     children: [
-      { index: true, element: <Overview /> },
-      { path: 'anomalies', element: <Anomalies /> },
-      { path: 'anomalies/:id', element: <Anomaly /> },
-      { path: 'analysis', element: <Analysis /> },
-      { path: 'collectors', element: <Collectors /> },
-      { path: 'metric', element: <Metric /> },
-      { path: 'knowledge', element: <Knowledge /> },
-      { path: 'knowledge/:cause', element: <Cause /> },
-      { path: '*', element: <NotFound /> },
+      {
+        errorElement: <Crash />,
+        children: [
+          { index: true, element: <Overview /> },
+          { path: 'anomalies', element: <Anomalies /> },
+          { path: 'anomalies/:id', element: <Anomaly /> },
+          { path: 'analysis', element: <Analysis /> },
+          { path: 'collectors', element: <Collectors /> },
+          { path: 'metric', element: <Metric /> },
+          { path: 'knowledge', element: <Knowledge /> },
+          { path: 'knowledge/:cause', element: <Cause /> },
+          { path: '*', element: <NotFound /> },
+        ],
+      },
     ],
   },
   { path: '*', element: <NotFound /> },

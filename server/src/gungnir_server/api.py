@@ -328,7 +328,7 @@ def diagnosis(
             "events": sum(1 for e in evidence.events if inside(e, evidence)),
             "processes": sum(1 for p in evidence.processes if inside(p, evidence)),
         }
-        for h in found["hypotheses"]:
+        for h in found["hypotheses"] + found["near"]:
             h["actions"] = [
                 {
                     "action": e.action,
