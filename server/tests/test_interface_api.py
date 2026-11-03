@@ -27,6 +27,12 @@ def test_a_sparse_rate_is_zero_between_samples_while_its_group_lives():
     assert 30 * minute not in times
 
 
+def test_a_group_memory_holds_its_value_between_samples():
+    minute = 60_000
+    held = charts.carry([[0, 5.0, 5.0, 5.0], [3 * minute, 7.0, 7.0, 7.0]], minute)
+    assert [p[1] for p in held] == [5.0, 5.0, 5.0, 7.0]
+
+
 def test_overview_derives_memory_size_and_lists_devices(client, token):
     body = batch(
         samples=[
@@ -117,6 +123,7 @@ def test_anomalies_list_and_a_missing_record(client, token):
 def test_diagnosis_of_a_quiet_interval_and_a_bounded_window(client, token):
     (found,) = client.get("/api/v1/hosts/laptop/diagnosis").json()
     assert found["hypotheses"] == [] and found["unexplained"] == []
+    assert found["evidence"] == {"records": 0, "events": 0, "processes": 0}
     too_long = client.get(
         "/api/v1/hosts/laptop/diagnosis", params={"since": iso(RECENT - 2 * 86_400_000), "until": iso(RECENT)}
     )

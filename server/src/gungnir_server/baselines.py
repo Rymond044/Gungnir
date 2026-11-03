@@ -291,5 +291,7 @@ class Book:
             return cap * p.capacity_floor_share
         if signal.endswith("_bytes"):
             share = p.group_memory_floor_share if frame.is_group(signal) else p.memory_floor_share
-            return max(abs(median), 1.0) * share
+            # A level that is zero at rest (pages under writeback) needs an
+            # absolute floor: a share of a zero median is no spread at all.
+            return max(max(abs(median), 1.0) * share, by_pattern(p.floors, signal) or ZERO)
         return by_pattern(p.floors, signal) or ZERO

@@ -57,11 +57,12 @@ def bucketed(
     bucket_s: int,
     step_s: float,
     raw_since: datetime,
-) -> list[Points]:
-    """Mean, min and max per bucket of each (signal, entity). Raw samples
-    serve buckets under a minute while they are kept, rollups the rest."""
+) -> tuple[list[Points], int]:
+    """Mean, min and max per bucket of each (signal, entity), and the bucket
+    length used. Raw samples serve buckets under a minute while they are
+    kept, rollups the rest, whose buckets are at least a minute."""
     if not keys:
-        return []
+        return [], bucket_s
     raw = bucket_s < 60 and since >= raw_since
     width = timedelta(seconds=max(bucket_s, 1 if raw else 60))
     if raw:
@@ -105,9 +106,10 @@ def bucketed(
             lo = min(lo, 0.0)
         found[(signal, entity)].append([b.timestamp() * 1000, mean, lo, hi])
     for key, pts in found.items():
-        if frame.is_group(key[0]) and key[0] not in frame.CARRIED:
-            found[key] = fill_zeros(pts, width.total_seconds() * 1000)
-    return [Points(s, e, found[(s, e)]) for s, e in keys]
+        if frame.is_group(key[0]):
+            fill = carry if key[0] in frame.CARRIED else fill_zeros
+            found[key] = fill(pts, width.total_seconds() * 1000)
+    return [Points(s, e, found[(s, e)]) for s, e in keys], int(width.total_seconds())
 
 
 def fill_zeros(points: list[list[float]], width_ms: float) -> list[list[float]]:
@@ -121,6 +123,22 @@ def fill_zeros(points: list[list[float]], width_ms: float) -> list[list[float]]:
         t = last[0] + width_ms
         while t < p[0] and t - last[0] <= alive:
             out.append([t, 0.0, 0.0, 0.0])
+            t += width_ms
+        out.append(p)
+    return out
+
+
+def carry(points: list[list[float]], width_ms: float) -> list[list[float]]:
+    """A group's memory is sent only when it changed (ADR 0017): between
+    samples, while the group lives, it holds its last value."""
+    if not points:
+        return points
+    alive = FULL_PERIOD.total_seconds() * 1000
+    out = [points[0]]
+    for last, p in pairwise(points):
+        t = last[0] + width_ms
+        while t < p[0] and t - last[0] <= alive:
+            out.append([t, last[1], last[1], last[1]])
             t += width_ms
         out.append(p)
     return out

@@ -25,6 +25,7 @@ from gungnir_server import (
     telemetry,
 )
 from gungnir_server.db import migrate, open_pool
+from gungnir_server.evidence import inside
 from gungnir_server.hosts import Host
 from gungnir_server.inference import RuleEngine, as_dict
 from gungnir_server.ingest import Batch
@@ -214,7 +215,7 @@ def chart(
     step = request.app.state.params.step_s
     bucket = charts.bucket_for(since, until, points, step)
     raw_since = datetime.now(UTC) - timedelta(days=maintenance.RAW_DAYS)
-    found = charts.bucketed(conn, host, keys, since, until, bucket, step, raw_since)
+    found, bucket = charts.bucketed(conn, host, keys, since, until, bucket, step, raw_since)
     return {"since": since, "until": until, "bucket_s": bucket, "series": found}
 
 
@@ -318,7 +319,15 @@ def diagnosis(
         spans = [("", since, until)]
     out = []
     for label, a, b in spans:
-        found = as_dict(state.engine.diagnose(gather.evidence(conn, host, state.base, a, b, replay)))
+        evidence = gather.evidence(conn, host, state.base, a, b, replay)
+        found = as_dict(state.engine.diagnose(evidence))
+        # What the inference engine was given, so that an empty answer can be told
+        # from an interval without evidence.
+        found["evidence"] = {
+            "records": sum(1 for r in evidence.records if inside(r, evidence)),
+            "events": sum(1 for e in evidence.events if inside(e, evidence)),
+            "processes": sum(1 for p in evidence.processes if inside(p, evidence)),
+        }
         for h in found["hypotheses"]:
             h["actions"] = [
                 {
