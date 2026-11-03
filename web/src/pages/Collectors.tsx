@@ -5,6 +5,7 @@ import ui from '../components/ui.module.css'
 import { age, dayClock, ms } from '../lib/format'
 import { collectorNames, collectorStates, factNames, named } from '../lib/names'
 import { useNow } from '../lib/useNow'
+import Entity from '../components/Entity'
 
 const TONE = { preferred: 'green', fallback: 'ochre', disabled: 'red' } as const
 
@@ -79,7 +80,9 @@ export default function Collectors() {
                 <td>
                   {named(factNames, f.name)} <Key>{f.name}</Key>
                 </td>
-                <td className="mono">{f.entity}</td>
+                <td>
+                  <Entity entity={f.entity} />
+                </td>
                 <td className="mono">{f.value}</td>
                 <td className="muted">{age((now - ms(f.ts)) / 1000)}</td>
               </tr>

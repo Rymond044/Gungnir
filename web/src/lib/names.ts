@@ -170,6 +170,31 @@ export const resourceNames: Record<string, string> = {
   swap: 'Swap',
 }
 
+export const entityTypeNames: Record<string, string> = {
+  block_device: 'блочное устройство',
+  control_group: 'группа (cgroup)',
+  host: 'хост',
+  mount_point: 'точка монтирования',
+  process: 'процесс',
+}
+
+export const unitNames: Record<string, string> = {
+  '1': 'доля',
+  '1/s': 'в секунду',
+  bytes: 'байты',
+  'bytes/s': 'байт/с',
+  cores: 'ядра',
+  degC: '°C',
+  events: 'события',
+  kills: 'завершения',
+  ms: 'мс',
+  'pages/s': 'страниц/с',
+  processes: 'процессы',
+  requests: 'запросы',
+  tasks: 'задачи',
+  threads: 'потоки',
+}
+
 export const domainNames: Record<string, string> = {
   disk: 'Диск и ФС',
   memory: 'Память',

@@ -13,6 +13,7 @@ import {
   classNames,
   directionNames,
   domainNames,
+  entityTypeNames,
   eventNames,
   factNames,
   gradeNames,
@@ -24,6 +25,7 @@ import {
   resourceNames,
   roleNames,
   signalNames,
+  unitNames,
 } from '../lib/names'
 import styles from './Knowledge.module.css'
 
@@ -228,8 +230,8 @@ function Signals({ k }: { k: KB }) {
                       </div>
                     )}
                   </td>
-                  <td className="mono">{s.entity}</td>
-                  <td className="mono">{s.unit}</td>
+                  <td>{named(entityTypeNames, s.entity)}</td>
+                  <td>{named(unitNames, s.unit)}</td>
                   <td>
                     {s.comment && <div>{s.comment}</div>}
                     <Source source={s.source} grade={s.grade} />
