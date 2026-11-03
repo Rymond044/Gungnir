@@ -89,7 +89,9 @@ export function duration(seconds: number): string {
   return `${Math.floor(s / 86400)}${nbsp}д ${Math.floor((s % 86400) / 3600)}${nbsp}ч`
 }
 
-export function age(seconds: number): string {
+export function age(raw: number): string {
+  // The browser's clock may run a little behind the host's.
+  const seconds = Math.max(0, raw)
   if (seconds < 90) return `${Math.round(seconds)}${nbsp}с назад`
   if (seconds < 90 * 60) return `${Math.round(seconds / 60)}${nbsp}мин назад`
   if (seconds < 48 * 3600) return `${Math.round(seconds / 3600)}${nbsp}ч назад`
