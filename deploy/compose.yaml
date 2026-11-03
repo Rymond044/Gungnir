@@ -1,5 +1,6 @@
-# Server and its database. Both ports are bound to localhost only: agents on
-# other machines need TLS first (NFR-8, docs/open-questions.md).
+# Server, its database and the web interface. Every port is bound to
+# localhost only: agents on other machines need TLS first, and the
+# interface has no login yet (NFR-8, docs/open-questions.md).
 name: gungnir
 
 services:
@@ -34,6 +35,14 @@ services:
         condition: service_healthy
     ports:
       - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+
+  web:
+    build: ../web
+    depends_on:
+      - server
+    ports:
+      - "127.0.0.1:3000:8080"
     restart: unless-stopped
 
 volumes:
