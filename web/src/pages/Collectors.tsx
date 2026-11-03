@@ -56,7 +56,7 @@ export default function Collectors() {
                     {c.origin ?? '—'}
                   </td>
                   <td className="muted" style={{ overflowWrap: 'anywhere' }}>
-                    {c.reason ?? ''}
+                    {c.reason ? osError(c.reason) : ''}
                   </td>
                 </tr>
               ))}
@@ -92,4 +92,17 @@ export default function Collectors() {
       </Panel>
     </div>
   )
+}
+
+// The agent passes the system's own message on; the common ones in words,
+// the path and the error number kept.
+const OS_ERRORS: [RegExp, string][] = [
+  [/No such file or directory/, 'нет такого файла'],
+  [/Permission denied/, 'нет прав'],
+  [/Operation not permitted/, 'операция не разрешена'],
+  [/Not a directory/, 'это не каталог'],
+]
+
+function osError(reason: string): string {
+  return OS_ERRORS.reduce((text, [pattern, words]) => text.replace(pattern, words), reason)
 }
