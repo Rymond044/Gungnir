@@ -1,7 +1,7 @@
 // What a record was judged against, in words (server display.against).
 
 import type { Basis } from '../api/types'
-import { formatValue } from './format'
+import { decimal, formatValue } from './format'
 import { classNames, named } from './names'
 
 export function against(signal: string, b: Basis): string {
@@ -10,7 +10,7 @@ export function against(signal: string, b: Basis): string {
     case 'baseline': {
       let text = `норма типа «${named(classNames, b.class === '*' ? 'unknown' : b.class)}»: медиана ${v(b.median)}, MAD ${v(b.mad)}`
       if (b.factor !== undefined && Math.abs(b.factor - 1) > 0.005)
-        text += `, поправка на питание ×${b.factor.toFixed(2)} (${b.power})`
+        text += `, поправка на питание ×${decimal(b.factor, 2)} (${b.power})`
       if (b.floor) text += ', разброс поднят до порога фонового сброса'
       return text
     }
@@ -27,7 +27,7 @@ export function against(signal: string, b: Basis): string {
       return `рост: часовые минимумы росли ${hours} ч подряд, на ${v(b.rise)} (нужно не меньше ${v(b.needed)})`
     }
     case 'forest':
-      return `Isolation Forest типа «${named(classNames, b.class)}»: признак ${b.feature}, z ${(b.z ?? 0).toFixed(1)}`
+      return `Isolation Forest типа «${named(classNames, b.class)}»: признак ${b.feature}, z ${decimal(b.z ?? 0, 1)}`
     default:
       return '—'
   }

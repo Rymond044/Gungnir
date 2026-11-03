@@ -3,7 +3,7 @@
 import type { RecordRow } from '../api/types'
 import type { Interval, LimitLine } from '../components/Chart'
 import { detectorName, kindNames } from './names'
-import { dayClock, duration, ms } from './format'
+import { dayClock, decimal, duration, ms } from './format'
 
 export function seriesKey(s: { signal: string; entity?: string }): string {
   return `${s.signal}@${s.entity ?? 'host'}`
@@ -62,11 +62,11 @@ export function recordLimit(r: RecordRow): LimitLine | null {
 /** What the score of a record means: |z| against a baseline, a share of a limit otherwise. */
 export function scoreText(r: Pick<RecordRow, 'detector' | 'peak_score' | 'baseline'>): string {
   const score = r.peak_score
-  const s = score > 999 ? '>999' : score.toFixed(score < 10 ? 2 : 1)
+  const s = score > 999 ? '>999' : decimal(score, score < 10 ? 2 : 1)
   if (r.detector.startsWith('robust') && r.baseline.basis === 'baseline') return `|z| = ${s}`
-  if (r.detector === 'iforest') return `${s} × порога леса`
-  if (r.detector === 'growth') return `рост ${s} × нужного`
-  return `${s} × предела`
+  if (r.detector === 'iforest') return `×${s} порога леса`
+  if (r.detector === 'growth') return `×${s} минимума роста`
+  return `×${s} предела`
 }
 
 /** A link to the large view of these series (`pages/Metric.tsx`). */

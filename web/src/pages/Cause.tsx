@@ -3,7 +3,7 @@ import { useKnowledge } from '../api/hooks'
 import type { RuleSymptom } from '../api/types'
 import { Chip, Empty, Failure, Key, Loading, Panel, Source, type Tone } from '../components/ui'
 import ui from '../components/ui.module.css'
-import { formatValue } from '../lib/format'
+import { formatNumber, formatValue } from '../lib/format'
 import { similar } from '../lib/knowledge'
 import {
   actionNames,
@@ -161,7 +161,7 @@ export default function Cause() {
                 <span className="muted">
                   {p.signal
                     ? `до ${Math.round(p.share * 100)} % от «${named(signalNames, p.signal)}» виновника`
-                    : `вес ×${p.share}`}
+                    : `вес ×${formatNumber(p.share)}`}
                   {p.when ? ` · если ${named(signalNames, p.when)}` : ''} · помогает{' '}
                   {likelihoodNames[p.effectiveness] ?? p.effectiveness}
                 </span>

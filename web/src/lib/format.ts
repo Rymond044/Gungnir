@@ -100,6 +100,11 @@ export function percent(share: number): string {
   return `${Math.round(share * 100)}${nbsp}%`
 }
 
+/** A number with a fixed count of decimals and the Russian decimal comma. */
+export function decimal(x: number, digits: number): string {
+  return x.toLocaleString('ru-RU', { minimumFractionDigits: digits, maximumFractionDigits: digits })
+}
+
 export function confidence(c: number): string {
-  return c.toFixed(2)
+  return decimal(c, 2)
 }

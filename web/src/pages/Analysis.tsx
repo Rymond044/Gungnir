@@ -5,7 +5,7 @@ import Evidence from '../components/Evidence'
 import Hypothesis from '../components/Hypothesis'
 import { Empty, Failure, Key, Loading, Panel, Segmented, Source } from '../components/ui'
 import ui from '../components/ui.module.css'
-import { dayClock, ms } from '../lib/format'
+import { confidence, dayClock, ms } from '../lib/format'
 import { lastInterval } from '../lib/range'
 import { causeNames, named, resourceNames, symptomName } from '../lib/names'
 import { useNow } from '../lib/useNow'
@@ -233,7 +233,7 @@ function reasonText(h: Diagnosis['near'][number]): string {
     case 'only impact':
       return 'видно только влияние, без признаков самой причины'
     case 'below cut-off':
-      return `уверенность ${h.confidence.toFixed(2)} ниже порога 0.30`
+      return `уверенность ${confidence(h.confidence)} ниже порога ${confidence(0.3)}`
     default:
       return h.reason
   }

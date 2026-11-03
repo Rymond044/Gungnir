@@ -5,7 +5,7 @@ import { useKnowledge } from '../api/hooks'
 import type { Knowledge as KB } from '../api/types'
 import { Chip, Empty, Failure, Key, Loading, Panel, Source } from '../components/ui'
 import ui from '../components/ui.module.css'
-import { formatValue } from '../lib/format'
+import { formatNumber, formatValue } from '../lib/format'
 import { DOMAINS } from '../lib/knowledge'
 import {
   actionNames,
@@ -353,7 +353,7 @@ function Actions({ k, host }: { k: KB; host: string }) {
                   <td>
                     {p.signal
                       ? `${Math.round(p.share * 100)} % от ${named(signalNames, p.signal)}`
-                      : `вес ×${p.share}`}
+                      : `вес ×${formatNumber(p.share)}`}
                     {p.when && <div className="muted">если {named(signalNames, p.when)}</div>}
                   </td>
                   <td>{likelihoodNames[p.effectiveness] ?? p.effectiveness}</td>

@@ -1,6 +1,6 @@
 import { Link } from 'react-router'
 import type { FoundSymptom, Hypothesis as H } from '../api/types'
-import { confidence, dayClock } from '../lib/format'
+import { confidence, dayClock, formatNumber } from '../lib/format'
 import {
   actionNames,
   causeNames,
@@ -171,7 +171,7 @@ export default function Hypothesis({
                 ·{' '}
                 {a.signal
                   ? `до ${Math.round(a.share * 100)} % от текущего «${named(signalNames, a.signal)}» виновника`
-                  : `вес ×${a.share}`}
+                  : `вес ×${formatNumber(a.share)}`}
                 {a.when ? ` · если ${named(signalNames, a.when)}` : ''} · помогает{' '}
                 {likelihoodNames[a.effectiveness] ?? a.effectiveness}
               </span>
