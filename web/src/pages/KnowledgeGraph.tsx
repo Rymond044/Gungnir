@@ -12,7 +12,7 @@ import { causeNames, domainNames, named, strengthNames, symptomKindNames, sympto
 type Domain = (typeof DOMAINS)[number] | 'all'
 
 const NODE_W = 230
-const NODE_H = 40
+const NODE_H = 48
 
 const EDGE_STYLE: Record<Strength, React.CSSProperties> = {
   characteristic: { stroke: 'var(--blue)', strokeWidth: 2 },
@@ -31,7 +31,7 @@ interface Built {
 function build(k: Knowledge, domain: Domain): Built {
   const rules = k.rules.filter((r) => domain === 'all' || r.file === domain)
   const g = new dagre.graphlib.Graph()
-  g.setGraph({ rankdir: 'LR', nodesep: 10, ranksep: 220, marginx: 10, marginy: 10 })
+  g.setGraph({ rankdir: 'LR', nodesep: 14, ranksep: 220, marginx: 10, marginy: 10 })
   g.setDefaultEdgeLabel(() => ({}))
   const symptoms = new Map<string, { kind: string; name: string }>()
   const edges: Edge[] = []
@@ -49,8 +49,7 @@ function build(k: Knowledge, domain: Domain): Built {
           source: `cause:${r.cause}`,
           target: key,
           data: { strength: s.strength, leading: s.leading },
-          style: EDGE_STYLE[s.strength],
-          animated: s.leading,
+          style: s.leading ? { ...EDGE_STYLE[s.strength], strokeWidth: 3.2 } : EDGE_STYLE[s.strength],
         })
       }
     }
@@ -70,6 +69,10 @@ function build(k: Knowledge, domain: Domain): Built {
         type: 'input',
         style: {
           width: NODE_W,
+          height: NODE_H,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           background: 'var(--side)',
           color: 'var(--side-text)',
           border: 0,
@@ -88,6 +91,10 @@ function build(k: Knowledge, domain: Domain): Built {
         type: 'output',
         style: {
           width: NODE_W,
+          height: NODE_H,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           background:
             s.kind === 'anomaly'
               ? 'var(--panel)'
@@ -153,15 +160,14 @@ export default function KnowledgeGraph({ k, host }: { k: Knowledge; host: string
               {strengthNames[s]}
             </span>
           ))}
-          <span>движущаяся линия — ведущий симптом</span>
+          <span>толстая линия — ведущий симптом</span>
         </span>
       </div>
       <div className={ui.row}>
         <div
           style={{
             flex: '3 1 560px',
-            height: '72vh',
-            minHeight: 480,
+            height: Math.max(480, built.height + 40),
             background: 'var(--panel)',
             border: '1px solid var(--line)',
             borderRadius: 10,
@@ -171,8 +177,9 @@ export default function KnowledgeGraph({ k, host }: { k: Knowledge; host: string
             key={domain}
             nodes={nodes}
             edges={edges}
-            fitView
-            minZoom={0.1}
+            // Full size: the page scrolls through a tall graph instead of shrinking it.
+            defaultViewport={{ x: 20, y: 10, zoom: 1 }}
+            minZoom={0.2}
             nodesDraggable={false}
             nodesConnectable={false}
             onNodeClick={(_, n) => setSelected(n.id === selected ? null : n.id)}
