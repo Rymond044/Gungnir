@@ -1,5 +1,5 @@
-"""Reading anomaly and impact records back, for the command line and later
-for the incident view."""
+"""Reading anomaly and impact records back, for the command line and the
+interface."""
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -28,6 +28,15 @@ class RecordRow:
     episode: int | None
     # Medians of the entity's context signals over the interval.
     context: dict | None
+    # Expected behavior explains it (ADR 0002); None before S5 judged it.
+    expected: bool | None = None
+
+
+COLUMNS = (
+    "SELECT a.id, a.kind, a.detector, a.level, s.signal, s.entity, a.started_at, a.ended_at,"
+    " a.direction, a.peak_score, a.value, a.workload_class, a.power_profile, a.baseline, a.episode,"
+    " a.context, a.expected FROM anomalies a JOIN series s ON s.id = a.series_id"
+)
 
 
 def records_of(
@@ -38,18 +47,39 @@ def records_of(
     open_only: bool = False,
     detector: str | None = None,
     limit: int = 50,
+    until: datetime | None = None,
+    kind: str | None = None,
+    signal: str | None = None,
+    entity: str | None = None,
 ) -> list[RecordRow]:
-    """Records that overlap [since, now), newest first; live ones unless a
+    """Records that overlap [since, until), newest first; live ones unless a
     replay is named."""
     rows = conn.execute(
-        "SELECT a.id, a.kind, a.detector, a.level, s.signal, s.entity, a.started_at, a.ended_at,"
-        " a.direction, a.peak_score, a.value, a.workload_class, a.power_profile, a.baseline, a.episode,"
-        " a.context FROM anomalies a JOIN series s ON s.id = a.series_id"
-        " WHERE a.host_id = %(h)s AND a.replay_id IS NOT DISTINCT FROM %(r)s"
+        COLUMNS + " WHERE a.host_id = %(h)s AND a.replay_id IS NOT DISTINCT FROM %(r)s"
         " AND (a.ended_at IS NULL OR a.ended_at >= %(since)s)"
+        " AND (%(until)s::timestamptz IS NULL OR a.started_at < %(until)s)"
         " AND (NOT %(open)s OR a.ended_at IS NULL)"
         " AND (%(det)s::text IS NULL OR a.detector LIKE %(det)s || '%%')"
+        " AND (%(kind)s::text IS NULL OR a.kind = %(kind)s)"
+        " AND (%(sig)s::text IS NULL OR s.signal = %(sig)s)"
+        " AND (%(ent)s::text IS NULL OR s.entity = %(ent)s)"
         " ORDER BY a.started_at DESC LIMIT %(limit)s",
-        {"h": host.id, "r": replay_id, "since": since, "open": open_only, "det": detector, "limit": limit},
+        {
+            "h": host.id,
+            "r": replay_id,
+            "since": since,
+            "until": until,
+            "open": open_only,
+            "det": detector,
+            "kind": kind,
+            "sig": signal,
+            "ent": entity,
+            "limit": limit,
+        },
     ).fetchall()
     return [RecordRow(*row) for row in rows]
+
+
+def record(conn: psycopg.Connection, host: Host, record_id: int) -> RecordRow | None:
+    row = conn.execute(COLUMNS + " WHERE a.host_id = %s AND a.id = %s", (host.id, record_id)).fetchone()
+    return RecordRow(*row) if row else None

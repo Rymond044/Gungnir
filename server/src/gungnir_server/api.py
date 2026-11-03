@@ -10,9 +10,23 @@ from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, R
 from fastapi.responses import JSONResponse
 from psycopg_pool import ConnectionPool
 
-from gungnir_server import base, hosts, maintenance, pipeline, telemetry
+from gungnir_server import (
+    anomalies,
+    base,
+    catalog,
+    charts,
+    gather,
+    hosts,
+    labels,
+    maintenance,
+    overview,
+    params,
+    pipeline,
+    telemetry,
+)
 from gungnir_server.db import migrate, open_pool
 from gungnir_server.hosts import Host
+from gungnir_server.inference import RuleEngine, as_dict
 from gungnir_server.ingest import Batch
 
 # A full batch of 10 000 samples is about 1 MB of JSON; 5 000 process rows
@@ -24,7 +38,11 @@ def create_app(pool: ConnectionPool | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         # A broken knowledge base stops the server here, never silently later.
-        base.load()
+        app.state.base = base.load()
+        app.state.params = params.load()
+        app.state.engine = RuleEngine(app.state.base, app.state.params)
+        app.state.norms = charts.Norms(app.state.params)
+        app.state.catalog = None
         own = pool is None
         app.state.pool = open_pool() if own else pool
         app.state.series = telemetry.SeriesIds()
@@ -164,3 +182,165 @@ def processes(host: NamedHost, conn: Conn, at: datetime | None = None) -> list[t
 @router.get("/hosts/{name}/facts")
 def facts(host: NamedHost, conn: Conn) -> list[telemetry.FactRow]:
     return telemetry.latest_facts(conn, host)
+
+
+# Reads for the web interface (slice S7).
+
+MAX_DIAGNOSIS = timedelta(hours=24)
+
+
+@router.get("/hosts/{name}/overview")
+def host_overview(host: NamedHost, conn: Conn) -> overview.Overview:
+    return overview.of(conn, host, datetime.now(UTC))
+
+
+@router.get("/hosts/{name}/chart")
+def chart(
+    host: NamedHost,
+    conn: Conn,
+    request: Request,
+    series: Annotated[list[str], Query(description="signal@entity; entity defaults to host")],
+    since: datetime | None = None,
+    until: datetime | None = None,
+    points: Annotated[int, Query(ge=2, le=2000)] = 600,
+) -> dict:
+    """Series bucketed to at most `points` points: [ms, mean, min, max]."""
+    if len(series) > charts.MAX_SERIES:
+        raise HTTPException(422, f"at most {charts.MAX_SERIES} series")
+    since, until = window(since, until, timedelta(hours=1))
+    if until <= since:
+        raise HTTPException(422, "until must be after since")
+    keys = [(s.partition("@")[0], s.partition("@")[2] or "host") for s in series]
+    step = request.app.state.params.step_s
+    bucket = charts.bucket_for(since, until, points, step)
+    raw_since = datetime.now(UTC) - timedelta(days=maintenance.RAW_DAYS)
+    found = charts.bucketed(conn, host, keys, since, until, bucket, step, raw_since)
+    return {"since": since, "until": until, "bucket_s": bucket, "series": found}
+
+
+@router.get("/hosts/{name}/norm")
+def norm(
+    host: NamedHost,
+    conn: Conn,
+    request: Request,
+    signal: str,
+    entity: str = "host",
+    since: datetime | None = None,
+    until: datetime | None = None,
+) -> charts.Norm:
+    """The band the robust detector judges the series normal in, for each
+    workload class and power profile of the interval, and its fixed limits."""
+    since, until = window(since, until, timedelta(hours=1))
+    found = request.app.state.norms.of(conn, host, signal, entity, since, until, datetime.now(UTC))
+    if found is None:
+        raise HTTPException(404, f"no series {signal} of {entity}")
+    return found
+
+
+@router.get("/hosts/{name}/context")
+def context(
+    host: NamedHost, conn: Conn, since: datetime | None = None, until: datetime | None = None
+) -> list[charts.Span]:
+    """Workload class and power profile over the interval."""
+    since, until = window(since, until, timedelta(hours=1))
+    return charts.context_spans(conn, host, since, until)
+
+
+@router.get("/hosts/{name}/anomalies")
+def list_anomalies(
+    host: NamedHost,
+    conn: Conn,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    open: bool = False,
+    kind: str | None = None,
+    detector: str | None = None,
+    signal: str | None = None,
+    entity: str | None = None,
+    replay: int | None = None,
+    limit: Annotated[int, Query(ge=1, le=5_000)] = 500,
+) -> list[anomalies.RecordRow]:
+    """Records that overlap the interval, newest first."""
+    since, until = window(since, until, timedelta(days=1))
+    return anomalies.records_of(conn, host, since, replay, open, detector, limit, until, kind, signal, entity)
+
+
+@router.get("/hosts/{name}/anomalies/{record_id}")
+def one_anomaly(host: NamedHost, conn: Conn, record_id: int) -> anomalies.RecordRow:
+    found = anomalies.record(conn, host, record_id)
+    if found is None:
+        raise HTTPException(404, f"no record {record_id}")
+    return found
+
+
+@router.get("/hosts/{name}/runs")
+def runs(host: NamedHost, conn: Conn) -> list[dict]:
+    """Labeled runs (calibration and scenarios) with their phases."""
+    out: dict[str, dict] = {}
+    for ph in labels.phases_of(conn, host):
+        run = out.setdefault(ph.run, {"run": ph.run, "kind": ph.kind, "phases": []})
+        run["phases"].append(
+            {
+                "phase": ph.phase,
+                "since": ph.since,
+                "until": ph.until,
+                "normal": ph.normal,
+                "expected": ph.expected,
+                "scope": ph.scope,
+            }
+        )
+    return sorted(out.values(), key=lambda r: r["phases"][0]["since"], reverse=True)
+
+
+@router.get("/hosts/{name}/diagnosis")
+def diagnosis(
+    host: NamedHost,
+    conn: Conn,
+    request: Request,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    run: str | None = None,
+    replay: int | None = None,
+) -> list[dict]:
+    """Ranked hypotheses of an interval, or of each phase of a labeled run
+    that is not normal, as `gungnir-server diagnose` gives them; each
+    hypothesis lists the actions the policy holds for its cause."""
+    state = request.app.state
+    if run:
+        phases = [ph for ph in labels.phases_of(conn, host, run=run) if not ph.normal]
+        if not phases:
+            raise HTTPException(404, f"run '{run}' has no phase that is not normal")
+        spans = [(ph.phase, ph.since, ph.until + state.params.label_tail) for ph in phases]
+    else:
+        since, until = window(since, until, timedelta(minutes=30))
+        if until <= since or until - since > MAX_DIAGNOSIS:
+            raise HTTPException(422, "the interval must be positive and at most 24 hours")
+        spans = [("", since, until)]
+    out = []
+    for label, a, b in spans:
+        found = as_dict(state.engine.diagnose(gather.evidence(conn, host, state.base, a, b, replay)))
+        for h in found["hypotheses"]:
+            h["actions"] = [
+                {
+                    "action": e.action,
+                    "when": e.when,
+                    "signal": e.signal,
+                    "share": e.share,
+                    "effectiveness": e.effectiveness,
+                    "source": e.source,
+                }
+                for e in state.base.policy.for_cause(h["cause"])
+            ]
+        out.append({"label": label, "since": a, "until": b, **found})
+    return out
+
+
+@router.get("/knowledge")
+def knowledge_base(request: Request, host: str | None = None) -> dict:
+    """The whole knowledge base, with labels and provenance."""
+    state = request.app.state
+    if host:
+        return catalog.document(state.base, host)
+    if state.catalog is None:
+        state.catalog = catalog.document(state.base)
+    return state.catalog
