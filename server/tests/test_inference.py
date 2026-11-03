@@ -302,3 +302,18 @@ def test_an_event_keeps_its_kind_and_type_apart_in_json():
         "at": 1.0,
         "message": "Out of memory",
     }
+
+
+def test_a_writer_that_hurts_nobody_is_a_near_miss_with_its_reason(engine):
+    from gungnir_server.inference import NO_IMPACT, as_dict
+
+    quiet = copy()[:3]  # the writes, without the reader waiting
+    d = engine.diagnose(ev(*quiet))
+    assert d.hypotheses == ()
+    near = {h.cause: h for h in d.near}
+    assert near["bulk_sequential_writer"].rejected == NO_IMPACT
+    assert as_dict(d)["near"][0]["reason"] == NO_IMPACT
+    # The same copy with the reader waiting is a hypothesis and no near miss.
+    hurt = engine.diagnose(ev(*copy()))
+    assert "bulk_sequential_writer" in hurt.causes()
+    assert "bulk_sequential_writer" not in {h.cause for h in hurt.near}

@@ -36,6 +36,14 @@ if TYPE_CHECKING:
     from gungnir_server.base import Base
 
 MATCHED, MISSING, PENDING, UNOBSERVABLE = "matched", "missing", "pending", "unobservable"
+# Why a rule whose leading symptom was seen gives no hypothesis (ADR 0055).
+CONTRADICTED = "contradicted"
+CHARACTERISTIC_MISSING = "characteristic missing"
+NO_IMPACT = "no impact"
+ONLY_IMPACT = "only impact"
+BELOW_CUTOFF = "below cut-off"
+# Near misses shown at most.
+NEAR = 5
 # A contradicting symptom that was looked for and not seen.
 ABSENT = "absent"
 # Order in which symptoms take evidence: the leading symptom, then by strength.
@@ -75,6 +83,8 @@ class Hypothesis:
     rule: Rule
     # The culprit's workload class explains its activity (ADR 0002).
     expected: bool = False
+    # Why the gate refused it; None for a hypothesis (ADR 0055).
+    rejected: str | None = None
 
     def with_status(self, status: str) -> list[Found]:
         return [f for f in self.found if f.status == status]
@@ -90,6 +100,9 @@ class Diagnosis:
     expected: tuple[str, ...]
     # By the impacted resource, when no hypothesis is shown.
     advisories: tuple[Advisory, ...]
+    # Causes whose leading symptom was seen but that the gate refused or
+    # the cut-off dropped, each with the reason (ADR 0055).
+    near: tuple[Hypothesis, ...] = ()
 
     def causes(self) -> list[str]:
         """Causes in rank order, each once."""
@@ -112,8 +125,9 @@ class RuleEngine:
         found = [h for rule in self.base.rules.values() for h in self._hypotheses(rule, ev)]
         # Evidence before the interval only supports what reaches into it.
         current = [h for h in found if any(inside(f.item, ev) for f in h.with_status(MATCHED))]
+        near = self._near(current)
         shown = sorted(
-            (h for h in current if h.confidence >= self.cutoff),
+            (h for h in current if h.rejected is None and h.confidence >= self.cutoff),
             key=lambda h: (
                 -h.confidence,
                 -len(h.with_status(MATCHED)),
@@ -129,7 +143,31 @@ class RuleEngine:
         unexplained += [e for e in ev.events if e not in used and inside(e, ev)]
         advisories = () if shown else self._advisories(ev)
         expected = sorted(r.id for r in ev.records if r.id in explained and inside(r, ev))
-        return Diagnosis(tuple(shown), tuple(unexplained), tuple(expected), advisories)
+        return Diagnosis(tuple(shown), tuple(unexplained), tuple(expected), advisories, near)
+
+    def _near(self, current: list[Hypothesis]) -> tuple[Hypothesis, ...]:
+        """The best refused candidate of each cause whose leading symptom was
+        seen and that gives no hypothesis, most matched symptoms first."""
+        best: dict[str, Hypothesis] = {}
+        for h in current:
+            if h.rejected is None and h.confidence >= self.cutoff:
+                continue
+            if not any(f.symptom.leading for f in h.with_status(MATCHED)):
+                continue
+            if h.rejected is None:
+                h = replace(h, rejected=BELOW_CUTOFF)
+            key = (len(h.with_status(MATCHED)), h.confidence)
+            if h.cause not in best or key > (
+                len(best[h.cause].with_status(MATCHED)),
+                best[h.cause].confidence,
+            ):
+                best[h.cause] = h
+        accepted = {h.cause for h in current if h.rejected is None and h.confidence >= self.cutoff}
+        ranked = sorted(
+            (h for c, h in best.items() if c not in accepted),
+            key=lambda h: (-len(h.with_status(MATCHED)), -h.confidence, h.cause),
+        )
+        return tuple(ranked[:NEAR])
 
     # Binding (ADR 0044)
 
@@ -144,10 +182,10 @@ class RuleEngine:
             # named only when its own evidence fits this hypothesis.
             if hypothesis and (culprit is None or _culprit_items(hypothesis)):
                 out.append(hypothesis)
-        if not out and None not in candidates:
+        if not any(h.rejected is None for h in out) and None not in candidates:
             hypothesis = self._bound(rule, ev, Binding(None, device, filesystem))
-            if hypothesis:
-                out.append(hypothesis)
+            if hypothesis and hypothesis.rejected is None:
+                out = [h for h in out if h.rejected is None] + [hypothesis]
         return out
 
     def _bound(self, rule: Rule, ev: Evidence, b: Binding) -> Hypothesis | None:
@@ -242,7 +280,12 @@ class RuleEngine:
         best = None
         for t0 in starts:
             hypothesis = self._assign(rule, ev, b, t0, has_leading)
-            if hypothesis and (best is None or hypothesis.confidence > best.confidence):
+            # A hypothesis beats a refused candidate whatever their confidence.
+            if hypothesis and (
+                best is None
+                or (hypothesis.rejected is None, hypothesis.confidence)
+                > (best.rejected is None, best.confidence)
+            ):
                 best = hypothesis
         return best
 
@@ -250,8 +293,10 @@ class RuleEngine:
         self, rule: Rule, ev: Evidence, b: Binding, t0: float, has_leading: bool
     ) -> Hypothesis | None:
         """Gives each symptom the earliest unused item inside its
-        window: the leading symptom first, then by strength."""
+        window: the leading symptom first, then by strength. A candidate the
+        gate refuses comes back marked with the reason."""
         used: set = set()
+        contradicted = False
         outcome: dict[int, Found] = {}
         order = sorted(
             range(len(rule.symptoms)),
@@ -275,7 +320,7 @@ class RuleEngine:
                 key=at,
             )
             if fits and m.strength == CONTRADICTING:
-                return None
+                contradicted = True
             if fits:
                 used.add(fits[0])
                 outcome[i] = Found(m, MATCHED, fits[0])
@@ -287,20 +332,29 @@ class RuleEngine:
                 outcome[i] = Found(m, ABSENT if m.strength == CONTRADICTING else MISSING)
         found = tuple(outcome[i] for i in range(len(rule.symptoms)))
 
-        if any(f.status == MISSING and f.symptom.strength == "characteristic" for f in found):
-            return None
         impact = [f for f in found if f.symptom.impact]
-        if not any(f.status == MATCHED for f in impact) and not all(f.status == UNOBSERVABLE for f in impact):
-            return None
+        rejected = None
+        if contradicted:
+            rejected = CONTRADICTED
+        # Nobody waiting is the reason an operator needs first.
+        elif not any(f.status == MATCHED for f in impact) and not all(
+            f.status == UNOBSERVABLE for f in impact
+        ):
+            rejected = NO_IMPACT
+        elif any(f.status == MISSING and f.symptom.strength == "characteristic" for f in found):
+            rejected = CHARACTERISTIC_MISSING
         # Without its leading symptom a cause must still show something besides the
         # impact, or any impact of the resource would name it.
-        if not has_leading and not any(f.status == MATCHED and not f.symptom.impact for f in found):
+        elif not has_leading and not any(f.status == MATCHED and not f.symptom.impact for f in found):
+            rejected = ONLY_IMPACT
+        if rejected and not has_leading:
             return None
-        support = 1 - math.prod(1 - self._weight(f) for f in found if f.status == MATCHED)
+        weighed = [f for f in found if f.symptom.strength != CONTRADICTING]
+        support = 1 - math.prod(1 - self._weight(f) for f in weighed if f.status == MATCHED)
         confidence = support * math.prod(
-            1 - self.alpha * self._weight(f) for f in found if f.status == MISSING
+            1 - self.alpha * self._weight(f) for f in weighed if f.status == MISSING
         )
-        return Hypothesis(rule.cause, b, confidence, support, t0, found, rule)
+        return Hypothesis(rule.cause, b, confidence, support, t0, found, rule, rejected=rejected)
 
     def _weight(self, f: Found) -> float:
         return self.weights[f.symptom.strength]
@@ -344,6 +398,7 @@ def as_dict(d: Diagnosis) -> dict:
         "unexplained": [_item_dict(i) for i in d.unexplained],
         "expected": list(d.expected),
         "advisories": [{"resource": a.resource, "text": a.text, "source": a.source} for a in d.advisories],
+        "near": [{**_hypothesis_dict(h), "reason": h.rejected} for h in d.near],
     }
 
 
