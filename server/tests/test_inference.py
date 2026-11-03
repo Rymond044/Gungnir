@@ -289,3 +289,16 @@ def test_a_hypothesis_must_reach_into_the_interval(engine):
     ended = [dataclasses.replace(r, end=r.start + 20) if isinstance(r, Record) else r for r in copy()]
     assert engine.diagnose(dataclasses.replace(ev(*ended), since=110.0)).causes()
     assert engine.diagnose(dataclasses.replace(ev(*ended), since=200.0)).causes() == []
+
+
+def test_an_event_keeps_its_kind_and_type_apart_in_json():
+    from gungnir_server.evidence import Event
+    from gungnir_server.inference import _item_dict
+
+    assert _item_dict(Event("7", "oom_kill", 1.0, "Out of memory")) == {
+        "type": "event",
+        "event_type": "oom_kill",
+        "id": "7",
+        "at": 1.0,
+        "message": "Out of memory",
+    }

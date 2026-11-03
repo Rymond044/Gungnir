@@ -389,7 +389,11 @@ def _culprit_score(h: Hypothesis) -> float:
 
 def _item_dict(item: Item) -> dict:
     kind = {Record: "record", Value: "value", Event: "event", SeenProcess: "process"}[type(item)]
-    return {"type": kind, **{k: v for k, v in item.__dict__.items() if v is not None}}
+    fields = {k: v for k, v in item.__dict__.items() if v is not None}
+    # An event's own type would hide what kind of item it is.
+    if isinstance(item, Event):
+        fields["event_type"] = fields.pop("type")
+    return {"type": kind, **fields}
 
 
 def _group(item: Item) -> str | None:
