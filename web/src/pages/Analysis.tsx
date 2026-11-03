@@ -109,16 +109,29 @@ export default function Analysis() {
 
 function Span({ d, host, offset, now }: { d: Diagnosis; host: string; offset: number | null; now: number }) {
   const title = d.label ? `Фаза ${d.label}` : 'Интервал'
+  const e = d.evidence
   return (
     <div className={ui.page}>
-      {d.label && (
-        <div className={ui.head}>
-          <h2>{title}</h2>
-          <span className="muted">
-            {dayClock(ms(d.since), offset, now)} — {dayClock(ms(d.until), offset, now)}
-          </span>
-        </div>
-      )}
+      <div className={ui.head}>
+        <h2>{title}</h2>
+        <span className="muted">
+          {dayClock(ms(d.since), offset, now)} — {dayClock(ms(d.until), offset, now)}
+        </span>
+      </div>
+      <Panel>
+        <span>
+          Механизм вывода получил из базы{' '}
+          <b>
+            {e.records} {plural(e.records, 'запись', 'записи', 'записей')} детекции
+          </b>
+          , <b>{e.events} событий</b> ядра и журнала и <b>{e.processes} симптомов процессов</b> за интервал и
+          сопоставил их с правилами базы знаний:{' '}
+          <b>
+            {d.hypotheses.length} {plural(d.hypotheses.length, 'гипотеза', 'гипотезы', 'гипотез')}
+          </b>
+          , {d.unexplained.length} без объяснения.
+        </span>
+      </Panel>
       {d.hypotheses.length === 0 ? (
         <Panel>
           <Empty>
@@ -179,4 +192,12 @@ function Span({ d, host, offset, now }: { d: Diagnosis; host: string; offset: nu
       )}
     </div>
   )
+}
+
+function plural(n: number, one: string, few: string, many: string): string {
+  const m10 = n % 10
+  const m100 = n % 100
+  if (m10 === 1 && m100 !== 11) return one
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few
+  return many
 }

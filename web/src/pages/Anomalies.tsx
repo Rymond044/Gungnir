@@ -4,7 +4,7 @@ import { useAnomalies, useOverview } from '../api/hooks'
 import { Empty, Failure, Key, Loading, Panel, Segmented } from '../components/ui'
 import ui from '../components/ui.module.css'
 import { dayClock, duration, ms } from '../lib/format'
-import { scoreText } from '../lib/basis'
+import { scoreText } from '../lib/records'
 import { classNames, detectorName, kindNames, named, signalNames } from '../lib/names'
 import { lastInterval, RANGES, rangeSeconds, type RangeKey } from '../lib/range'
 import { useNow } from '../lib/useNow'
@@ -87,7 +87,15 @@ export default function Anomalies() {
         </label>
       </div>
 
-      <Panel aside={records.data ? `${records.data.length} записей` : undefined}>
+      <Panel
+        aside={
+          records.data
+            ? records.data.length >= 1000
+              ? 'показаны последние 1000 записей'
+              : `${records.data.length} записей`
+            : undefined
+        }
+      >
         {records.isPending ? (
           <Loading />
         ) : records.isError ? (
@@ -96,7 +104,17 @@ export default function Anomalies() {
           <Empty>{show === 'open' ? 'Открытых записей нет.' : 'За период записей нет.'}</Empty>
         ) : (
           <div className={ui.scroll}>
-            <table style={{ minWidth: 900 }}>
+            <table className={ui.fixed} style={{ minWidth: 980 }}>
+              <colgroup>
+                <col style={{ width: 110 }} />
+                <col style={{ width: '26%' }} />
+                <col />
+                <col style={{ width: 170 }} />
+                <col style={{ width: 120 }} />
+                <col style={{ width: 90 }} />
+                <col style={{ width: 140 }} />
+                <col style={{ width: 120 }} />
+              </colgroup>
               <thead>
                 <tr>
                   <th>вид</th>
@@ -125,12 +143,16 @@ export default function Anomalies() {
                           <Key>{r.signal}</Key>
                         </div>
                       </td>
-                      <td className="mono" style={{ overflowWrap: 'anywhere', maxWidth: 260 }}>
-                        {r.entity}
+                      <td
+                        className="mono"
+                        title={r.entity}
+                        style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      >
+                        {shortEntity(r.entity)}
                       </td>
                       <td>{detectorName(r.detector)}</td>
                       <td className="mono" style={{ whiteSpace: 'nowrap' }}>
-                        {scoreText(r.detector, r.peak_score)}
+                        {scoreText(r)}
                       </td>
                       <td className="mono">{dayClock(ms(r.started_at), offset, now)}</td>
                       <td>
@@ -153,4 +175,9 @@ export default function Anomalies() {
       </span>
     </div>
   )
+}
+
+/** A control group by its last path segment, the unit or scope; the host and devices as they are. */
+function shortEntity(entity: string): string {
+  return entity.split('/').pop() ?? entity
 }

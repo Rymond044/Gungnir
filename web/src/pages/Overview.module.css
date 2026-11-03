@@ -124,3 +124,21 @@
     display: none;
   }
 }
+
+.titleLink {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.titleLink:hover {
+  color: var(--blue);
+}
+
+.expandIcon {
+  color: var(--faint);
+  font-weight: 400;
+}
+
+.titleLink:hover .expandIcon {
+  color: var(--blue);
+}

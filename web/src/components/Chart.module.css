@@ -6,19 +6,26 @@
 
 .plot {
   position: relative;
-  background-color: var(--panel);
-  background-image:
-    linear-gradient(to right, var(--grid-minor) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--grid-minor) 1px, transparent 1px);
-  background-size:
-    5% 100%,
-    100% 25%;
-  border-left: 1px solid var(--grid-major);
-  border-bottom: 1px solid var(--grid-major);
   touch-action: none;
+  user-select: none;
 }
 
-.plot svg {
+.selectable {
+  cursor: crosshair;
+}
+
+.area {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background-color: var(--panel);
+  background-image: linear-gradient(to right, var(--grid-minor) 1px, transparent 1px);
+  background-size: 5% 100%;
+  border-left: 1px solid var(--grid-major);
+  border-bottom: 1px solid var(--grid-major);
+}
+
+.area svg {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -34,15 +41,47 @@
   background: var(--grid-major);
 }
 
-.yMax {
+.yLabel {
   position: absolute;
-  top: 2px;
   left: 4px;
   font-size: 11px;
+  line-height: 16px;
   color: var(--faint);
   background: var(--panel);
   padding: 0 3px;
   border-radius: 3px;
+  pointer-events: none;
+}
+
+.strip {
+  position: absolute;
+  top: 0;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--ochre);
+  opacity: 0.55;
+}
+
+.stripImpact {
+  background: var(--red);
+}
+
+.stripCurrent {
+  opacity: 1;
+}
+
+.tipRecord {
+  color: #f1c48a;
+}
+
+.selection {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(47, 109, 181, 0.15);
+  border-left: 1px solid var(--blue);
+  border-right: 1px solid var(--blue);
+  pointer-events: none;
 }
 
 .axis {
@@ -63,27 +102,17 @@
   top: 0;
   bottom: 0;
   width: 0;
-  border-left: 1.5px solid var(--red);
-}
-
-.markLabel {
-  position: absolute;
-  top: 4px;
-  left: 5px;
-  font-size: 11px;
-  white-space: nowrap;
-  color: var(--red-text);
-  background: var(--panel);
-  padding: 0 4px;
-  border-radius: 3px;
+  border-left: 1.5px solid var(--ochre);
+  pointer-events: none;
 }
 
 .shade {
   position: absolute;
   top: 0;
   bottom: 0;
-  background: var(--red-tint);
-  opacity: 0.6;
+  background: var(--ochre-tint);
+  opacity: 0.45;
+  pointer-events: none;
 }
 
 .cursor {

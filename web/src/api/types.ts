@@ -251,6 +251,8 @@ export interface Diagnosis {
   unexplained: (EvidenceItem & Record<string, unknown>)[]
   expected: string[]
   advisories: Advisory[]
+  /** What the inference engine was given inside the interval. */
+  evidence: { records: number; events: number; processes: number }
 }
 
 // Knowledge base (catalog.document).

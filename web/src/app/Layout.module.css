@@ -5,8 +5,13 @@
 }
 
 .side {
-  flex: 1 1 208px;
+  flex: 0 0 220px;
   max-width: 100%;
+  /* The side bar stays in place; only the main part scrolls. */
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
   background: var(--side);
   color: var(--side-text);
   padding: 20px 12px;
@@ -124,12 +129,17 @@
 }
 
 .main {
-  flex: 999 1 560px;
+  flex: 1 1 560px;
   min-width: 0;
   padding: 24px 28px 40px;
 }
 
 @media (max-width: 760px) {
+  .side {
+    flex-basis: 100%;
+    position: static;
+    height: auto;
+  }
   .main {
     padding: 16px;
   }

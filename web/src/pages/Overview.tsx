@@ -8,6 +8,7 @@ import ui from '../components/ui.module.css'
 import { clock, dayClock, duration, formatBytes, formatNumber, formatValue, ms, percent } from '../lib/format'
 import { classNames, detectorName, kindNames, named, processStates, signalNames } from '../lib/names'
 import { lastInterval, RANGES, rangeSeconds, type RangeKey } from '../lib/range'
+import { metricLink } from '../lib/records'
 import { useNow } from '../lib/useNow'
 import styles from './Overview.module.css'
 
@@ -55,7 +56,7 @@ export default function Overview() {
           <Segmented label="Период" options={RANGES.slice(0, 4)} value={range} onChange={setRange} />
         </span>
       </div>
-      <Resources host={host} o={o} interval={interval} />
+      <Resources host={host} o={o} interval={interval} range={range} />
 
       <div className={ui.row}>
         <div style={{ flex: '3 1 560px', minWidth: 0 }}>
@@ -273,7 +274,17 @@ function resources(o: OverviewData, v: Values): ResourceDef[] {
   return out
 }
 
-function Resources({ host, o, interval }: { host: string; o: OverviewData; interval: Interval }) {
+function Resources({
+  host,
+  o,
+  interval,
+  range,
+}: {
+  host: string
+  o: OverviewData
+  interval: Interval
+  range: RangeKey
+}) {
   const v = valuesOf(o)
   const filesystems = o.filesystems.map((fs) => ({
     fs,
@@ -286,9 +297,14 @@ function Resources({ host, o, interval }: { host: string; o: OverviewData; inter
         <Panel
           key={`${r.title}${r.sub}`}
           title={
-            <>
-              {r.title} <span className={styles.sub}>{r.sub}</span>
-            </>
+            <Link
+              to={metricLink(host, r.series, { range })}
+              className={styles.titleLink}
+              title="Открыть крупно"
+            >
+              {r.title} <span className={styles.sub}>{r.sub}</span>{' '}
+              <span className={styles.expandIcon}>⤢</span>
+            </Link>
           }
           aside={<span className={`${styles.now} ${r.nowRed ? styles.nowRed : ''}`}>{r.now}</span>}
         >

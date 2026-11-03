@@ -1,7 +1,5 @@
-import dagre from '@dagrejs/dagre'
-import { Background, Controls, Position, ReactFlow, type Edge, type Node } from '@xyflow/react'
-import '@xyflow/react/dist/style.css'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import ForceGraph2D, { type ForceGraphMethods, type LinkObject, type NodeObject } from 'react-force-graph-2d'
 import { Link } from 'react-router'
 import type { Knowledge, Strength } from '../api/types'
 import { Chip, Key, Panel, Segmented } from '../components/ui'
@@ -10,131 +8,122 @@ import { DOMAINS, nameKeys } from '../lib/knowledge'
 import { causeNames, domainNames, named, strengthNames, symptomKindNames, symptomName } from '../lib/names'
 
 type Domain = (typeof DOMAINS)[number] | 'all'
+type Kind = 'cause' | 'anomaly' | 'event' | 'process'
 
-const NODE_W = 230
-const NODE_H = 48
+// The canvas cannot read CSS variables; these are the colours of palette D
+// (styles/tokens.css).
+const COLOR: Record<Kind, string> = {
+  cause: '#262422',
+  anomaly: '#2f6db5',
+  event: '#a86400',
+  process: '#3c7d55',
+}
+const EDGE: Record<Strength, { color: string; dash: number[] | null }> = {
+  characteristic: { color: '#2f6db5', dash: null },
+  typical: { color: '#8a857c', dash: null },
+  possible: { color: '#b9b3a9', dash: [3, 3] },
+  contradicting: { color: '#b8352b', dash: [2, 3] },
+}
+const KIND_NAMES: Record<Kind, string> = {
+  cause: 'причина',
+  anomaly: 'метрика',
+  event: 'событие ядра или журнала',
+  process: 'симптом процесса',
+}
+const FAINT = 'rgba(115, 109, 100, 0.12)'
+const HEIGHT = 640
 
-const EDGE_STYLE: Record<Strength, React.CSSProperties> = {
-  characteristic: { stroke: 'var(--blue)', strokeWidth: 2 },
-  typical: { stroke: 'var(--ink)', strokeWidth: 1.2 },
-  possible: { stroke: 'var(--gray)', strokeWidth: 1.2, strokeDasharray: '4 3' },
-  contradicting: { stroke: 'var(--red)', strokeWidth: 1.4, strokeDasharray: '2 3' },
+interface GNode {
+  id: string
+  kind: Kind
+  name: string
+  label: string
+  degree: number
 }
 
-interface Built {
-  nodes: Node[]
-  edges: Edge[]
-  height: number
+interface GLink {
+  source: string
+  target: string
+  strength: Strength
+  leading: boolean
 }
 
-/** Causes on the left, the signals, events and process symptoms they show through on the right. */
-function build(k: Knowledge, domain: Domain): Built {
+function build(k: Knowledge, domain: Domain): { nodes: GNode[]; links: GLink[] } {
   const rules = k.rules.filter((r) => domain === 'all' || r.file === domain)
-  const g = new dagre.graphlib.Graph()
-  g.setGraph({ rankdir: 'LR', nodesep: 14, ranksep: 220, marginx: 10, marginy: 10 })
-  g.setDefaultEdgeLabel(() => ({}))
-  const symptoms = new Map<string, { kind: string; name: string }>()
-  const edges: Edge[] = []
+  const nodes = new Map<string, GNode>()
+  const links: GLink[] = []
   for (const r of rules) {
-    g.setNode(`cause:${r.cause}`, { width: NODE_W, height: NODE_H })
+    const id = `cause:${r.cause}`
+    nodes.set(id, { id, kind: 'cause', name: r.cause, label: named(causeNames, r.cause), degree: 0 })
     for (const s of r.symptoms) {
       for (const key of nameKeys(s)) {
-        const name = key.split(':')[1]
-        symptoms.set(key, { kind: key.split(':')[0], name })
-        const id = `${r.cause}->${key}`
-        if (edges.some((e) => e.id === id)) continue
-        g.setEdge(`cause:${r.cause}`, key)
-        edges.push({
-          id,
-          source: `cause:${r.cause}`,
-          target: key,
-          data: { strength: s.strength, leading: s.leading },
-          style: s.leading ? { ...EDGE_STYLE[s.strength], strokeWidth: 3.2 } : EDGE_STYLE[s.strength],
-        })
+        const [kind, name] = key.split(':') as [Kind, string]
+        if (!nodes.has(key))
+          nodes.set(key, { id: key, kind, name, label: symptomName(kind, name), degree: 0 })
+        if (links.some((l) => l.source === id && l.target === key)) continue
+        links.push({ source: id, target: key, strength: s.strength, leading: s.leading })
+        nodes.get(id)!.degree += 1
+        nodes.get(key)!.degree += 1
       }
     }
   }
-  for (const key of symptoms.keys()) g.setNode(key, { width: NODE_W, height: NODE_H })
-  dagre.layout(g)
-
-  const nodes: Node[] = [
-    ...rules.map((r) => {
-      const p = g.node(`cause:${r.cause}`)
-      return {
-        id: `cause:${r.cause}`,
-        position: { x: p.x - NODE_W / 2, y: p.y - NODE_H / 2 },
-        data: { label: named(causeNames, r.cause), kind: 'cause' },
-        sourcePosition: Position.Right,
-        targetPosition: Position.Left,
-        type: 'input',
-        style: {
-          width: NODE_W,
-          height: NODE_H,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'var(--side)',
-          color: 'var(--side-text)',
-          border: 0,
-          borderRadius: 8,
-          fontSize: 12.5,
-        },
-      } satisfies Node
-    }),
-    ...[...symptoms.entries()].map(([key, s]) => {
-      const p = g.node(key)
-      return {
-        id: key,
-        position: { x: p.x - NODE_W / 2, y: p.y - NODE_H / 2 },
-        data: { label: symptomName(s.kind === 'anomaly' ? 'anomaly' : s.kind, s.name), kind: s.kind },
-        targetPosition: Position.Left,
-        type: 'output',
-        style: {
-          width: NODE_W,
-          height: NODE_H,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background:
-            s.kind === 'anomaly'
-              ? 'var(--panel)'
-              : s.kind === 'event'
-                ? 'var(--ochre-tint)'
-                : 'var(--blue-tint)',
-          border: '1px solid var(--line)',
-          borderRadius: 8,
-          fontSize: 12.5,
-          color: 'var(--text)',
-        },
-      } satisfies Node
-    }),
-  ]
-  return { nodes, edges, height: g.graph().height ?? 600 }
+  return { nodes: [...nodes.values()], links }
 }
 
+// The simulation replaces a link's ends by the node objects.
+function endId(end: string | number | NodeObject | undefined): string {
+  return typeof end === 'object' ? String(end.id) : String(end)
+}
+
+function radius(n: GNode): number {
+  return n.kind === 'cause' ? 7 : 3.5 + Math.sqrt(n.degree) * 1.4
+}
+
+/**
+ * The knowledge base as a living graph: causes and what they show through,
+ * pulled together by their links. Hovering a node lights up its neighbours;
+ * clicking keeps them lit and lets the links run.
+ */
 export default function KnowledgeGraph({ k, host }: { k: Knowledge; host: string }) {
   const [domain, setDomain] = useState<Domain>('disk')
   const [selected, setSelected] = useState<string | null>(null)
-  const built = useMemo(() => build(k, domain), [k, domain])
+  const [hovered, setHovered] = useState<string | null>(null)
+  const box = useRef<HTMLDivElement>(null)
+  const graph = useRef<ForceGraphMethods<NodeObject<GNode>, LinkObject<GNode, GLink>>>(undefined)
+  const [width, setWidth] = useState(800)
+  const data = useMemo(() => build(k, domain), [k, domain])
 
-  const linked = useMemo(() => {
-    if (!selected) return null
-    const ids = new Set([selected])
-    for (const e of built.edges) {
-      if (e.source === selected) ids.add(e.target)
-      if (e.target === selected) ids.add(e.source)
+  useEffect(() => {
+    const el = box.current
+    if (!el) return
+    const observer = new ResizeObserver(() => setWidth(el.clientWidth))
+    observer.observe(el)
+    setWidth(el.clientWidth)
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    // Spread the nodes a little more than the defaults, so labels fit.
+    graph.current?.d3Force('charge')?.strength(-170)
+    graph.current?.d3Force('link')?.distance(70)
+    graph.current?.d3ReheatSimulation()
+  }, [data])
+
+  const focus = hovered ?? selected
+  const lit = useMemo(() => {
+    if (!focus) return null
+    const ids = new Set([focus])
+    for (const l of data.links) {
+      const a = endId(l.source)
+      const b = endId(l.target)
+      if (a === focus) ids.add(b)
+      if (b === focus) ids.add(a)
     }
     return ids
-  }, [selected, built])
+  }, [focus, data])
 
-  const nodes = built.nodes.map((n) => ({
-    ...n,
-    style: { ...n.style, opacity: !linked || linked.has(n.id) ? 1 : 0.25 },
-  }))
-  const edges = built.edges.map((e) => ({
-    ...e,
-    style: { ...e.style, opacity: !selected || e.source === selected || e.target === selected ? 1 : 0.08 },
-  }))
+  const touches = (l: LinkObject<GNode, GLink>) =>
+    !!focus && (endId(l.source) === focus || endId(l.target) === focus)
 
   return (
     <div className={ui.page}>
@@ -151,96 +140,168 @@ export default function KnowledgeGraph({ k, host }: { k: Knowledge; host: string
             setSelected(null)
           }}
         />
-        <span className="muted" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', fontSize: 13 }}>
-          {(Object.keys(EDGE_STYLE) as Strength[]).map((s) => (
-            <span key={s} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <svg width="22" height="6" aria-hidden="true">
-                <line x1="0" y1="3" x2="22" y2="3" style={EDGE_STYLE[s]} />
-              </svg>
-              {strengthNames[s]}
-            </span>
-          ))}
-          <span>толстая линия — ведущий симптом</span>
+        <span className="muted" style={{ fontSize: 13 }}>
+          колесо — масштаб, перетаскивание — сдвиг и узлы, клик — закрепить подсветку
         </span>
       </div>
+      <Legend />
       <div className={ui.row}>
         <div
+          ref={box}
           style={{
             flex: '3 1 560px',
-            height: Math.max(480, built.height + 40),
+            minWidth: 0,
+            height: HEIGHT,
             background: 'var(--panel)',
             border: '1px solid var(--line)',
             borderRadius: 10,
+            overflow: 'hidden',
           }}
         >
-          <ReactFlow
-            key={domain}
-            nodes={nodes}
-            edges={edges}
-            // Full size: the page scrolls through a tall graph instead of shrinking it.
-            defaultViewport={{ x: 20, y: 10, zoom: 1 }}
-            minZoom={0.2}
-            nodesDraggable={false}
-            nodesConnectable={false}
-            onNodeClick={(_, n) => setSelected(n.id === selected ? null : n.id)}
-            onPaneClick={() => setSelected(null)}
-            proOptions={{ hideAttribution: true }}
-            // The page scrolls; the wheel over the graph does not zoom it.
-            zoomOnScroll={false}
-            preventScrolling={false}
-          >
-            <Background gap={20} color="var(--grid-minor)" />
-            <Controls showInteractive={false} />
-          </ReactFlow>
+          <ForceGraph2D<GNode, GLink>
+            ref={graph}
+            graphData={data}
+            width={width}
+            height={HEIGHT}
+            backgroundColor="#f5f4f1"
+            cooldownTicks={300}
+            onEngineStop={() => graph.current?.zoomToFit(400, 40)}
+            nodeRelSize={1}
+            nodeVal={(n) => radius(n) ** 2}
+            nodeLabel={(n) => `${n.label} (${KIND_NAMES[n.kind]})`}
+            nodeCanvasObject={(n, ctx, scale) => {
+              const r = radius(n)
+              const dim = !!lit && !lit.has(n.id)
+              ctx.beginPath()
+              ctx.arc(n.x!, n.y!, r, 0, 2 * Math.PI)
+              ctx.fillStyle = dim ? FAINT : COLOR[n.kind]
+              ctx.fill()
+              if (n.id === focus) {
+                ctx.lineWidth = 2 / scale
+                ctx.strokeStyle = '#a86400'
+                ctx.stroke()
+              }
+              // Labels of causes always; of the rest when zoomed in or lit.
+              const show = n.kind === 'cause' || scale > 1.6 || (!!lit && lit.has(n.id))
+              if (!show || dim) return
+              const size = Math.max(10 / scale, n.kind === 'cause' ? 4.2 : 3.4)
+              ctx.font = `${n.kind === 'cause' ? 600 : 400} ${size}px Golos Text, sans-serif`
+              ctx.textAlign = 'center'
+              ctx.textBaseline = 'top'
+              ctx.fillStyle = n.kind === 'cause' ? '#1c1b19' : '#4a463f'
+              ctx.fillText(n.label, n.x!, n.y! + r + 1.5)
+            }}
+            nodePointerAreaPaint={(n, color, ctx) => {
+              ctx.beginPath()
+              ctx.arc(n.x!, n.y!, radius(n) + 2, 0, 2 * Math.PI)
+              ctx.fillStyle = color
+              ctx.fill()
+            }}
+            linkColor={(l) => (lit && !touches(l) ? FAINT : EDGE[l.strength].color)}
+            linkWidth={(l) => (l.leading ? 2.4 : 1) * (touches(l) ? 1.5 : 1)}
+            linkLineDash={(l) => EDGE[l.strength].dash}
+            linkDirectionalParticles={(l) => (touches(l) ? 3 : 0)}
+            linkDirectionalParticleWidth={2.5}
+            linkDirectionalParticleSpeed={0.008}
+            linkDirectionalParticleColor={(l) => EDGE[l.strength].color}
+            onNodeHover={(n) => setHovered(n ? String(n.id) : null)}
+            onNodeClick={(n) => setSelected(String(n.id) === selected ? null : String(n.id))}
+            onBackgroundClick={() => setSelected(null)}
+          />
         </div>
         <div style={{ flex: '1 1 260px', minWidth: 0 }}>
-          <Selected k={k} id={selected} host={host} edges={built.edges} />
+          <Selected k={k} id={selected} host={host} links={data.links} />
         </div>
       </div>
     </div>
   )
 }
 
-function Selected({ k, id, host, edges }: { k: Knowledge; id: string | null; host: string; edges: Edge[] }) {
+function Legend() {
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 18px', fontSize: 13, color: 'var(--muted)' }}>
+      {(Object.keys(COLOR) as Kind[]).map((kind) => (
+        <span key={kind} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <svg width={kind === 'cause' ? 14 : 10} height={kind === 'cause' ? 14 : 10} aria-hidden="true">
+            <circle cx="50%" cy="50%" r="45%" fill={COLOR[kind]} />
+          </svg>
+          {KIND_NAMES[kind]}
+        </span>
+      ))}
+      <span style={{ width: 1, background: 'var(--line)' }} />
+      {(Object.keys(EDGE) as Strength[]).map((s) => (
+        <span key={s} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <svg width="24" height="6" aria-hidden="true">
+            <line
+              x1="0"
+              y1="3"
+              x2="24"
+              y2="3"
+              stroke={EDGE[s].color}
+              strokeWidth="1.6"
+              strokeDasharray={EDGE[s].dash?.join(' ')}
+            />
+          </svg>
+          {strengthNames[s]}
+        </span>
+      ))}
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <svg width="24" height="6" aria-hidden="true">
+          <line x1="0" y1="3" x2="24" y2="3" stroke="#8a857c" strokeWidth="3" />
+        </svg>
+        ведущий симптом
+      </span>
+      <span>размер узла — сколько у него связей</span>
+    </div>
+  )
+}
+
+function Selected({ k, id, host, links }: { k: Knowledge; id: string | null; host: string; links: GLink[] }) {
   if (!id) {
     return (
       <Panel title="Как читать">
         <span>
-          Слева причины, справа то, в чём они проявляются: метрики, события ядра и журнала, состояния
-          процессов. Нажмите на узел, чтобы оставить только его связи.
+          Тёмные узлы — причины, цветные — то, в чём они проявляются: метрики, события ядра и журнала,
+          состояния процессов. Линия от причины к симптому значит, что правило ожидает этот симптом; цвет и
+          пунктир говорят, насколько он обязателен. Наведите на узел, чтобы увидеть его связи, нажмите, чтобы
+          закрепить.
         </span>
       </Panel>
     )
   }
+  const touching = links.filter((l) => endId(l.source) === id || endId(l.target) === id)
   if (id.startsWith('cause:')) {
     const cause = id.slice(6)
     const info = k.causes.find((c) => c.name === cause)
     return (
       <Panel title={named(causeNames, cause)}>
-        <Key>{cause}</Key>
+        <span>
+          <Chip>{KIND_NAMES.cause}</Chip> <Key>{cause}</Key>
+        </span>
         <span>{info?.comment}</span>
-        <span className="muted">{edges.filter((e) => e.source === id).length} связей с симптомами</span>
+        <span className="muted">{touching.length} симптомов в правиле</span>
         <Link to={`/hosts/${host}/knowledge/${cause}`} className={`${ui.button} ${ui.primary}`}>
           Открыть правило
         </Link>
       </Panel>
     )
   }
-  const [kind, name] = id.split(':')
-  const users = edges.filter((e) => e.target === id)
+  const [kind, name] = id.split(':') as [Kind, string]
   return (
     <Panel title={symptomName(kind, name)}>
       <span>
-        <Chip>{symptomKindNames[kind]}</Chip> <Key>{name}</Key>
+        <Chip>{symptomKindNames[kind] ?? KIND_NAMES[kind]}</Chip> <Key>{name}</Key>
       </span>
-      <span className="muted">Используют {users.length} причин:</span>
-      {users.map((e) => {
-        const cause = e.source.slice(6)
-        const strength = (e.data as { strength: Strength }).strength
+      <span className="muted">Встречается в правилах {touching.length} причин:</span>
+      {touching.map((l) => {
+        const cause = endId(l.source).slice(6)
         return (
-          <span key={e.id}>
+          <span key={cause}>
             <Link to={`/hosts/${host}/knowledge/${cause}`}>{named(causeNames, cause)}</Link>{' '}
-            <span className="muted">· {strengthNames[strength]}</span>
+            <span className="muted">
+              · {strengthNames[l.strength]}
+              {l.leading ? ', ведущий' : ''}
+            </span>
           </span>
         )
       })}

@@ -10,6 +10,7 @@ import Anomaly from './pages/Anomaly'
 import Cause from './pages/Cause'
 import Collectors from './pages/Collectors'
 import Knowledge from './pages/Knowledge'
+import Metric from './pages/Metric'
 import NotFound from './pages/NotFound'
 import Overview from './pages/Overview'
 import './styles/global.css'
@@ -29,6 +30,7 @@ const router = createBrowserRouter([
       { path: 'anomalies/:id', element: <Anomaly /> },
       { path: 'analysis', element: <Analysis /> },
       { path: 'collectors', element: <Collectors /> },
+      { path: 'metric', element: <Metric /> },
       { path: 'knowledge', element: <Knowledge /> },
       { path: 'knowledge/:cause', element: <Cause /> },
       { path: '*', element: <NotFound /> },

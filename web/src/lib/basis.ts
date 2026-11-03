@@ -32,11 +32,3 @@ export function against(signal: string, b: Basis): string {
       return '—'
   }
 }
-
-/** What the score of a record means, by its detector. */
-export function scoreText(detector: string, score: number): string {
-  const s = score > 999 ? '>999' : score.toFixed(score < 10 ? 2 : 1)
-  if (detector.startsWith('robust')) return `|z| = ${s}`
-  if (detector === 'iforest') return `${s} × порога леса`
-  return `${s} × предела`
-}

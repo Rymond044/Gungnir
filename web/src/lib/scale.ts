@@ -24,9 +24,42 @@ export function timeTicks(since: number, until: number, offsetS: number | null, 
   return out
 }
 
+/**
+ * Round axis limits and the step between grid lines, about `count` steps
+ * over [lo, hi]. With `zero` the axis starts at zero; otherwise it hugs the
+ * data, so that a slow drift of a level fills the plot.
+ */
+export function niceAxis(
+  lo: number,
+  hi: number,
+  zero: boolean,
+  count = 4,
+  binary = false,
+): { min: number; max: number; step: number } {
+  if (binary) {
+    // Bytes: round in KiB, MiB or GiB, so the labels read 256 MiB, not 268 MB.
+    const unit = 1024 ** Math.max(0, Math.floor(Math.log(Math.max(Math.abs(hi), 1)) / Math.log(1024)))
+    const a = niceAxis(lo / unit, hi / unit, zero, count)
+    return { min: a.min * unit, max: a.max * unit, step: a.step * unit }
+  }
+  const from = zero ? 0 : lo
+  const span = hi - from
+  if (!(span > 0)) {
+    const v = Math.abs(hi) || 1
+    return zero
+      ? { min: 0, max: niceCeil(v), step: niceCeil(v) / count }
+      : { min: hi - v * 0.05, max: hi + v * 0.05, step: v * 0.025 }
+  }
+  const step = niceCeil(span / count)
+  const min = zero ? 0 : Math.floor(from / step + 1e-9) * step
+  const max = Math.max(min + step, Math.ceil(hi / step - 1e-9) * step)
+  return { min, max, step }
+}
+
 export interface Frame {
   since: number
   until: number
+  yMin: number
   yMax: number
   width: number
   height: number
@@ -37,8 +70,8 @@ export function x(f: Frame, t: number): number {
 }
 
 export function y(f: Frame, v: number): number {
-  const clamped = Math.max(0, Math.min(f.yMax, v))
-  return f.height - (clamped / f.yMax) * f.height
+  const clamped = Math.max(f.yMin, Math.min(f.yMax, v))
+  return f.height - ((clamped - f.yMin) / (f.yMax - f.yMin)) * f.height
 }
 
 /** Runs of points without a gap longer than `gapMs`. */

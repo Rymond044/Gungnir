@@ -81,12 +81,13 @@ export interface RecordFilter {
   limit?: number
 }
 
-export function useAnomalies(host: string, filter: RecordFilter) {
+export function useAnomalies(host: string, filter: RecordFilter, enabled = true) {
   return useQuery({
     queryKey: ['anomalies', host, filter],
     queryFn: () => get<RecordRow[]>(`/hosts/${host}/anomalies`, { ...filter }),
     refetchInterval: LIVE_MS,
     placeholderData: keepPreviousData,
+    enabled,
   })
 }
 

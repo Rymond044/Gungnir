@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Point } from '../api/types'
-import { nearest, niceCeil, runs, timeTicks } from './scale'
+import { nearest, niceAxis, niceCeil, runs, timeTicks } from './scale'
 
 describe('niceCeil', () => {
   it('rounds up to 1, 2, 2.5 or 5 times a power of ten', () => {
@@ -35,5 +35,25 @@ describe('nearest', () => {
     expect(nearest(pts, 14)).toBe(1)
     expect(nearest(pts, 16)).toBe(2)
     expect(nearest([], 3)).toBe(-1)
+  })
+})
+
+describe('niceAxis', () => {
+  it('starts at zero for rates', () => {
+    expect(niceAxis(3, 186, true)).toEqual({ min: 0, max: 200, step: 50 })
+  })
+  it('hugs a level that drifts far from zero', () => {
+    const a = niceAxis(0.52, 0.56, false)
+    expect(a.min).toBeCloseTo(0.52)
+    expect(a.max).toBeCloseTo(0.56)
+    expect(a.step).toBeCloseTo(0.01)
+  })
+})
+
+describe('niceAxis in binary units', () => {
+  it('rounds bytes to MiB', () => {
+    const a = niceAxis(0, 370 * 2 ** 20, true, 4, true)
+    expect(a.max).toBe(400 * 2 ** 20)
+    expect(a.step).toBe(100 * 2 ** 20)
   })
 })

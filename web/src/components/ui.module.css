@@ -195,3 +195,24 @@
   color: var(--muted);
   font-size: 13px;
 }
+
+.fixed {
+  table-layout: fixed;
+}
+
+.fixed td {
+  overflow-wrap: anywhere;
+}
+
+.expand {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.expand:hover {
+  color: var(--blue);
+}
