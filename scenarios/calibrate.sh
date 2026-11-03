@@ -1,23 +1,23 @@
 #!/bin/bash
 # Calibration run (ADR 0024): about 15 minutes of graded loads, each in its
 # own scope gungnir-cal-<load>-<step>, with the host otherwise left alone.
-# The script only creates load and writes one label per phase; the core
+# The script only creates load and writes one label per phase; the server
 # measures capacity from the samples its agent sent meanwhile.
 #
-# Usage: calibrate.sh HOST     (HOST as known to the core; needs stress-ng, fio)
+# Usage: calibrate.sh HOST     (HOST as known to the server; needs stress-ng, fio)
 #
 # At the end the labels are imported, capacity is derived and processes no
-# workload rule covers are listed, through GUNGNIR_CORE (default: the core
+# workload rule covers are listed, through GUNGNIR_SERVER (default: the server
 # container of deploy/compose.yaml).
 set -euo pipefail
 
 host=${1:?usage: calibrate.sh HOST}
 here=$(cd "$(dirname "$0")" && pwd)
-# An array, so that a path with spaces survives; GUNGNIR_CORE is split on spaces.
-if [ -n "${GUNGNIR_CORE:-}" ]; then
-    read -r -a core <<<"$GUNGNIR_CORE"
+# An array, so that a path with spaces survives; GUNGNIR_SERVER is split on spaces.
+if [ -n "${GUNGNIR_SERVER:-}" ]; then
+    read -r -a server <<<"$GUNGNIR_SERVER"
 else
-    core=(docker compose -f "$here/../deploy/compose.yaml" exec -T core gungnir-core)
+    server=(docker compose -f "$here/../deploy/compose.yaml" exec -T server gungnir-server)
 fi
 idle_s=${CAL_IDLE_S:-300}
 step_s=${CAL_STEP_S:-60}
@@ -94,8 +94,8 @@ phase disk-fsync false '["disk.write_await_ms","disk.write_ops_per_s","io.pressu
     --time_based --runtime="$step_s"
 echo "Phases recorded in $label_file"
 
-# The last batch reaches the core within about 10 s.
+# The last batch reaches the server within about 10 s.
 sleep 15
-"${core[@]}" runs import "$host" - <"$label_file"
-"${core[@]}" calibrate "$host" "$run"
-"${core[@]}" workload unmatched "$host"
+"${server[@]}" runs import "$host" - <"$label_file"
+"${server[@]}" calibrate "$host" "$run"
+"${server[@]}" workload unmatched "$host"

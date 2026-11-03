@@ -10,7 +10,7 @@
 //! Only events worth diagnosing leave the host: kernel messages of error
 //! priority or worse, warnings of the storage stack, and a few systemd
 //! messages identified by their message id. Turning them into event types is
-//! knowledge and happens in the core.
+//! knowledge and happens in the server.
 
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom};

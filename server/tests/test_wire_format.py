@@ -3,7 +3,7 @@ import time
 import pytest
 from pydantic import ValidationError
 
-from gungnir_core.ingest import MAX_SAMPLES, Batch
+from gungnir_server.ingest import MAX_SAMPLES, Batch
 
 # Ten minutes ago on a minute boundary: inside raw retention, and its minute
 # is complete for rollups.

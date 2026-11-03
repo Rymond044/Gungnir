@@ -2,10 +2,10 @@ import dataclasses
 
 import pytest
 
-from gungnir_core import base
-from gungnir_core.evidence import HOST, Evidence, Record, Sign, Value
-from gungnir_core.params import Params
-from gungnir_core.reasoner import MATCHED, MISSING, PENDING, UNOBSERVABLE, RuleReasoner
+from gungnir_server import base
+from gungnir_server.evidence import HOST, Evidence, Record, Sign, Value
+from gungnir_server.params import Params
+from gungnir_server.reasoner import MATCHED, MISSING, PENDING, UNOBSERVABLE, RuleReasoner
 
 USER = "user.slice/user-1000.slice/user@1000.service"
 APPS = f"{USER}/app.slice"

@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
-from gungnir_core import maintenance
+from gungnir_server import maintenance
 from tests.test_ingest_api import auth
 from tests.test_wire_format import RECENT, batch, sample
 

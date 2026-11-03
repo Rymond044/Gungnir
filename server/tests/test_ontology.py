@@ -2,8 +2,8 @@ import shutil
 
 import pytest
 
-from gungnir_core import ontology, workload
-from gungnir_core.knowledge import KnowledgeError
+from gungnir_server import ontology, workload
+from gungnir_server.knowledge import KnowledgeError
 
 
 @pytest.fixture(scope="module")

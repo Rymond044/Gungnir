@@ -2,7 +2,7 @@
 # Installs or upgrades the agent as a systemd service. Run as root from this
 # directory, after building: (cd ../../agent && cargo build --release).
 # Usage: install.sh [TOKEN_FILE]
-# TOKEN_FILE holds the token printed by `gungnir-core host add`; it may be
+# TOKEN_FILE holds the token printed by `gungnir-server host add`; it may be
 # omitted on an upgrade, when /etc/gungnir/agent.token is already in place.
 set -eu
 
@@ -17,6 +17,8 @@ binary=../../agent/target/release/gungnir-agent
 install -m 0755 "$binary" /usr/local/bin/gungnir-agent
 install -d -m 0755 /etc/gungnir
 [ -e /etc/gungnir/agent.toml ] || install -m 0644 agent.toml /etc/gungnir/agent.toml
+# The key was `core_url` before the core was renamed the server (ADR 0050).
+sed -i 's/^core_url\b/server_url/' /etc/gungnir/agent.toml
 [ -z "$token_file" ] || install -m 0600 -o root -g root "$token_file" /etc/gungnir/agent.token
 install -m 0644 gungnir-agent.service /etc/systemd/system/gungnir-agent.service
 

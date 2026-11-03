@@ -17,10 +17,10 @@ host=${1:?usage: culprits.sh HOST [cpu] [disk] [memory]}
 shift
 wanted=${*:-cpu disk memory}
 here=$(cd "$(dirname "$0")" && pwd)
-if [ -n "${GUNGNIR_CORE:-}" ]; then
-    read -r -a core <<<"$GUNGNIR_CORE"
+if [ -n "${GUNGNIR_SERVER:-}" ]; then
+    read -r -a server <<<"$GUNGNIR_SERVER"
 else
-    core=(docker compose -f "$here/../deploy/compose.yaml" exec -T core gungnir-core)
+    server=(docker compose -f "$here/../deploy/compose.yaml" exec -T server gungnir-server)
 fi
 step_s=${SC_STEP_S:-60}
 # The victim runs alone first, so that its own start is not the culprit's.
@@ -108,5 +108,5 @@ for which in $wanted; do
 done
 echo "Phases recorded in $label_file"
 
-"${core[@]}" runs import "$host" - <"$label_file"
-echo "Diagnose them with: gungnir-core diagnose $host --run $run"
+"${server[@]}" runs import "$host" - <"$label_file"
+echo "Diagnose them with: gungnir-server diagnose $host --run $run"

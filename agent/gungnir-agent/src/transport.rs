@@ -1,4 +1,4 @@
-//! Delivery of sample batches to the core over HTTP/JSON. The agent always
+//! Delivery of sample batches to the server over HTTP/JSON. The agent always
 //! opens the connection, so a host behind NAT or in a VM needs no inbound port.
 
 use std::time::Duration;
@@ -13,9 +13,9 @@ use crate::sources::{Event, ModuleStatus, Process};
 #[derive(Serialize)]
 pub struct Batch<'a, B: Serialize> {
     pub agent: AgentInfo,
-    /// Increases by one per batch; lets the core spot gaps in its log.
+    /// Increases by one per batch; lets the server spot gaps in its log.
     pub seq: u64,
-    /// Probe results, repeated in every batch so a restarted core learns
+    /// Probe results, repeated in every batch so a restarted server learns
     /// them without a separate handshake.
     pub sources: &'a [ModuleStatus],
     /// Rows dropped on buffer or spool overflow since the agent started.
@@ -99,10 +99,10 @@ pub struct AgentInfo {
 
 pub enum Outcome {
     Accepted,
-    /// The core refused the batch as malformed; resending it would only
+    /// The server refused the batch as malformed; resending it would only
     /// fail again, so the caller discards it.
     Rejected(String),
-    /// Network trouble, a core error or a refused token; worth retrying.
+    /// Network trouble, a server error or a refused token; worth retrying.
     Failed(String),
 }
 
@@ -113,11 +113,11 @@ pub struct Transport {
 }
 
 impl Transport {
-    pub fn new(core_url: &str, token: &str, timeout: Duration) -> Self {
+    pub fn new(server_url: &str, token: &str, timeout: Duration) -> Self {
         let http = ureq::Agent::config_builder().timeout_global(Some(timeout)).build().into();
         Self {
             http,
-            url: format!("{}/api/v1/ingest", core_url.trim_end_matches('/')),
+            url: format!("{}/api/v1/ingest", server_url.trim_end_matches('/')),
             authorization: format!("Bearer {token}"),
         }
     }

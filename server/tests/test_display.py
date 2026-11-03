@@ -2,9 +2,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from gungnir_core.display import format_value, render_status
-from gungnir_core.hosts import HostSummary
-from gungnir_core.telemetry import SeriesInfo, SourceState
+from gungnir_server.display import format_value, render_status
+from gungnir_server.hosts import HostSummary
+from gungnir_server.telemetry import SeriesInfo, SourceState
 
 
 @pytest.mark.parametrize(

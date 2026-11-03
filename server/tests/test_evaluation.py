@@ -1,6 +1,6 @@
 import numpy as np
 
-from gungnir_core.detection.evaluation import Event, Rec, score, table
+from gungnir_server.detection.evaluation import Event, Rec, score, table
 
 MIN = 60_000
 

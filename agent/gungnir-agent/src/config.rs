@@ -8,14 +8,14 @@ use crate::sources::Roots;
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct Config {
-    /// Base URL of the core, e.g. `http://127.0.0.1:8080`.
-    pub core_url: String,
+    /// Base URL of the server, e.g. `http://127.0.0.1:8080`.
+    pub server_url: String,
     /// File holding the agent's token. Defaults to the systemd credential
     /// `token` (see `LoadCredential=` in the unit).
     pub token_file: Option<PathBuf>,
     pub sample_interval_secs: u64,
     pub send_interval_secs: u64,
-    /// Rows kept in memory while the core is unreachable and the spool is
+    /// Rows kept in memory while the server is unreachable and the spool is
     /// unavailable; the oldest go first.
     pub buffer_capacity: usize,
     /// Rows per batch: samples, facts, process rows and events together.
@@ -37,7 +37,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            core_url: "http://127.0.0.1:8080".into(),
+            server_url: "http://127.0.0.1:8080".into(),
             token_file: None,
             sample_interval_secs: 5,
             send_interval_secs: 10,
@@ -115,8 +115,8 @@ mod tests {
 
     #[test]
     fn partial_file_keeps_defaults() {
-        let config: Config = toml::from_str("core_url = \"http://core:8080\"").unwrap();
-        assert_eq!(config.core_url, "http://core:8080");
+        let config: Config = toml::from_str("server_url = \"http://server:8080\"").unwrap();
+        assert_eq!(config.server_url, "http://server:8080");
         assert_eq!(config.sample_interval_secs, 5);
     }
 

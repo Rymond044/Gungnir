@@ -51,7 +51,7 @@ pub struct Fact {
     pub value: String,
 }
 
-/// A fact is repeated this often even when unchanged, so the core learns it
+/// A fact is repeated this often even when unchanged, so the server learns it
 /// after its own restart.
 const FACT_EVERY: Duration = Duration::from_secs(300);
 
@@ -136,7 +136,7 @@ pub enum State {
     Disabled,
 }
 
-/// The outcome of probing one module, reported to the core.
+/// The outcome of probing one module, reported to the server.
 #[derive(Debug, Clone, Serialize)]
 pub struct ModuleStatus {
     pub module: &'static str,

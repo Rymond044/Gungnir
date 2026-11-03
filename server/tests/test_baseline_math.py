@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from gungnir_core import baselines, frame
-from gungnir_core.params import Params, by_pattern
+from gungnir_server import baselines, frame
+from gungnir_server.params import Params, by_pattern
 
 
 def test_buckets_keep_one_percent_relative_accuracy():

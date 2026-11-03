@@ -2,8 +2,8 @@
 
 from datetime import datetime, timedelta
 
-from gungnir_core import hosts
-from gungnir_core.telemetry import SeriesIds
+from gungnir_server import hosts
+from gungnir_server.telemetry import SeriesIds
 
 
 def add_host(conn, name: str = "laptop") -> hosts.Host:

@@ -15,4 +15,4 @@ RUN useradd --system --no-create-home gungnir
 USER gungnir
 ENV PATH=/app/.venv/bin:$PATH
 EXPOSE 8080
-CMD ["gungnir-core", "serve", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["gungnir-server", "serve", "--host", "0.0.0.0", "--port", "8080"]

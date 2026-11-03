@@ -3,8 +3,8 @@ from datetime import UTC, datetime, timedelta
 
 import numpy as np
 
-from gungnir_core import baselines, capacity, labels, workload
-from gungnir_core.params import Params
+from gungnir_server import baselines, capacity, labels, workload
+from gungnir_server.params import Params
 from tests import seed
 from tests.test_wire_format import RECENT
 

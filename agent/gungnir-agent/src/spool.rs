@@ -1,7 +1,7 @@
-//! Spool on disk for data the core could not take. When delivery fails, the
-//! oldest data leaves memory for a file here, so a long outage of the core
+//! Spool on disk for data the server could not take. When delivery fails, the
+//! oldest data leaves memory for a file here, so a long outage of the server
 //! costs disk space instead of the agent's memory, and a restart of the
-//! agent loses nothing. Files are sent back oldest first once the core
+//! agent loses nothing. Files are sent back oldest first once the server
 //! answers again.
 //!
 //! Each file is one batch body in JSON, named `<sequence>-<rows>.json` so

@@ -1,7 +1,7 @@
 import pytest
 
-from gungnir_core import base, expected, ontology, policy, rules
-from gungnir_core.knowledge import KnowledgeError
+from gungnir_server import base, expected, ontology, policy, rules
+from gungnir_server.knowledge import KnowledgeError
 
 
 @pytest.fixture(scope="module")

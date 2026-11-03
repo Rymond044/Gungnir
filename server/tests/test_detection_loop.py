@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
-from gungnir_core.detection.runner import Runner
-from gungnir_core.params import Params
+from gungnir_server.detection.runner import Runner
+from gungnir_server.params import Params
 from tests import seed
 from tests.test_wire_format import RECENT
 
@@ -41,8 +41,8 @@ def test_live_loop_writes_one_interval_across_steps_and_restarts(conn):
 def test_records_read_back_in_words(conn):
     from datetime import timezone
 
-    from gungnir_core.anomalies import records_of
-    from gungnir_core.display import render_records
+    from gungnir_server.anomalies import records_of
+    from gungnir_server.display import render_records
 
     test_live_loop_writes_one_interval_across_steps_and_restarts(conn)
     host = seed.hosts.by_name(conn, "laptop")

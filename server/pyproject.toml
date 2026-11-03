@@ -1,7 +1,7 @@
 [project]
-name = "gungnir-core"
+name = "gungnir-server"
 version = "0.1.0"
-description = "gungnIR core: ingest, storage, detection, diagnosis and the API"
+description = "gungnIR server: ingest, storage, detection, diagnosis and the API"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.162",
@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-gungnir-core = "gungnir_core.cli:main"
+gungnir-server = "gungnir_server.cli:main"
 
 [dependency-groups]
 dev = ["httpx2>=2.16", "owlready2>=0.51", "pytest>=9.2", "ruff>=0.17"]

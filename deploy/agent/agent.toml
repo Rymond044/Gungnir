@@ -1,12 +1,12 @@
 # gungnIR agent configuration. Every key is optional; the values shown are the
 # defaults. The token is not configured here: see LoadCredential= in the unit.
 
-core_url = "http://127.0.0.1:8080"
+server_url = "http://127.0.0.1:8080"
 sample_interval_secs = 5
 send_interval_secs = 10
 
 # Rows (samples, facts, process rows, events) per batch, and the most kept
-# in memory. While the core is unreachable, all but one batch moves to the
+# in memory. While the server is unreachable, all but one batch moves to the
 # spool on disk; memory fills up only when there is no spool.
 buffer_capacity = 50000
 max_batch = 5000

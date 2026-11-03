@@ -5,9 +5,9 @@ import pytest
 from fastapi.testclient import TestClient
 from psycopg import sql
 
-from gungnir_core import hosts
-from gungnir_core.api import create_app
-from gungnir_core.db import open_pool
+from gungnir_server import hosts
+from gungnir_server.api import create_app
+from gungnir_server.db import open_pool
 
 # Server of `deploy/compose.yaml`; tests use their own database on it.
 ADMIN_URL = os.environ.get("GUNGNIR_TEST_ADMIN_URL", "postgresql://gungnir:gungnir@localhost:5432/gungnir")
@@ -50,8 +50,8 @@ def conn(database_url):
     """A migrated database without the app and its background workers."""
     from datetime import UTC, datetime
 
-    from gungnir_core import maintenance
-    from gungnir_core.db import migrate
+    from gungnir_server import maintenance
+    from gungnir_server.db import migrate
 
     with psycopg.connect(database_url) as conn:
         migrate(conn)

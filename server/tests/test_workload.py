@@ -2,9 +2,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from gungnir_core import knowledge, workload
-from gungnir_core.params import Params
-from gungnir_core.workload import Proc, Rule, RuleClassifier, Snapshot, State, accept
+from gungnir_server import knowledge, workload
+from gungnir_server.params import Params
+from gungnir_server.workload import Proc, Rule, RuleClassifier, Snapshot, State, accept
 
 T0 = datetime(2026, 10, 29, 12, 0, tzinfo=UTC)
 P = Params()
@@ -94,11 +94,11 @@ def test_operator_rules_go_to_the_host_file(tmp_path, monkeypatch):
 
 
 def test_an_unreadable_knowledge_directory_is_an_error(tmp_path, monkeypatch):
-    # Not an empty rule set: the core would run without rules and say nothing.
+    # Not an empty rule set: the server would run without rules and say nothing.
     monkeypatch.setenv("GUNGNIR_KNOWLEDGE_DIR", str(tmp_path / "missing"))
     with pytest.raises(knowledge.KnowledgeError, match="cannot read"):
         workload.load_rules("laptop")
-    from gungnir_core.detection.detectors import thresholds
+    from gungnir_server.detection.detectors import thresholds
 
     with pytest.raises(knowledge.KnowledgeError, match="cannot read"):
         thresholds("laptop")

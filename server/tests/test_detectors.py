@@ -3,8 +3,8 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from gungnir_core.detection import forest
-from gungnir_core.detection.detectors import (
+from gungnir_server.detection import forest
+from gungnir_server.detection.detectors import (
     BookBaselines,
     Cold,
     Context,
@@ -16,9 +16,9 @@ from gungnir_core.detection.detectors import (
     group_cold,
     pressure_levels,
 )
-from gungnir_core.detection.records import Tracker
-from gungnir_core.frame import Frame, SeriesMeta, is_group
-from gungnir_core.params import Params
+from gungnir_server.detection.records import Tracker
+from gungnir_server.frame import Frame, SeriesMeta, is_group
+from gungnir_server.params import Params
 
 P = Params()
 
@@ -235,7 +235,7 @@ def test_forest_names_three_signals_of_an_odd_window():
 
 
 def test_growth_needs_rising_hourly_minima_by_a_noticeable_share():
-    from gungnir_core.detection.growth import Growth
+    from gungnir_server.detection.growth import Growth
 
     # Five hours at one sample a minute; caches swing by 200 MiB within the
     # hour, while the floor under them rises by 100 MiB an hour from 1 GiB.

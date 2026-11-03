@@ -1,7 +1,7 @@
 import numpy as np
 
-from gungnir_core.detection.records import Closed, Evaluation, Opened, RecordSpec, Tracker
-from gungnir_core.params import Params
+from gungnir_server.detection.records import Closed, Evaluation, Opened, RecordSpec, Tracker
+from gungnir_server.params import Params
 
 P = Params()
 

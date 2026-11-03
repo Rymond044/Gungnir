@@ -66,4 +66,4 @@ class = "build"
 priority = 20
 command = ["dockerd", "containerd", "buildkitd"]
 unit = ["docker.service", "containerd.service"]
-provenance = { source = "Docker documentation, BuildKit (docs.docker.com/build/buildkit/): the default builder of Docker Engine since 23.0, run by dockerd; on the laptop on 2026-10-30 a core image build loaded docker.service to 34 % and containerd.service to 33 % of disk I/O", grade = "unverified" }
+provenance = { source = "Docker documentation, BuildKit (docs.docker.com/build/buildkit/): the default builder of Docker Engine since 23.0, run by dockerd; on the laptop on 2026-10-30 a server image build loaded docker.service to 34 % and containerd.service to 33 % of disk I/O", grade = "unverified" }

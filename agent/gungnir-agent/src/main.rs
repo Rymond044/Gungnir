@@ -1,5 +1,5 @@
 //! gungnIR agent: probes signal sources, samples them at a fixed interval,
-//! buffers the samples and delivers them to the core.
+//! buffers the samples and delivers them to the server.
 
 mod buffer;
 mod clock;
@@ -94,7 +94,7 @@ fn run(args: Args) -> Result<(), String> {
 
     let token = config.read_token()?;
     let transport =
-        Transport::new(&config.core_url, &token, Duration::from_secs(config.request_timeout_secs));
+        Transport::new(&config.server_url, &token, Duration::from_secs(config.request_timeout_secs));
     let stop = Arc::new(AtomicBool::new(false));
     for signal in [signal_hook::consts::SIGTERM, signal_hook::consts::SIGINT] {
         signal_hook::flag::register(signal, Arc::clone(&stop)).map_err(|e| format!("signal handler: {e}"))?;
@@ -132,7 +132,7 @@ fn run(args: Args) -> Result<(), String> {
         max_batch: config.max_batch,
     };
     agent.failing = vec![false; agent.sources.len()];
-    info!("sending to {} every {} s", config.core_url, config.send_interval_secs);
+    info!("sending to {} every {} s", config.server_url, config.send_interval_secs);
 
     // Probing primed the counters, so the first rates come one interval later.
     let mut next_sample = Instant::now() + config.sample_interval();
@@ -260,7 +260,7 @@ impl Agent {
         match outcome {
             Outcome::Accepted => self.buffer.consume(ticks),
             Outcome::Rejected(reason) => {
-                error!("core rejected batch {} of {rows} rows, discarding it: {reason}", self.seq);
+                error!("server rejected batch {} of {rows} rows, discarding it: {reason}", self.seq);
                 self.buffer.consume(ticks);
             }
             Outcome::Failed(reason) => return self.failed(&reason),
@@ -273,7 +273,7 @@ impl Agent {
         let dropped = self.buffer.dropped();
         let outcome = self.transport.send(&batch(&self.info, self.seq, &self.statuses, dropped, body));
         if let Outcome::Rejected(reason) = &outcome {
-            error!("core rejected a spooled batch, discarding it: {reason}");
+            error!("server rejected a spooled batch, discarding it: {reason}");
         }
         outcome
     }
