@@ -74,24 +74,86 @@ struct Snapshot {
     has_io: bool,
 }
 
-/// The entity name of a group: its path below the hierarchy root, with the
-/// instance number dropped from scope names (`app-firefox-4242.scope`
-/// becomes `app-firefox.scope`), so a restarted application continues the
-/// same series instead of starting a new one.
+/// The entity name of a group: its path below the hierarchy root with the
+/// parts that differ between instances of one program dropped, so a
+/// restarted program continues the same series instead of starting a new
+/// one, and its instances add up:
+/// - instance numbers of scopes, also chained (`kitty-133019-0.scope` and
+///   `app-firefox-4242.scope` become `kitty.scope` and `app-firefox.scope`);
+/// - a UUID ending a scope (`tmux-spawn-<uuid>.scope`);
+/// - the D-Bus connection a service was activated by
+///   (`dbus-:1.25-org.gnome.NautilusPreviewer@0.service`, also escaped as
+///   `\x2d` in slice names).
+///
+/// Numbered templates (`user@1000.service`) and container ids
+/// (`docker-<id>.scope`) stay: they name different things.
 pub(super) fn entity(rel: &str) -> String {
-    rel.split('/').map(strip_instance).collect::<Vec<_>>().join("/")
+    rel.split('/').map(|name| strip_instance(&strip_dbus_connection(name))).collect::<Vec<_>>().join("/")
 }
 
 fn strip_instance(name: &str) -> String {
-    if let Some(stem) = name.strip_suffix(".scope")
-        && let Some((base, number)) = stem.rsplit_once('-')
+    let Some(mut stem) = name.strip_suffix(".scope") else { return name.to_owned() };
+    if let Some(base) = strip_uuid(stem) {
+        stem = base;
+    }
+    while let Some((base, number)) = stem.rsplit_once('-')
         && !base.is_empty()
         && !number.is_empty()
         && number.bytes().all(|b| b.is_ascii_digit())
     {
-        return format!("{base}.scope");
+        stem = base;
     }
-    name.to_owned()
+    format!("{stem}.scope")
+}
+
+/// The name without a trailing `-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`.
+fn strip_uuid(stem: &str) -> Option<&str> {
+    const LEN: usize = 36;
+    if stem.len() <= LEN + 1 || !stem.is_char_boundary(stem.len() - LEN - 1) {
+        return None;
+    }
+    let (base, tail) = stem.split_at(stem.len() - LEN - 1);
+    let uuid = tail.strip_prefix('-')?;
+    let parts: Vec<&str> = uuid.split('-').collect();
+    let shape = [8, 4, 4, 4, 12];
+    let is_uuid = parts.len() == shape.len()
+        && parts.iter().zip(shape).all(|(p, n)| p.len() == n && p.bytes().all(|b| b.is_ascii_hexdigit()));
+    (is_uuid && !base.is_empty()).then_some(base)
+}
+
+/// The name without a D-Bus connection such as `:1.25` and the dash after it.
+fn strip_dbus_connection(name: &str) -> String {
+    let mut out = String::with_capacity(name.len());
+    let mut rest = name;
+    while let Some(at) = rest.find(':') {
+        out.push_str(&rest[..at]);
+        let after = &rest[at + 1..];
+        let digits = |s: &str| s.bytes().take_while(u8::is_ascii_digit).count();
+        let major = digits(after);
+        let skip = (major > 0 && after[major..].starts_with('.'))
+            .then(|| {
+                let minor = digits(&after[major + 1..]);
+                let tail = &after[major + 1 + minor..];
+                let sep = if tail.starts_with('-') {
+                    1
+                } else if tail.starts_with("\\x2d") {
+                    4
+                } else {
+                    0
+                };
+                (minor > 0 && sep > 0).then_some(major + 1 + minor + sep)
+            })
+            .flatten();
+        match skip {
+            Some(n) => rest = &after[n..],
+            None => {
+                out.push(':');
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 pub struct Cgroup2 {
@@ -365,6 +427,23 @@ mod tests {
             "user.slice/app.slice/app-firefox.scope"
         );
         assert_eq!(entity("system.slice/session-3.scope"), "system.slice/session.scope");
+        assert_eq!(entity("session.slice/kitty-133019-0.scope"), "session.slice/kitty.scope");
+        assert_eq!(
+            entity("session.slice/tmux-spawn-3e1b2c4d-dc56-4a7f-8b9e-0a1b2c3d4e5f.scope"),
+            "session.slice/tmux-spawn.scope"
+        );
+        assert_eq!(
+            entity("app.slice/dbus-:1.25-org.gnome.NautilusPreviewer@0.service"),
+            "app.slice/dbus-org.gnome.NautilusPreviewer@0.service"
+        );
+        assert_eq!(
+            entity("app.slice/app-dbus\\x2d:1.2\\x2dorg.telegram.desktop.slice"),
+            "app.slice/app-dbus\\x2dorg.telegram.desktop.slice"
+        );
+        assert_eq!(
+            entity("user.slice/user-1000.slice/user@1000.service"),
+            "user.slice/user-1000.slice/user@1000.service"
+        );
         assert_eq!(entity("user.slice/user-1000.slice"), "user.slice/user-1000.slice");
         assert_eq!(entity("system.slice/docker-7d4c40.scope"), "system.slice/docker-7d4c40.scope");
         assert_eq!(entity("system.slice/nginx.service"), "system.slice/nginx.service");
