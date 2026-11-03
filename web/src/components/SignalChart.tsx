@@ -79,6 +79,7 @@ export default function SignalChart({
       fitY={fitY}
       binary={series[0]?.signal.includes('_bytes') ?? false}
       onSelect={onSelect}
+      loaded={!!chart.data}
     />
   )
 }

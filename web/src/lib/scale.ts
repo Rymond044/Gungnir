@@ -90,6 +90,24 @@ export function runs(points: Point[], gapMs: number): Point[][] {
   return out
 }
 
+/**
+ * Stretches of [since, until] where no series has a sample for longer than
+ * `gapMs`: the agent was stopped, the host slept or the network was down.
+ */
+export function missing(series: Point[][], since: number, until: number, gapMs: number): [number, number][] {
+  const times = series
+    .flatMap((points) => points.map((p) => p[0]))
+    .filter((t) => t >= since && t <= until)
+    .sort((a, b) => a - b)
+  const out: [number, number][] = []
+  let last = since
+  for (const t of [...times, until]) {
+    if (t - last > gapMs) out.push([last, t])
+    last = Math.max(last, t)
+  }
+  return out
+}
+
 export function line(f: Frame, run: Point[], index = 1): string {
   return run.map((p) => `${x(f, p[0]).toFixed(1)},${y(f, p[index]).toFixed(1)}`).join(' ')
 }

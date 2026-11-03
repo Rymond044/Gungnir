@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Point } from '../api/types'
-import { nearest, niceAxis, niceCeil, runs, timeTicks } from './scale'
+import { missing, nearest, niceAxis, niceCeil, runs, timeTicks } from './scale'
 
 describe('niceCeil', () => {
   it('rounds up to 1, 2, 2.5 or 5 times a power of ten', () => {
@@ -56,4 +56,20 @@ describe('niceAxis in binary units', () => {
     expect(a.max).toBe(400 * 2 ** 20)
     expect(a.step).toBe(100 * 2 ** 20)
   })
+})
+
+it('finds the stretches where no series has samples', () => {
+  const a: Point[] = [
+    [100, 1, 1, 1],
+    [110, 1, 1, 1],
+    [300, 1, 1, 1],
+  ]
+  const b: Point[] = [[200, 1, 1, 1]]
+  expect(missing([a, b], 0, 320, 50)).toEqual([
+    [0, 100],
+    [110, 200],
+    [200, 300],
+  ])
+  expect(missing([[]], 0, 100, 50)).toEqual([[0, 100]])
+  expect(missing([a], 90, 120, 50)).toEqual([])
 })

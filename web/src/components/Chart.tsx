@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import type { Point } from '../api/types'
 import { clock } from '../lib/format'
-import { envelope, line, nearest, niceAxis, runs, timeTicks, x, y, type Frame } from '../lib/scale'
+import { envelope, line, missing, nearest, niceAxis, runs, timeTicks, x, y, type Frame } from '../lib/scale'
 import styles from './Chart.module.css'
 
 export interface Line {
@@ -58,10 +58,14 @@ interface Props {
   binary?: boolean
   /** Dragging across the plot selects a stretch of time to zoom into. */
   onSelect?: (from: number, to: number) => void
+  /** False while the samples are still on their way: nothing is marked missing yet. */
+  loaded?: boolean
 }
 
 const W = 1000
 const STRIP = 7
+// Shorter silences are the agent's batching and the detection lag.
+const SILENCE_MS = 60_000
 
 export default function Chart({
   lines,
@@ -79,6 +83,7 @@ export default function Chart({
   fitY = false,
   binary = false,
   onSelect,
+  loaded = true,
 }: Props) {
   const plot = useRef<HTMLDivElement>(null)
   const [hover, setHover] = useState<number | null>(null)
@@ -118,6 +123,14 @@ export default function Chart({
   const share = (t: number) => (t - since) / (until - since)
   const pct = (t: number) => `${(share(t) * 100).toFixed(3)}%`
   const strips = intervals.filter((i) => i.to >= since && i.from <= until)
+  const silent = loaded
+    ? missing(
+        lines.map((l) => l.points),
+        since,
+        until,
+        Math.max(gap, SILENCE_MS),
+      )
+    : []
   const stripsH = strips.length ? STRIP + 4 : 0
 
   function timeAt(e: React.PointerEvent): number {
@@ -269,6 +282,16 @@ export default function Chart({
               )),
             )}
           </svg>
+          {silent.map(([from, to]) => (
+            <span
+              key={from}
+              className={styles.missing}
+              style={{ left: pct(from), width: `${(share(to) - share(from)) * 100}%` }}
+              title={`нет данных: ${clock(from, offsetS)} — ${clock(to, offsetS)}`}
+            >
+              {share(to) - share(from) > 0.12 && 'нет данных'}
+            </span>
+          ))}
           {strips
             .filter((s) => s.current && s.from >= since)
             .map((s, i) => (
@@ -355,6 +378,15 @@ export default function Chart({
           <span>
             <span className={styles.swatch} style={{ background: 'var(--ochre)', height: 6 }} />
             записи детекции
+          </span>
+        )}
+        {silent.length > 0 && (
+          <span>
+            <span
+              className={`${styles.swatch} ${styles.missing}`}
+              style={{ position: 'static', height: 8 }}
+            />
+            нет данных
           </span>
         )}
       </div>
