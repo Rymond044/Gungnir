@@ -89,11 +89,6 @@ export default function Analysis() {
             ))}
           </select>
         )}
-        {mode === 'interval' && (
-          <span className="muted">
-            {dayClock(ms(since!), offset, now)} — {dayClock(ms(until!), offset, now)}
-          </span>
-        )}
         {diagnosis.isFetching && <span className="muted">считаю…</span>}
       </div>
 
