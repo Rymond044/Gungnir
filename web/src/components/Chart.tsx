@@ -95,7 +95,10 @@ export default function Chart({
     const dataMin = Math.min(...values.map((p) => p[2]), Infinity)
     const visibleBands = bands.filter((b) => b.to > since && b.from < until)
     const bandMax = Math.max(...visibleBands.map((b) => b.high), -Infinity)
-    const top = Math.max(dataMax, bandMax, minMax, 0)
+    // A band far above quiet data would press the line to the floor; the band
+    // then runs off the top, which still reads as "well inside the norm".
+    const bandTop = Number.isFinite(dataMax) ? Math.min(bandMax, Math.max(dataMax, minMax) * 2) : bandMax
+    const top = Math.max(dataMax, bandTop, minMax, 0)
     // A limit far beyond the data would flatten it; such limits are named below the plot.
     const reach = fitY ? Math.max((dataMax - dataMin) * 2, Math.abs(dataMax) * 0.1) : 0
     const shown = limits.filter((l) =>
