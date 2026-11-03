@@ -48,8 +48,6 @@ export default function Overview() {
         )}
       </div>
 
-      <OpenStatus host={host} o={o} offset={offset} now={now} />
-
       <div className={ui.head}>
         <h2>Ресурсы</h2>
         <span style={{ marginLeft: 'auto' }}>
@@ -57,6 +55,8 @@ export default function Overview() {
         </span>
       </div>
       <Resources host={host} o={o} interval={interval} range={range} />
+
+      <OpenStatus host={host} o={o} offset={offset} now={now} />
 
       <div className={ui.row}>
         <div style={{ flex: '3 1 560px', minWidth: 0 }}>
