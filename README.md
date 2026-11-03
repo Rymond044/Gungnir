@@ -23,7 +23,7 @@ docker compose -f deploy/compose.yaml exec server gungnir-server host add <name>
 (cd deploy/agent && sudo ./install.sh ../../token)         # systemd service gungnir-agent
 ```
 
-Check: `docker compose -f deploy/compose.yaml exec server gungnir-server status <name>` shows the agent, its signal sources and the latest value of every signal in its unit; `gungnir-agent --probe` prints what the agent itself sees. API docs: `http://127.0.0.1:8080/docs`.
+Check: `docker compose -f deploy/compose.yaml exec server gungnir-server status <name>` shows the agent, its collectors and the latest value of every signal in its unit; `gungnir-agent --probe` prints what the agent itself sees. API docs: `http://127.0.0.1:8080/docs`.
 
 Detection runs inside the server. Calibrate a new host once, with the host left alone for about 17 minutes:
 

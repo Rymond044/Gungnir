@@ -4,7 +4,7 @@ import pytest
 
 from gungnir_server.display import format_value, render_status
 from gungnir_server.hosts import HostSummary
-from gungnir_server.telemetry import SeriesInfo, SourceState
+from gungnir_server.telemetry import CollectorState, SeriesInfo
 
 
 @pytest.mark.parametrize(
@@ -27,15 +27,15 @@ def test_values_are_shown_in_their_units(signal, value, text):
 def test_status_marks_fallbacks_and_stale_values():
     now = datetime(2026, 10, 28, 16, 0, tzinfo=UTC)
     host = HostSummary("laptop", now, now - timedelta(seconds=4), "0.1.0", now - timedelta(hours=1), 10800, 0)
-    sources = [
-        SourceState("cpu", "preferred", "/proc/stat", None, now),
-        SourceState("memory", "fallback", "sysinfo(2)", "/proc/meminfo: gone", now),
+    collectors = [
+        CollectorState("cpu", "preferred", "/proc/stat", None, now),
+        CollectorState("memory", "fallback", "sysinfo(2)", "/proc/meminfo: gone", now),
     ]
     series = [
         SeriesInfo("cpu.idle_ratio", "host", now - timedelta(seconds=4), 0.98),
         SeriesInfo("disk.read_await_ms", "sda", now - timedelta(minutes=10), 1.5),
     ]
-    text = render_status(host, sources, series, now)
+    text = render_status(host, collectors, series, now)
     assert "started 2026-10-28 18:00:00 +0300" in text
     assert "last contact 4 s ago" in text
     assert "fallback   sysinfo(2)  (/proc/meminfo: gone)" in text

@@ -54,7 +54,7 @@ def evidence(
         row[0] for row in conn.execute("SELECT DISTINCT signal FROM series WHERE host_id = %s", (host.id,))
     }
     unobservable = set(onto.signals) - seen
-    states = {s.module: s.state for s in telemetry.source_states(conn, host)}
+    states = {s.collector: s.state for s in telemetry.collector_states(conn, host)}
     if states.get("journal") in (None, "disabled"):
         unobservable |= set(onto.events)
     if not snapshots:

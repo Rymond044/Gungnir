@@ -101,7 +101,7 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
-    use crate::sources::{find, scratch_dir};
+    use crate::collectors::{find, scratch_dir};
 
     fn write(dir: &Path, some: u64, full: u64) {
         for file in ["cpu", "memory", "io"] {

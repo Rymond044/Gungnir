@@ -335,7 +335,7 @@ impl Source for Cgroup2 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sources::{find, scratch_dir};
+    use crate::collectors::{find, scratch_dir};
 
     fn group(root: &Path, rel: &str, usage: u64, wbytes: u64, mem: u64) {
         let dir = root.join(rel);

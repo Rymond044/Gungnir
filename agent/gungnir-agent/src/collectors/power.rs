@@ -136,7 +136,7 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
-    use crate::sources::scratch_dir;
+    use crate::collectors::scratch_dir;
 
     fn supply(root: &std::path::Path, name: &str, files: &[(&str, &str)]) {
         let dir = root.join(name);

@@ -236,7 +236,7 @@ fn await_ms(ms_a: u64, ms_b: u64, ops_a: u64, ops_b: u64) -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sources::{find, fixture_roots, scratch_dir};
+    use crate::collectors::{find, fixture_roots, scratch_dir};
 
     fn roots_without_loop() -> Roots {
         Roots { disk_exclude: vec!["loop".into()], ..fixture_roots() }

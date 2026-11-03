@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
-use crate::sources::Roots;
+use crate::collectors::Roots;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields, default)]

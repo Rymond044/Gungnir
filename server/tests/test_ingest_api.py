@@ -36,14 +36,14 @@ def test_resent_batch_is_harmless(client, token):
     assert response.json() == {"accepted": 1, "inserted": 0, "out_of_window": 0}
 
 
-def test_disabled_source_is_recorded_with_reason(client, token):
-    sources = [
-        {"module": "cpu", "state": "preferred", "origin": "/proc/stat"},
-        {"module": "memory", "state": "fallback", "origin": "sysinfo(2)", "reason": "/proc/meminfo: gone"},
-        {"module": "disk", "state": "disabled", "reason": "/sys/block: permission denied"},
+def test_disabled_collector_is_recorded_with_reason(client, token):
+    collectors = [
+        {"collector": "cpu", "state": "preferred", "origin": "/proc/stat"},
+        {"collector": "memory", "state": "fallback", "origin": "sysinfo(2)", "reason": "/proc/meminfo: gone"},
+        {"collector": "disk", "state": "disabled", "reason": "/sys/block: permission denied"},
     ]
-    client.post("/api/v1/ingest", json=batch(sources=sources), headers=auth(token))
-    states = {s["module"]: s for s in client.get("/api/v1/hosts/laptop/sources").json()}
+    client.post("/api/v1/ingest", json=batch(collectors=collectors), headers=auth(token))
+    states = {s["collector"]: s for s in client.get("/api/v1/hosts/laptop/collectors").json()}
     assert states["memory"]["state"] == "fallback"
     assert states["disk"]["state"] == "disabled"
     assert states["disk"]["reason"] == "/sys/block: permission denied"

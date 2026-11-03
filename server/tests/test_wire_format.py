@@ -14,7 +14,7 @@ def batch(**overrides) -> dict:
     body = {
         "agent": {"version": "0.1.0", "started_at": 1_761_000_000_000, "utc_offset_s": 10800},
         "seq": 1,
-        "sources": [{"module": "cpu", "state": "preferred", "origin": "/proc/stat"}],
+        "collectors": [{"collector": "cpu", "state": "preferred", "origin": "/proc/stat"}],
         "dropped": 0,
         "samples": [{"ts": RECENT, "signal": "cpu.iowait_ratio", "entity": "host", "value": 0.02}],
     }
@@ -53,6 +53,12 @@ def event(**overrides) -> dict:
 def test_valid_batch_parses():
     parsed = Batch.model_validate(batch())
     assert parsed.samples[0].signal == "cpu.iowait_ratio"
+
+
+def test_an_agent_from_before_the_rename_is_accepted():
+    old = batch() | {"sources": [{"module": "cpu", "state": "preferred", "origin": "/proc/stat"}]}
+    del old["collectors"]
+    assert Batch.model_validate(old).collectors[0].collector == "cpu"
 
 
 @pytest.mark.parametrize("name", ["cpu", "CPU.idle", "cpu..idle", "cpu.idle-ratio", "1cpu.idle"])

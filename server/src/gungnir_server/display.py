@@ -5,7 +5,7 @@ from fnmatch import fnmatchcase
 
 from gungnir_server.evidence import HOST, Event, Item, Record, Value
 from gungnir_server.hosts import HostSummary
-from gungnir_server.telemetry import FactRow, ProcessRow, SeriesInfo, SourceState
+from gungnir_server.telemetry import CollectorState, FactRow, ProcessRow, SeriesInfo
 
 # A value older than this is marked with its age; the agent samples every 5 s.
 STALE_SECONDS = 60
@@ -56,7 +56,7 @@ def host_zone(host: HostSummary) -> timezone:
 
 def render_status(
     host: HostSummary,
-    sources: list[SourceState],
+    collectors: list[CollectorState],
     series: list[SeriesInfo],
     now: datetime,
     facts: list[FactRow] = (),
@@ -76,9 +76,9 @@ def render_status(
     lines.append(f"  rows lost to buffer and spool overflow: {host.dropped_rows}")
 
     lines.append("")
-    lines.append("Signal sources")
-    for s in sources:
-        line = f"  {s.module:<13} {s.state:<10} {s.origin or '-'}"
+    lines.append("Collectors")
+    for s in collectors:
+        line = f"  {s.collector:<13} {s.state:<10} {s.origin or '-'}"
         if s.state != "preferred" and s.reason:
             line += f"  ({s.reason})"
         lines.append(line)

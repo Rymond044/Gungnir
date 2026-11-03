@@ -4,7 +4,7 @@
 
 use std::collections::VecDeque;
 
-use crate::sources::Collected;
+use crate::collectors::Collected;
 
 pub struct Tick {
     /// Milliseconds since the Unix epoch, host wall clock.
@@ -89,7 +89,7 @@ impl Buffer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sources::Reading;
+    use crate::collectors::Reading;
 
     fn tick(ts: i64, rows: usize) -> Tick {
         let data =

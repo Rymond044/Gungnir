@@ -1,10 +1,10 @@
-//! gungnIR agent: probes signal sources, samples them at a fixed interval,
+//! gungnIR agent: probes its collectors, samples them at a fixed interval,
 //! buffers the samples and delivers them to the server.
 
 mod buffer;
 mod clock;
+mod collectors;
 mod config;
-mod sources;
 mod spool;
 mod transport;
 
@@ -18,9 +18,9 @@ use std::time::{Duration, Instant};
 use log::{error, info, warn};
 
 use buffer::{Buffer, Tick};
+use collectors::{Collected, CollectorStatus, Source, State};
 use config::Config;
 use serde::Serialize;
-use sources::{Collected, ModuleStatus, Source, State};
 use spool::Spool;
 use transport::{AgentInfo, Batch, Body, Outcome, StoredBody, Transport};
 
@@ -33,7 +33,7 @@ const USAGE: &str = "\
 usage: gungnir-agent [--config PATH] [--probe]
 
   --config PATH  configuration file (TOML); built-in defaults otherwise
-  --probe        report signal sources and one round of readings as JSON, then exit
+  --probe        report collectors and one round of readings as JSON, then exit
   --version      print the version";
 
 struct Args {
@@ -84,7 +84,7 @@ fn init_logging() {
 
 fn run(args: Args) -> Result<(), String> {
     let config = Config::load(args.config.as_deref())?;
-    let mut probed = sources::probe(&config.roots());
+    let mut probed = collectors::probe(&config.roots());
     for status in &probed.statuses {
         log_status(status);
     }
@@ -180,7 +180,7 @@ struct Agent {
     sources: Vec<Box<dyn Source>>,
     /// Whether each source failed on its last read, to log changes only.
     failing: Vec<bool>,
-    statuses: Vec<ModuleStatus>,
+    statuses: Vec<CollectorStatus>,
     buffer: Buffer,
     spool: Option<Spool>,
     transport: Transport,
@@ -324,25 +324,31 @@ impl Agent {
 fn batch<'a, B: Serialize>(
     info: &AgentInfo,
     seq: u64,
-    sources: &'a [ModuleStatus],
+    collectors: &'a [CollectorStatus],
     dropped: u64,
     body: B,
 ) -> Batch<'a, B> {
-    Batch { agent: AgentInfo { utc_offset_s: clock::utc_offset_s(), ..*info }, seq, sources, dropped, body }
+    Batch {
+        agent: AgentInfo { utc_offset_s: clock::utc_offset_s(), ..*info },
+        seq,
+        collectors,
+        dropped,
+        body,
+    }
 }
 
-fn log_status(status: &ModuleStatus) {
+fn log_status(status: &CollectorStatus) {
     let origin = status.origin.as_deref().unwrap_or("-");
     let reason = status.reason.as_deref().unwrap_or("");
     match status.state {
-        State::Preferred => info!("source {}: {origin}", status.module),
-        State::Fallback => warn!("source {}: fallback {origin} ({reason})", status.module),
-        State::Disabled => warn!("source {}: disabled ({reason})", status.module),
+        State::Preferred => info!("collector {}: {origin}", status.collector),
+        State::Fallback => warn!("collector {}: fallback {origin} ({reason})", status.collector),
+        State::Disabled => warn!("collector {}: disabled ({reason})", status.collector),
     }
 }
 
 /// One round of collection one second after probing, so rates are present.
-fn print_probe(sources: &mut [Box<dyn Source>], statuses: &[ModuleStatus]) -> Result<(), String> {
+fn print_probe(sources: &mut [Box<dyn Source>], statuses: &[CollectorStatus]) -> Result<(), String> {
     thread::sleep(Duration::from_secs(1));
     let now = Instant::now();
     let mut data = Collected::default();
@@ -352,7 +358,7 @@ fn print_probe(sources: &mut [Box<dyn Source>], statuses: &[ModuleStatus]) -> Re
         }
     }
     let tick = [Tick { ts: clock::now_ms(), data }];
-    let report = serde_json::json!({ "sources": statuses, "collected": Body::from_ticks(&tick) });
+    let report = serde_json::json!({ "collectors": statuses, "collected": Body::from_ticks(&tick) });
     println!("{}", serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?);
     Ok(())
 }

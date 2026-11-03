@@ -87,13 +87,13 @@ def store(conn: psycopg.Connection, ids: SeriesIds, host: Host, batch: Batch, no
                 host.id,
             ),
         )
-        for s in batch.sources:
+        for s in batch.collectors:
             conn.execute(
-                "INSERT INTO source_states (host_id, module, state, origin, reason, reported_at)"
+                "INSERT INTO collector_states (host_id, collector, state, origin, reason, reported_at)"
                 " VALUES (%s, %s, %s, %s, %s, now())"
-                " ON CONFLICT (host_id, module) DO UPDATE SET state = EXCLUDED.state,"
+                " ON CONFLICT (host_id, collector) DO UPDATE SET state = EXCLUDED.state,"
                 " origin = EXCLUDED.origin, reason = EXCLUDED.reason, reported_at = EXCLUDED.reported_at",
-                (host.id, s.module, s.state, s.origin, s.reason),
+                (host.id, s.collector, s.state, s.origin, s.reason),
             )
         inserted = _insert_samples(conn, series, in_window) if in_window else 0
         if in_window:
@@ -167,21 +167,21 @@ def _insert_context(conn: psycopg.Connection, host: Host, batch: Batch, processe
 
 
 @dataclass(frozen=True)
-class SourceState:
-    module: str
+class CollectorState:
+    collector: str
     state: str
     origin: str | None
     reason: str | None
     reported_at: datetime
 
 
-def source_states(conn: psycopg.Connection, host: Host) -> list[SourceState]:
+def collector_states(conn: psycopg.Connection, host: Host) -> list[CollectorState]:
     rows = conn.execute(
-        "SELECT module, state, origin, reason, reported_at FROM source_states"
-        " WHERE host_id = %s ORDER BY module",
+        "SELECT collector, state, origin, reason, reported_at FROM collector_states"
+        " WHERE host_id = %s ORDER BY collector",
         (host.id,),
     ).fetchall()
-    return [SourceState(*row) for row in rows]
+    return [CollectorState(*row) for row in rows]
 
 
 @dataclass(frozen=True)

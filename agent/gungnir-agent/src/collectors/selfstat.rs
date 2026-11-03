@@ -95,11 +95,11 @@ impl Source for ProcSelf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sources::find;
+    use crate::collectors::find;
 
     #[test]
     fn reports_own_private_memory() {
-        let roots = Roots { proc: PathBuf::from("/proc"), ..crate::sources::missing_roots() };
+        let roots = Roots { proc: PathBuf::from("/proc"), ..crate::collectors::missing_roots() };
         let mut source = ProcSelf {
             dir: roots.proc.join("self"),
             ticks_per_s: 100.0,

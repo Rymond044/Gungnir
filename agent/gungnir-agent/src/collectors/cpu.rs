@@ -130,7 +130,7 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
-    use crate::sources::{find, fixture_roots};
+    use crate::collectors::{find, fixture_roots};
 
     #[test]
     fn parses_real_proc_stat() {

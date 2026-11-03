@@ -97,9 +97,9 @@ def list_hosts(conn: Conn) -> list[hosts.HostSummary]:
     return hosts.summaries(conn)
 
 
-@router.get("/hosts/{name}/sources")
-def sources(host: NamedHost, conn: Conn) -> list[telemetry.SourceState]:
-    return telemetry.source_states(conn, host)
+@router.get("/hosts/{name}/collectors")
+def collectors(host: NamedHost, conn: Conn) -> list[telemetry.CollectorState]:
+    return telemetry.collector_states(conn, host)
 
 
 @router.get("/hosts/{name}/series")

@@ -37,7 +37,7 @@ dc exec -T db pg_restore -U gungnir -d scratch < ../backups/<file>.dump
 
 ```sh
 server host list                       # hosts and when their agent was last seen
-server status laptop                   # sources, facts (incl. workload.class), top processes, latest values
+server status laptop                   # collectors, facts (incl. workload.class), top processes, latest values
 server status laptop --groups          # also control group series
 server workload show laptop            # class changes of the last 24 h, and a class still pending
 server anomalies laptop                # live records of the last 24 h
@@ -141,7 +141,7 @@ The ontology is `knowledge/ontology/gungnir.ttl`; open it in Protégé (File →
 
 Before: server up, calibration run done, a day of data collected.
 
-1. `server status laptop`: the agent, its sources, the current `workload.class`.
+1. `server status laptop`: the agent, its collectors, the current `workload.class`.
 2. `server workload show laptop`, then start a build (`cd agent && cargo clean -p gungnir-agent && cargo build --release`); after about 30 s `workload show` reports `build`. Open `knowledge/expected/workload_classes.toml`: every rule has its source.
 3. `stress-ng --cpu 0 --timeout 60s`, wait 40 s, `server anomalies laptop --hours 1`: a `threshold` record on `cpu.idle_ratio`, and after a baseline exists a `robust.mad` one; it closes about 15 s after the load ends.
 4. `systemd-run --user --scope -p MemoryHigh=200M stress-ng --vm 1 --vm-bytes 400M --timeout 60s`: memory pressure in the group, an `impact` record when it is high enough.

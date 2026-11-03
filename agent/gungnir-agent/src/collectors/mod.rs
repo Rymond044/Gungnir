@@ -1,8 +1,8 @@
-//! Signal sources and their probing.
+//! Collectors and the probing of their sources.
 //!
-//! Each module (cpu, memory, ...) lists its candidate sources in order of
+//! Each collector (cpu, memory, ...) lists its candidate sources in order of
 //! preference. At start the agent opens the first candidate that works; the
-//! rest are fallbacks. A module with no working candidate is disabled and
+//! rest are fallbacks. A collector with no working candidate is disabled and
 //! reported, and the agent carries on without it.
 
 mod cgroup;
@@ -136,10 +136,10 @@ pub enum State {
     Disabled,
 }
 
-/// The outcome of probing one module, reported to the server.
+/// The outcome of probing one collector, reported to the server.
 #[derive(Debug, Clone, Serialize)]
-pub struct ModuleStatus {
-    pub module: &'static str,
+pub struct CollectorStatus {
+    pub collector: &'static str,
     pub state: State,
     pub origin: Option<String>,
     pub reason: Option<String>,
@@ -147,43 +147,43 @@ pub struct ModuleStatus {
 
 type Opener = fn(&Roots, Instant) -> io::Result<Box<dyn Source>>;
 
-struct Module {
+struct Collector {
     name: &'static str,
     candidates: &'static [Opener],
 }
 
-const MODULES: &[Module] = &[
-    Module { name: "cpu", candidates: &[cpu::open_proc_stat] },
-    Module { name: "memory", candidates: &[memory::open_meminfo, memory::open_sysinfo] },
-    Module { name: "vmstat", candidates: &[vmstat::open_proc_vmstat] },
-    Module { name: "disk", candidates: &[disk::open_proc_diskstats, disk::open_sys_block] },
-    Module { name: "fs", candidates: &[fs::open_mounts] },
-    Module { name: "pressure", candidates: &[pressure::open_proc_pressure] },
-    Module { name: "cgroup", candidates: &[cgroup::open_cgroup2] },
-    Module { name: "processes", candidates: &[processes::open_proc_pids] },
-    Module { name: "thermal", candidates: &[thermal::open_throttle_counters, thermal::open_thermal_zone] },
-    Module { name: "power_supply", candidates: &[power::open_power_supply] },
-    Module { name: "power_profile", candidates: &[power::open_platform_profile, power::open_cpufreq_epp] },
-    Module { name: "journal", candidates: &[journal::open_journalctl, journal::open_kmsg] },
-    Module { name: "self", candidates: &[selfstat::open_proc_self] },
+const COLLECTORS: &[Collector] = &[
+    Collector { name: "cpu", candidates: &[cpu::open_proc_stat] },
+    Collector { name: "memory", candidates: &[memory::open_meminfo, memory::open_sysinfo] },
+    Collector { name: "vmstat", candidates: &[vmstat::open_proc_vmstat] },
+    Collector { name: "disk", candidates: &[disk::open_proc_diskstats, disk::open_sys_block] },
+    Collector { name: "fs", candidates: &[fs::open_mounts] },
+    Collector { name: "pressure", candidates: &[pressure::open_proc_pressure] },
+    Collector { name: "cgroup", candidates: &[cgroup::open_cgroup2] },
+    Collector { name: "processes", candidates: &[processes::open_proc_pids] },
+    Collector { name: "thermal", candidates: &[thermal::open_throttle_counters, thermal::open_thermal_zone] },
+    Collector { name: "power_supply", candidates: &[power::open_power_supply] },
+    Collector { name: "power_profile", candidates: &[power::open_platform_profile, power::open_cpufreq_epp] },
+    Collector { name: "journal", candidates: &[journal::open_journalctl, journal::open_kmsg] },
+    Collector { name: "self", candidates: &[selfstat::open_proc_self] },
 ];
 
 pub struct Probed {
     pub sources: Vec<Box<dyn Source>>,
-    pub statuses: Vec<ModuleStatus>,
+    pub statuses: Vec<CollectorStatus>,
 }
 
-/// Opens every module's best working source. Opening performs a first read,
+/// Opens every collector's best working source. Opening performs a first read,
 /// so a source that is present but unreadable counts as missing.
 pub fn probe(roots: &Roots) -> Probed {
     let now = Instant::now();
     let mut sources = Vec::new();
     let mut statuses = Vec::new();
 
-    for module in MODULES {
+    for collector in COLLECTORS {
         let mut failures = Vec::new();
         let mut chosen = None;
-        for (rank, open) in module.candidates.iter().enumerate() {
+        for (rank, open) in collector.candidates.iter().enumerate() {
             match open(roots, now) {
                 Ok(source) => {
                     chosen = Some((rank, source));
@@ -198,8 +198,8 @@ pub fn probe(roots: &Roots) -> Probed {
         let reason = (!failures.is_empty()).then(|| failures.join("; "));
         let status = match chosen {
             Some((rank, source)) => {
-                let status = ModuleStatus {
-                    module: module.name,
+                let status = CollectorStatus {
+                    collector: collector.name,
                     state: if rank == 0 { State::Preferred } else { State::Fallback },
                     origin: Some(source.origin()),
                     reason,
@@ -207,7 +207,9 @@ pub fn probe(roots: &Roots) -> Probed {
                 sources.push(source);
                 status
             }
-            None => ModuleStatus { module: module.name, state: State::Disabled, origin: None, reason },
+            None => {
+                CollectorStatus { collector: collector.name, state: State::Disabled, origin: None, reason }
+            }
         };
         statuses.push(status);
     }
@@ -292,10 +294,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn missing_source_disables_module_without_failing() {
+    fn missing_source_disables_collector_without_failing() {
         let roots = missing_roots();
         let probed = probe(&roots);
-        let cpu = probed.statuses.iter().find(|s| s.module == "cpu").unwrap();
+        let cpu = probed.statuses.iter().find(|s| s.collector == "cpu").unwrap();
         assert_eq!(cpu.state, State::Disabled);
         assert!(cpu.reason.as_deref().unwrap().contains("/nonexistent/proc/stat"));
     }
@@ -304,7 +306,7 @@ mod tests {
     fn memory_falls_back_to_sysinfo() {
         let roots = missing_roots();
         let probed = probe(&roots);
-        let memory = probed.statuses.iter().find(|s| s.module == "memory").unwrap();
+        let memory = probed.statuses.iter().find(|s| s.collector == "memory").unwrap();
         assert_eq!(memory.state, State::Fallback);
         assert_eq!(memory.origin.as_deref(), Some("sysinfo(2)"));
     }

@@ -85,7 +85,7 @@ impl Source for ProcVmstat {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sources::fixture_roots;
+    use crate::collectors::fixture_roots;
 
     #[test]
     fn sums_allocstall_zones() {

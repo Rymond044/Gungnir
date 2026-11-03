@@ -121,7 +121,7 @@ impl Source for Sysinfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sources::{find, fixture_roots};
+    use crate::collectors::{find, fixture_roots};
 
     #[test]
     fn reads_real_meminfo_in_bytes() {

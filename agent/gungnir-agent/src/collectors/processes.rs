@@ -200,7 +200,7 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
-    use crate::sources::scratch_dir;
+    use crate::collectors::scratch_dir;
 
     fn stat_line(pid: u32, comm: &str, state: char, ticks: u64, rss: u64) -> String {
         format!(

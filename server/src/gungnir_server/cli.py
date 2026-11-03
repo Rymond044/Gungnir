@@ -56,7 +56,7 @@ def main() -> None:
     commands.add_parser("maintain", help="create partitions, roll up and expire data now")
     commands.add_parser("process", help="run the workload classifier and due histograms for all hosts now")
 
-    status = commands.add_parser("status", help="show a host's agent, signal sources and latest values")
+    status = commands.add_parser("status", help="show a host's agent, collectors and latest values")
     status.add_argument("name")
     status.add_argument("--groups", action="store_true", help="also list control group series")
 
@@ -385,12 +385,12 @@ def show_status(conn: psycopg.Connection, name: str, groups: bool) -> None:
     host = hosts.by_name(conn, name)
     if summary is None or host is None:
         sys.exit(f"no host '{name}'")
-    sources = telemetry.source_states(conn, host)
+    collectors = telemetry.collector_states(conn, host)
     series = telemetry.series_of(conn, host)
     now = datetime.now(UTC)
     facts = telemetry.latest_facts(conn, host)
     processes = telemetry.processes_at(conn, host, now)
-    print(render_status(summary, sources, series, now, facts, processes, groups))
+    print(render_status(summary, collectors, series, now, facts, processes, groups))
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ use std::time::Duration;
 use serde::Serialize;
 
 use crate::buffer::Tick;
-use crate::sources::{Event, ModuleStatus, Process};
+use crate::collectors::{CollectorStatus, Event, Process};
 
 /// A batch is a header plus a body. The body is either built from ticks in
 /// memory or read back from the spool, which is why it is generic.
@@ -17,7 +17,7 @@ pub struct Batch<'a, B: Serialize> {
     pub seq: u64,
     /// Probe results, repeated in every batch so a restarted server learns
     /// them without a separate handshake.
-    pub sources: &'a [ModuleStatus],
+    pub collectors: &'a [CollectorStatus],
     /// Rows dropped on buffer or spool overflow since the agent started.
     pub dropped: u64,
     #[serde(flatten)]

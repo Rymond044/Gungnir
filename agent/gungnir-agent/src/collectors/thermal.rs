@@ -4,7 +4,7 @@
 //! The preferred source is the per-CPU `thermal_throttle` counters of x86
 //! (Documentation/ABI/testing/sysfs-devices-system-cpu) together with a
 //! temperature zone; without the counters, the zone alone; without either,
-//! the module is disabled.
+//! the collector is disabled.
 
 use std::collections::HashSet;
 use std::io;
@@ -137,7 +137,7 @@ impl Source for Thermal {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sources::{find, scratch_dir};
+    use crate::collectors::{find, scratch_dir};
 
     fn write(path: &Path, text: &str) {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
