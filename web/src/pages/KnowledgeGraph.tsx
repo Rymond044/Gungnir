@@ -93,10 +93,11 @@ export default function KnowledgeGraph({ k, host }: { k: Knowledge; host: string
   const graph = useRef<ForceGraphMethods<NodeObject<GNode>, LinkObject<GNode, GLink>>>(undefined)
   const [width, setWidth] = useState(800)
   const data = useMemo(() => build(k, domain), [k, domain])
-  // The view fits the graph once per domain. Dragging a node reheats the
-  // simulation; fitting again on every stop would zoom away from where the
-  // operator is looking.
-  const fitted = useRef(false)
+  // The graph stays hidden while it lays itself out and is shown once,
+  // already fitted to its box: otherwise the operator watches it settle and
+  // then jump to a new scale. Dragging a node later reheats the simulation
+  // without fitting again.
+  const [ready, setReady] = useState(false)
   // Label boxes drawn in this frame, in graph units: a label that would cover
   // another moves above its node, or waits for hover or zoom.
   const placed = useRef<[number, number, number, number][]>([])
@@ -115,7 +116,6 @@ export default function KnowledgeGraph({ k, host }: { k: Knowledge; host: string
     graph.current?.d3Force('charge')?.strength(-170)
     graph.current?.d3Force('link')?.distance(70)
     graph.current?.d3ReheatSimulation()
-    fitted.current = false
   }, [data])
 
   const focus = hovered ?? selected
@@ -147,10 +147,11 @@ export default function KnowledgeGraph({ k, host }: { k: Knowledge; host: string
           onChange={(d) => {
             setDomain(d)
             setSelected(null)
+            setReady(false)
           }}
         />
         <span className="muted" style={{ fontSize: 13 }}>
-          колесо — масштаб, перетаскивание — сдвиг и узлы, клик — закрепить подсветку
+          Ctrl + колесо — масштаб, перетаскивание — сдвиг и узлы, клик — закрепить подсветку
         </span>
       </div>
       <Legend />
@@ -165,83 +166,90 @@ export default function KnowledgeGraph({ k, host }: { k: Knowledge; host: string
             border: '1px solid var(--line)',
             borderRadius: 10,
             overflow: 'hidden',
+            position: 'relative',
           }}
         >
-          <ForceGraph2D<GNode, GLink>
-            ref={graph}
-            graphData={data}
-            width={width}
-            height={HEIGHT}
-            backgroundColor="#f5f4f1"
-            warmupTicks={150}
-            cooldownTicks={150}
-            onEngineStop={() => {
-              if (fitted.current) return
-              fitted.current = true
-              graph.current?.zoomToFit(400, 40)
-            }}
-            onRenderFramePre={() => {
-              placed.current = []
-            }}
-            nodeRelSize={1}
-            nodeVal={(n) => radius(n) ** 2}
-            nodeLabel={(n) => `${n.label} (${KIND_NAMES[n.kind]})`}
-            nodeCanvasObject={(n, ctx, scale) => {
-              const r = radius(n)
-              const dim = !!lit && !lit.has(n.id)
-              ctx.beginPath()
-              ctx.arc(n.x!, n.y!, r, 0, 2 * Math.PI)
-              ctx.fillStyle = dim ? FAINT : COLOR[n.kind]
-              ctx.fill()
-              if (n.id === focus) {
-                ctx.lineWidth = 2 / scale
-                ctx.strokeStyle = '#a86400'
-                ctx.stroke()
-              }
-              // Labels of causes always; of the rest when zoomed in or lit.
-              const show = n.kind === 'cause' || scale > 1.6 || (!!lit && lit.has(n.id))
-              if (!show || dim) return
-              const size = Math.max(10 / scale, n.kind === 'cause' ? 4.2 : 3.4)
-              ctx.font = `${n.kind === 'cause' ? 600 : 400} ${size}px Golos Text, sans-serif`
-              const w = ctx.measureText(n.label).width
-              const pad = size * 0.2
-              const box = (top: number): [number, number, number, number] => [
-                n.x! - w / 2 - pad,
-                top - pad,
-                n.x! + w / 2 + pad,
-                top + size + pad,
-              ]
-              const free = (b: [number, number, number, number]) =>
-                !placed.current.some((p) => b[0] < p[2] && p[0] < b[2] && b[1] < p[3] && p[1] < b[3])
-              const below = box(n.y! + r + 1.5)
-              const above = box(n.y! - r - 1.5 - size)
-              const spot = free(below) ? below : free(above) ? above : n.id === focus ? below : null
-              if (!spot) return
-              placed.current.push(spot)
-              ctx.fillStyle = HALO
-              ctx.fillRect(spot[0], spot[1], spot[2] - spot[0], spot[3] - spot[1])
-              ctx.textAlign = 'center'
-              ctx.textBaseline = 'top'
-              ctx.fillStyle = n.kind === 'cause' ? '#1c1b19' : '#4a463f'
-              ctx.fillText(n.label, n.x!, spot[1] + pad)
-            }}
-            nodePointerAreaPaint={(n, color, ctx) => {
-              ctx.beginPath()
-              ctx.arc(n.x!, n.y!, radius(n) + 2, 0, 2 * Math.PI)
-              ctx.fillStyle = color
-              ctx.fill()
-            }}
-            linkColor={(l) => (lit && !touches(l) ? FAINT : EDGE[l.strength].color)}
-            linkWidth={(l) => (l.leading ? 2.4 : 1) * (touches(l) ? 1.5 : 1)}
-            linkLineDash={(l) => EDGE[l.strength].dash}
-            linkDirectionalParticles={(l) => (touches(l) ? 3 : 0)}
-            linkDirectionalParticleWidth={2.5}
-            linkDirectionalParticleSpeed={0.008}
-            linkDirectionalParticleColor={(l) => EDGE[l.strength].color}
-            onNodeHover={(n) => setHovered(n ? String(n.id) : null)}
-            onNodeClick={(n) => setSelected(String(n.id) === selected ? null : String(n.id))}
-            onBackgroundClick={() => setSelected(null)}
-          />
+          {!ready && <span className={ui.overlay}>Раскладываю граф…</span>}
+          <div style={{ opacity: ready ? 1 : 0, transition: 'opacity 0.2s' }}>
+            <ForceGraph2D<GNode, GLink>
+              ref={graph}
+              graphData={data}
+              width={width}
+              height={HEIGHT}
+              backgroundColor="#f5f4f1"
+              warmupTicks={150}
+              cooldownTicks={150}
+              onEngineStop={() => {
+                if (ready) return
+                graph.current?.zoomToFit(0, 40)
+                setReady(true)
+              }}
+              // The page scrolls under the wheel; the graph zooms with Ctrl, as
+              // maps do, and with a trackpad pinch, which arrives as Ctrl + wheel.
+              enableZoomInteraction={(e: MouseEvent) => e.ctrlKey || e.metaKey}
+              onRenderFramePre={() => {
+                placed.current = []
+              }}
+              nodeRelSize={1}
+              nodeVal={(n) => radius(n) ** 2}
+              nodeLabel={(n) => `${n.label} (${KIND_NAMES[n.kind]})`}
+              nodeCanvasObject={(n, ctx, scale) => {
+                const r = radius(n)
+                const dim = !!lit && !lit.has(n.id)
+                ctx.beginPath()
+                ctx.arc(n.x!, n.y!, r, 0, 2 * Math.PI)
+                ctx.fillStyle = dim ? FAINT : COLOR[n.kind]
+                ctx.fill()
+                if (n.id === focus) {
+                  ctx.lineWidth = 2 / scale
+                  ctx.strokeStyle = '#a86400'
+                  ctx.stroke()
+                }
+                // Labels of causes always; of the rest when zoomed in or lit.
+                const show = n.kind === 'cause' || scale > 1.6 || (!!lit && lit.has(n.id))
+                if (!show || dim) return
+                const size = Math.max(10 / scale, n.kind === 'cause' ? 4.2 : 3.4)
+                ctx.font = `${n.kind === 'cause' ? 600 : 400} ${size}px Golos Text, sans-serif`
+                const w = ctx.measureText(n.label).width
+                const pad = size * 0.2
+                const box = (top: number): [number, number, number, number] => [
+                  n.x! - w / 2 - pad,
+                  top - pad,
+                  n.x! + w / 2 + pad,
+                  top + size + pad,
+                ]
+                const free = (b: [number, number, number, number]) =>
+                  !placed.current.some((p) => b[0] < p[2] && p[0] < b[2] && b[1] < p[3] && p[1] < b[3])
+                const below = box(n.y! + r + 1.5)
+                const above = box(n.y! - r - 1.5 - size)
+                const spot = free(below) ? below : free(above) ? above : n.id === focus ? below : null
+                if (!spot) return
+                placed.current.push(spot)
+                ctx.fillStyle = HALO
+                ctx.fillRect(spot[0], spot[1], spot[2] - spot[0], spot[3] - spot[1])
+                ctx.textAlign = 'center'
+                ctx.textBaseline = 'top'
+                ctx.fillStyle = n.kind === 'cause' ? '#1c1b19' : '#4a463f'
+                ctx.fillText(n.label, n.x!, spot[1] + pad)
+              }}
+              nodePointerAreaPaint={(n, color, ctx) => {
+                ctx.beginPath()
+                ctx.arc(n.x!, n.y!, radius(n) + 2, 0, 2 * Math.PI)
+                ctx.fillStyle = color
+                ctx.fill()
+              }}
+              linkColor={(l) => (lit && !touches(l) ? FAINT : EDGE[l.strength].color)}
+              linkWidth={(l) => (l.leading ? 2.4 : 1) * (touches(l) ? 1.5 : 1)}
+              linkLineDash={(l) => EDGE[l.strength].dash}
+              linkDirectionalParticles={(l) => (touches(l) ? 3 : 0)}
+              linkDirectionalParticleWidth={2.5}
+              linkDirectionalParticleSpeed={0.008}
+              linkDirectionalParticleColor={(l) => EDGE[l.strength].color}
+              onNodeHover={(n) => setHovered(n ? String(n.id) : null)}
+              onNodeClick={(n) => setSelected(String(n.id) === selected ? null : String(n.id))}
+              onBackgroundClick={() => setSelected(null)}
+            />
+          </div>
         </div>
         <div style={{ flex: '1 1 260px', minWidth: 0 }}>
           <Selected k={k} id={selected} host={host} links={data.links} />

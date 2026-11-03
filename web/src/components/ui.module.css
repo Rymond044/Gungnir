@@ -216,3 +216,15 @@
 .expand:hover {
   color: var(--blue);
 }
+
+/* A note over a box whose content is not ready to be seen yet. */
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 13px;
+  pointer-events: none;
+}
