@@ -24,16 +24,26 @@ DEFAULT_FLOORS = {
     "*_c": 2.0,
     "cpu.thermal_throttles": 1.0,
     "*_cores": 0.05,
-    # A desktop's services wake up and go back to sleep all the time.
-    "cgroup.*_cores": 0.1,
+    # A desktop's services wake up and go back to sleep all the time
+    # (0.1 until 2026-11-03, ADR 0054).
+    "cgroup.*_cores": 0.25,
     "*_events": 1.0,
     "*.oom_kills": 1.0,
     "proc.*": 1.0,
+    # Zero at rest, so a share of the median is no spread at all (ADR 0054).
+    "disk.queue_depth": 1.0,
+    "disk.in_flight": 1.0,
+    "mem.writeback_bytes": 8 * 2**20,
+    # A small group's memory moves by megabytes; a rise of a few MiB is not
+    # unusual however small the group (ADR 0054).
+    "cgroup.mem_bytes": 32 * 2**20,
 }
 # Level signals, where slow drift matters. An EWMA estimates the mean; on a
 # skewed rate series the mean sits above the median for good, so the EWMA
-# against the baseline median would alarm all the time there.
-DEFAULT_EWMA_SIGNALS = ("*_bytes", "*.used_ratio", "proc.*")
+# against the baseline median would alarm all the time there. Filesystems,
+# process counts and the other memory levels drift with ordinary use; the
+# fullness of a filesystem is judged by its thresholds (ADR 0054).
+DEFAULT_EWMA_SIGNALS = ("mem.available_bytes", "swap.used_bytes")
 
 
 @dataclass(frozen=True)
@@ -57,7 +67,7 @@ class Params:
     power_factor_clamp: tuple[float, float] = (0.5, 2.0)
     # Memory spread floor: a share of the median. A group's memory moves by
     # tens of percent as its caches fill and drain, the host's much less.
-    memory_floor_share: float = 0.01
+    memory_floor_share: float = 0.05
     group_memory_floor_share: float = 0.1
     # Cold start of a group's memory (ADR 0045): a share of host memory.
     group_cold_memory_share: float = 0.1
@@ -95,7 +105,8 @@ class Params:
     stale_after: int = 12
 
     # Robust branch.
-    robust_k: float = 3.0
+    # 3 until 2026-11-03; 4 cut a day's records by a third (ADR 0054).
+    robust_k: float = 4.0
     ewma_lambda: float = 0.05
     ewma_l: float = 3.0
     ewma_signals: tuple[str, ...] = DEFAULT_EWMA_SIGNALS

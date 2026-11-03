@@ -95,13 +95,22 @@ def test_floors_take_the_most_specific_pattern():
     assert by_pattern(floors, "disk.read_ops_per_s") == 5.0
     assert by_pattern(floors, "mem.major_faults_per_s") == 1.0
     assert by_pattern(floors, "unknown.thing") is None
-    assert by_pattern(floors, "cgroup.cpu_cores") == 0.1
+    assert by_pattern(floors, "cgroup.cpu_cores") == 0.25
+    assert by_pattern(floors, "disk.queue_depth") == 1.0
 
 
 def test_group_memory_gets_a_wider_floor_than_host_memory():
     book = baselines.Book(None, None, Params())
-    assert book.floor("cgroup.mem_bytes", "docker.service", 100e6) == pytest.approx(10e6)
-    assert book.floor("mem.anon_bytes", "host", 100e6) == pytest.approx(1e6)
+    assert book.floor("cgroup.mem_bytes", "docker.service", 1e9) == pytest.approx(100e6)
+    assert book.floor("mem.anon_bytes", "host", 1e9) == pytest.approx(50e6)
+
+
+def test_a_level_zero_at_rest_has_an_absolute_floor():
+    book = baselines.Book(None, None, Params())
+    # A share of a zero median would be no spread at all.
+    assert book.floor("mem.writeback_bytes", "host", 0.0) == 8 * 2**20
+    # A small group's memory moves by megabytes.
+    assert book.floor("cgroup.mem_bytes", "windscribe-helper.service", 1e6) == 32 * 2**20
 
 
 def test_request_sizes_and_group_operations_are_context_only():

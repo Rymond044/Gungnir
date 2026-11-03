@@ -182,8 +182,8 @@ def test_group_pressure_follows_the_host_s_lowest_impact_level():
 
 def test_ewma_catches_drift_the_sample_test_misses():
     x = 1e9 + np.arange(300) * 1e5  # slow growth, each sample within 3 MAD
-    baselines = Fixed({("mem.anon_bytes", "interactive"): (1e9, 1e7)})
-    found = records(Robust(baselines), context(make_frame({"mem.anon_bytes": x})))
+    baselines = Fixed({("mem.available_bytes", "interactive"): (1e9, 1e7)})
+    found = records(Robust(baselines), context(make_frame({"mem.available_bytes": x})))
     assert {d for d, _ in found} == {"robust.ewma"}
     # The same creep in a control group is no drift alarm.
     baselines = Fixed({("cgroup.mem_bytes", "interactive"): (1e9, 1e7)})
