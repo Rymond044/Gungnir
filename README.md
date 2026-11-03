@@ -5,9 +5,9 @@ Intelligent monitoring, diagnosis and controlled remediation for Linux hosts.
 | Directory | Contents |
 |---|---|
 | `agent/` | Rust workspace: `gungnir-agent` (signal collection, buffer, transport), `gungnir-actuator` (privileged actions, not yet built) |
-| `server/` | Python package `gungnir_server`: ingest, storage, workload classes, baselines, detection, API, CLI; diagnosis to come |
-| `web/` | Web interface |
-| `knowledge/` | Workload class rules, control and impact thresholds (with provenance); ontology, causal rules, action policy and knowledge tests to come |
+| `server/` | Python package `gungnir_server`: ingest, storage, workload classes, baselines, detection, inference engine, API, CLI |
+| `web/` | Web interface: React and TypeScript, built by Vite, served by nginx |
+| `knowledge/` | Ontology, causal rules, expected behavior, action policy, workload class rules, detection thresholds and knowledge tests, each entry with provenance |
 | `scenarios/` | Calibration and overhead runs, fault scenarios with ground truth; `runs/` holds label files and result tables |
 | `deploy/` | Docker Compose for the server, systemd unit and installer for the agent |
 
@@ -16,7 +16,7 @@ Design lives in the workspace repository: `docs/architecture.md` and `docs/adr/`
 ## Run
 
 ```sh
-docker compose -f deploy/compose.yaml up -d --build      # server on 127.0.0.1:8080, PostgreSQL on 127.0.0.1:5432
+docker compose -f deploy/compose.yaml up -d --build      # interface on 127.0.0.1:3000, server on :8080, PostgreSQL on :5432
 docker compose -f deploy/compose.yaml exec server gungnir-server host add <name> > token   # shown once
 
 (cd agent && cargo build --release)
@@ -45,4 +45,6 @@ Everyday commands (checks, rebuilds, runs, replays, the demo): `COMMANDS.md`.
 ```sh
 cd agent && cargo fmt && cargo clippy --all-targets && cargo test
 cd server && uv sync && uv run ruff check && uv run ruff format && uv run pytest   # needs the Compose PostgreSQL
+cd web && pnpm install && pnpm dev     # interface on :5173 against the server on :8080
+cd web && pnpm check                   # prettier, eslint, tsc, vitest
 ```

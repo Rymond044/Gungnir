@@ -19,6 +19,7 @@ Commands that write files on the host (`workload assign`, `evaluate --out`, `smd
 | Stop (data kept) | `dc down` |
 | Delete all data | `dc down -v` (asks nothing, think first) |
 | New server version after a code change | `dc up -d --build server` (migrations apply at start; the agent spools meanwhile) |
+| New interface version | `dc up -d --build web` |
 | Server logs | `dc logs -f server \| grep -v ingest` |
 | New agent version | `(cd agent && cargo build --release) && (cd deploy/agent && sudo ./install.sh)` |
 | Agent logs | `journalctl -u gungnir-agent -f` |
@@ -45,15 +46,18 @@ server anomalies laptop --open         # records still open
 dc exec db psql -U gungnir -c "SELECT now() - at AS behind FROM detection_state"   # detection lag, about 20-30 s
 ```
 
-API in the browser: http://127.0.0.1:8080/docs.
+Interface: http://127.0.0.1:3000 (overview, anomalies, analysis, knowledge base). API in the browser: http://127.0.0.1:8080/docs.
 
 ## Tests and code checks
 
 ```sh
 cd server && uv run ruff check && uv run ruff format --check && uv run pytest -q    # server; needs the database up
 cd agent && cargo fmt --check && cargo clippy --all-targets && cargo test          # agent
+cd web && pnpm check                                                                # interface: prettier, eslint, tsc, vitest
 bash -n scenarios/*.sh                                                              # scripts parse
 ```
+
+The interface in development, with hot reload against the running server: `cd web && pnpm install && pnpm dev`, then http://localhost:5173.
 
 ## Detection
 
