@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { Fragment, type ReactNode } from 'react'
 import { ApiError } from '../api/client'
 import { gradeNames } from '../lib/names'
 import styles from './ui.module.css'
@@ -38,9 +38,23 @@ export function Chip({ tone = 'plain', dot, children }: { tone?: Tone; dot?: boo
   )
 }
 
-/** The key of a signal, cause or entity as the code and the knowledge base name it. */
+/**
+ * The key of a signal, cause or entity as the code and the knowledge base name
+ * it. A long key wraps after its dots and underscores, not inside a word.
+ */
 export function Key({ children }: { children: ReactNode }) {
-  return <span className={styles.key}>{children}</span>
+  if (typeof children !== 'string') return <span className={styles.key}>{children}</span>
+  const parts = children.split(/(?<=[._|/])/)
+  return (
+    <span className={styles.key}>
+      {parts.map((p, i) => (
+        <Fragment key={i}>
+          {i > 0 && <wbr />}
+          {p}
+        </Fragment>
+      ))}
+    </span>
+  )
 }
 
 export function Source({ source, grade }: { source?: string | null; grade?: string | null }) {
