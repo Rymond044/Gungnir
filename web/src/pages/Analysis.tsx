@@ -99,8 +99,10 @@ export default function Analysis() {
       ) : diagnosis.isError ? (
         <Failure error={diagnosis.error} />
       ) : (
-        diagnosis.data.map((d) => (
-          <Span key={d.label + d.since} d={d} host={host} offset={offset} now={now} />
+        // Keyed by place, not by time: the live interval moves with every poll,
+        // and a new key would remount the span and close what the operator opened.
+        diagnosis.data.map((d, i) => (
+          <Span key={`${i}-${d.label}`} d={d} host={host} offset={offset} now={now} />
         ))
       )}
     </div>
