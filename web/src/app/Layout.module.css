@@ -114,6 +114,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  /* The age changes every few seconds; one line keeps the bar from jumping. */
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .led {

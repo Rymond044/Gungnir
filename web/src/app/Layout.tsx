@@ -73,9 +73,9 @@ export default function Layout() {
           ) : (
             <span className={styles.hostName}>{host}</span>
           )}
-          <span className={styles.contact}>
+          <span className={styles.contact} title="когда агент последний раз передал данные">
             <span className={`${styles.led} ${stale ? styles.ledStale : ''}`} />
-            {seen === null ? 'агент ещё не выходил на связь' : `агент на связи ${age(seen)}`}
+            {seen === null ? 'агент не выходил на связь' : `агент: ${age(seen)}`}
           </span>
           {o && <span>нагрузка: {named(classNames, o.workload_class ?? 'unknown')}</span>}
           {o && (
