@@ -92,6 +92,10 @@ export default function KnowledgeGraph({ k, host }: { k: Knowledge; host: string
   const graph = useRef<ForceGraphMethods<NodeObject<GNode>, LinkObject<GNode, GLink>>>(undefined)
   const [width, setWidth] = useState(800)
   const data = useMemo(() => build(k, domain), [k, domain])
+  // The view fits the graph once per domain. Dragging a node reheats the
+  // simulation; fitting again on every stop would zoom away from where the
+  // operator is looking.
+  const fitted = useRef(false)
 
   useEffect(() => {
     const el = box.current
@@ -107,6 +111,7 @@ export default function KnowledgeGraph({ k, host }: { k: Knowledge; host: string
     graph.current?.d3Force('charge')?.strength(-170)
     graph.current?.d3Force('link')?.distance(70)
     graph.current?.d3ReheatSimulation()
+    fitted.current = false
   }, [data])
 
   const focus = hovered ?? selected
@@ -164,8 +169,13 @@ export default function KnowledgeGraph({ k, host }: { k: Knowledge; host: string
             width={width}
             height={HEIGHT}
             backgroundColor="#f5f4f1"
-            cooldownTicks={300}
-            onEngineStop={() => graph.current?.zoomToFit(400, 40)}
+            warmupTicks={150}
+            cooldownTicks={150}
+            onEngineStop={() => {
+              if (fitted.current) return
+              fitted.current = true
+              graph.current?.zoomToFit(400, 40)
+            }}
             nodeRelSize={1}
             nodeVal={(n) => radius(n) ** 2}
             nodeLabel={(n) => `${n.label} (${KIND_NAMES[n.kind]})`}
