@@ -126,6 +126,17 @@
   font-size: 13px;
 }
 
+.more summary {
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.repeat {
+  display: block;
+  color: var(--faint);
+  font-size: 12px;
+}
+
 @media (max-width: 760px) {
   .openItem {
     grid-template-columns: minmax(0, 1fr) 80px;

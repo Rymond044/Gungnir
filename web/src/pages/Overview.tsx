@@ -8,6 +8,7 @@ import { Chip, Empty, Failure, Key, Loading, Panel, Segmented } from '../compone
 import ui from '../components/ui.module.css'
 import { clock, dayClock, duration, formatBytes, formatNumber, formatValue, ms, percent } from '../lib/format'
 import { classNames, detectorName, kindNames, named, processStates, signalNames } from '../lib/names'
+import { groupEvents, type EventGroup } from '../lib/events'
 import { lastInterval, RANGES, rangeSeconds, type RangeKey } from '../lib/range'
 import { metricLink } from '../lib/records'
 import { useNow } from '../lib/useNow'
@@ -424,24 +425,17 @@ function Processes({ host, offset }: { host: string; offset: number | null }) {
 
 function Events({ host, offset, now }: { host: string; offset: number | null; now: number }) {
   const events = useEvents(host, lastInterval(86400, now), 1000)
-  const rows = [...(events.data ?? [])].reverse()
+  const groups = groupEvents([...(events.data ?? [])].reverse())
   return (
     <Panel title="События" aside="ядро и журнал, 24 ч">
       {events.isError ? (
         <Failure error={events.error} />
-      ) : rows.length === 0 ? (
+      ) : groups.length === 0 ? (
         <Empty>За сутки событий не было.</Empty>
       ) : (
         <div className={styles.events}>
-          {rows.slice(0, SHOWN_EVENTS).map((e, i) => (
-            <EventLine
-              key={`${e.ts}${i}`}
-              ts={e.ts}
-              text={e.message}
-              unit={e.unit}
-              offset={offset}
-              now={now}
-            />
+          {groups.slice(0, SHOWN_EVENTS).map((g) => (
+            <EventLine key={g.lines.join('\n')} group={g} offset={offset} now={now} />
           ))}
         </div>
       )}
@@ -449,19 +443,29 @@ function Events({ host, offset, now }: { host: string; offset: number | null; no
   )
 }
 
-function EventLine(props: {
-  ts: string
-  text: string
-  unit: string | null
-  offset: number | null
-  now: number
-}) {
+function EventLine({ group, offset, now }: { group: EventGroup; offset: number | null; now: number }) {
+  const [first, ...rest] = group.lines
+  const earlier = group.times.slice(1)
   return (
     <>
-      <span className="mono muted">{dayClock(ms(props.ts), props.offset, props.now)}</span>
+      <span className="mono muted">{dayClock(group.times[0], offset, now)}</span>
       <span style={{ overflowWrap: 'anywhere' }}>
-        {props.unit && <span className="mono">{props.unit}: </span>}
-        {props.text}
+        {first}
+        {rest.length > 0 && (
+          <details className={styles.more}>
+            <summary>
+              ещё {rest.length} {plural(rest.length, 'строка', 'строки', 'строк')} в это же время
+            </summary>
+            {rest.map((l) => (
+              <div key={l}>{l}</div>
+            ))}
+          </details>
+        )}
+        {earlier.length > 0 && (
+          <span className={styles.repeat}>
+            повторялось раньше: {earlier.map((t) => dayClock(t, offset, now)).join(', ')}
+          </span>
+        )}
       </span>
     </>
   )
