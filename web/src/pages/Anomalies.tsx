@@ -112,9 +112,9 @@ export default function Anomalies() {
                 <col style={{ width: 170 }} />
                 <col style={{ width: 140 }} />
                 <col style={{ width: 140 }} />
-                <col style={{ width: 90 }} />
+                <col style={{ width: 85 }} />
                 <col style={{ width: 120 }} />
-                <col style={{ width: 110 }} />
+                <col style={{ width: 140 }} />
               </colgroup>
               <thead>
                 <tr>
