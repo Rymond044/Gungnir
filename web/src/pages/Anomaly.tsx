@@ -8,7 +8,7 @@ import { Chip, Empty, Failure, Key, Loading, Panel } from '../components/ui'
 import ui from '../components/ui.module.css'
 import { against } from '../lib/basis'
 import { dayClock, duration, formatValue, ms } from '../lib/format'
-import { classNames, detectorName, directionNames, named, signalNames } from '../lib/names'
+import { classNames, detectorName, directionNames, named, powerName, signalNames } from '../lib/names'
 import { isLevel, metricLink, recordInterval, recordLimit, scoreText } from '../lib/records'
 import { useNow } from '../lib/useNow'
 
@@ -173,7 +173,7 @@ export default function Anomaly() {
             <span>тип нагрузки</span>
             <span>{named(classNames, r.workload_class ?? 'unknown')}</span>
             <span>питание</span>
-            <span className="mono">{r.power_profile ?? '—'}</span>
+            <span>{powerName(r.power_profile)}</span>
             <span>ожидаемое поведение</span>
             <span>
               {r.expected === null ? 'не оценивалось' : r.expected ? 'да, тип нагрузки объясняет' : 'нет'}

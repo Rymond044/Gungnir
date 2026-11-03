@@ -2,7 +2,7 @@
 
 import type { Basis } from '../api/types'
 import { decimal, formatValue } from './format'
-import { classNames, named } from './names'
+import { classNames, named, powerName } from './names'
 
 export function against(signal: string, b: Basis): string {
   const v = (x: number | undefined) => formatValue(signal, x ?? null)
@@ -10,7 +10,7 @@ export function against(signal: string, b: Basis): string {
     case 'baseline': {
       let text = `норма типа «${named(classNames, b.class === '*' ? 'unknown' : b.class)}»: медиана ${v(b.median)}, MAD ${v(b.mad)}`
       if (b.factor !== undefined && Math.abs(b.factor - 1) > 0.005)
-        text += `, поправка на питание ×${decimal(b.factor, 2)} (${b.power})`
+        text += `, поправка на питание ×${decimal(b.factor, 2)} (${powerName(b.power)})`
       if (b.floor) text += ', разброс поднят до порога фонового сброса'
       return text
     }

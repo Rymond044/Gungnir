@@ -32,7 +32,7 @@ export const signalNames: Record<string, string> = {
   'cpu.nice_ratio': 'CPU с низким приоритетом (nice)',
   'cpu.pressure_some_ratio': 'Давление CPU (PSI some)',
   'cpu.runnable_tasks': 'Очередь на CPU',
-  'cpu.steal_ratio': 'Steal time',
+  'cpu.steal_ratio': 'Время, отнятое гипервизором (steal)',
   'cpu.system_ratio': 'CPU ядра (system)',
   'cpu.temperature_c': 'Температура CPU',
   'cpu.thermal_throttles': 'События теплового троттлинга',
@@ -56,11 +56,11 @@ export const signalNames: Record<string, string> = {
   'mem.anon_bytes': 'Анонимная память',
   'mem.available_bytes': 'Доступная память',
   'mem.cached_bytes': 'Страничный кэш',
-  'mem.direct_reclaims_per_s': 'Direct reclaim',
+  'mem.direct_reclaims_per_s': 'Прямое освобождение памяти (direct reclaim)',
   'mem.dirty_background_bytes': 'Порог фонового сброса',
   'mem.dirty_bytes': 'Грязные страницы',
   'mem.free_bytes': 'Свободная память',
-  'mem.major_faults_per_s': 'Major page faults',
+  'mem.major_faults_per_s': 'Страничные промахи с чтением с диска (major faults)',
   'mem.oom_kills': 'OOM-kill',
   'mem.pressure_full_ratio': 'Давление памяти (PSI full)',
   'mem.pressure_some_ratio': 'Давление памяти (PSI some)',
@@ -72,8 +72,8 @@ export const signalNames: Record<string, string> = {
   'power.on_ac': 'Питание от сети',
   'proc.count': 'Процессы',
   'proc.threads': 'Потоки',
-  'swap.in_pages_per_s': 'Swap-in',
-  'swap.out_pages_per_s': 'Swap-out',
+  'swap.in_pages_per_s': 'Подкачка из swap (swap-in)',
+  'swap.out_pages_per_s': 'Вытеснение в swap (swap-out)',
   'swap.used_bytes': 'Занято в swap',
   'swap.used_ratio': 'Заполнение swap',
 }
@@ -83,7 +83,7 @@ export const causeNames: Record<string, string> = {
   bulk_sequential_writer: 'Массовая последовательная запись',
   cpu_hog: 'Захват CPU',
   cpu_quota_throttling: 'Троттлинг по квоте CPU',
-  cpu_steal: 'Steal time: CPU забирает гипервизор',
+  cpu_steal: 'CPU забирает гипервизор (steal)',
   device_errors: 'Ошибки устройства',
   filesystem_filled: 'Процесс заполняет ФС',
   filesystem_full: 'ФС заполнена',
@@ -193,6 +193,20 @@ export const unitNames: Record<string, string> = {
   requests: 'запросы',
   tasks: 'задачи',
   threads: 'потоки',
+}
+
+const profileNames: Record<string, string> = {
+  eco: 'экономичный',
+  balanced: 'сбалансированный',
+  performance: 'производительный',
+}
+
+/** A power profile as the agent reports it, `profile/source`, in words. */
+export function powerName(power: string | null | undefined): string {
+  if (!power) return '—'
+  const [profile, source] = power.split('/')
+  const from = source === 'battery' ? 'от батареи' : source === 'ac' ? 'от сети' : source
+  return [profileNames[profile] ?? profile, from].filter(Boolean).join(', ')
 }
 
 export const domainNames: Record<string, string> = {
