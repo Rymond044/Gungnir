@@ -12,6 +12,7 @@ from psycopg_pool import ConnectionPool
 
 from gungnir_server import (
     anomalies,
+    audit,
     base,
     catalog,
     charts,
@@ -188,6 +189,7 @@ def facts(host: NamedHost, conn: Conn) -> list[telemetry.FactRow]:
 # Reads for the web interface (slice S7).
 
 MAX_DIAGNOSIS = timedelta(hours=24)
+MAX_AUDIT = timedelta(days=7)
 
 
 @router.get("/hosts/{name}/overview")
@@ -342,6 +344,30 @@ def diagnosis(
             ]
         out.append({"label": label, "since": a, "until": b, **found})
     return out
+
+
+@router.get("/hosts/{name}/audit")
+def audit_of(
+    host: NamedHost,
+    conn: Conn,
+    request: Request,
+    since: datetime | None = None,
+    until: datetime | None = None,
+) -> dict:
+    """What was unusual over an interval, what it was and who did it
+    (ADRs 0056, 0057). `data_since` is the first snapshot of the host in the
+    interval: a host switched on ten minutes ago has ten minutes to show."""
+    state = request.app.state
+    since, until = window(since, until, timedelta(hours=1))
+    if until <= since or until - since > MAX_AUDIT:
+        raise HTTPException(422, "the interval must be positive and at most 7 days")
+    evidence = gather.evidence(conn, host, state.base, since, until)
+    found = audit.audit(conn, state.base, evidence, state.engine.diagnose(evidence))
+    (first,) = conn.execute(
+        "SELECT min(ts) FROM process_samples WHERE host_id = %s AND ts >= %s AND ts <= %s",
+        (host.id, since, until),
+    ).fetchone()
+    return {"since": since, "until": until, "data_since": first, **found}
 
 
 @router.get("/knowledge")

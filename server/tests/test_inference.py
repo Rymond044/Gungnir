@@ -298,9 +298,9 @@ def test_a_hypothesis_must_reach_into_the_interval(engine):
 
 def test_an_event_keeps_its_kind_and_type_apart_in_json():
     from gungnir_server.evidence import Event
-    from gungnir_server.inference import _item_dict
+    from gungnir_server.inference import item_dict
 
-    assert _item_dict(Event("7", "oom_kill", 1.0, "Out of memory")) == {
+    assert item_dict(Event("7", "oom_kill", 1.0, "Out of memory")) == {
         "type": "event",
         "event_type": "oom_kill",
         "id": "7",

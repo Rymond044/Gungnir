@@ -408,15 +408,15 @@ class RuleEngine:
 def as_dict(d: Diagnosis) -> dict:
     """The diagnosis with its explanation trees, for JSON."""
     return {
-        "hypotheses": [_hypothesis_dict(h) for h in d.hypotheses],
-        "unexplained": [_item_dict(i) for i in d.unexplained],
+        "hypotheses": [as_hypothesis(h) for h in d.hypotheses],
+        "unexplained": [item_dict(i) for i in d.unexplained],
         "expected": list(d.expected),
         "advisories": [{"resource": a.resource, "text": a.text, "source": a.source} for a in d.advisories],
-        "near": [{**_hypothesis_dict(h), "reason": h.rejected} for h in d.near],
+        "near": [{**as_hypothesis(h), "reason": h.rejected} for h in d.near],
     }
 
 
-def _hypothesis_dict(h: Hypothesis) -> dict:
+def as_hypothesis(h: Hypothesis) -> dict:
     return {
         "cause": h.cause,
         "culprit": h.binding.culprit,
@@ -439,7 +439,7 @@ def _hypothesis_dict(h: Hypothesis) -> dict:
                 "impact": f.symptom.impact,
                 "source": f.symptom.source,
                 "status": f.status,
-                "evidence": _item_dict(f.item) if f.item else None,
+                "evidence": item_dict(f.item) if f.item else None,
             }
             for f in h.found
         ],
@@ -457,7 +457,7 @@ def _culprit_score(h: Hypothesis) -> float:
     return max(scores, default=0.0)
 
 
-def _item_dict(item: Item) -> dict:
+def item_dict(item: Item) -> dict:
     kind = {Record: "record", Value: "value", Event: "event", SeenProcess: "process"}[type(item)]
     fields = {k: v for k, v in item.__dict__.items() if v is not None}
     # An event's own type would hide what kind of item it is.
