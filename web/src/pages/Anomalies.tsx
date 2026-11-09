@@ -7,7 +7,8 @@ import ui from '../components/ui.module.css'
 import { dayClock, duration, ms } from '../lib/format'
 import { scoreText } from '../lib/records'
 import { classNames, detectorName, kindNames, named, signalNames } from '../lib/names'
-import { lastInterval, RANGES, rangeSeconds, type RangeKey } from '../lib/range'
+import { useShownInterval } from '../lib/interval'
+import RangePicker from '../components/RangePicker'
 import { useNow } from '../lib/useNow'
 
 type Show = 'open' | 'all'
@@ -20,9 +21,9 @@ export default function Anomalies() {
   const [params, setParams] = useSearchParams()
   const show = (params.get('show') as Show) ?? 'open'
   const kind = (params.get('kind') as Kind) ?? 'any'
-  const range = (params.get('range') as RangeKey) ?? '24h'
   const detector = params.get('detector') ?? 'any'
   const now = useNow()
+  const shown = useShownInterval('24h', now)
   const overview = useOverview(host)
   const offset = overview.data?.host.utc_offset_s ?? null
 
@@ -34,7 +35,7 @@ export default function Anomalies() {
   }
 
   const records = useAnomalies(host, {
-    ...(show === 'open' ? { open: true } : lastInterval(rangeSeconds(range), now)),
+    ...(show === 'open' ? { open: true } : shown.interval),
     kind: kind === 'any' ? undefined : kind,
     detector: detector === 'any' ? undefined : detector,
     limit: 1000,
@@ -43,7 +44,7 @@ export default function Anomalies() {
   return (
     <div className={ui.page}>
       <div className={ui.head}>
-        <h1>Аномалии</h1>
+        <h1>Журнал аномалий</h1>
         <span className="muted">
           записи детекции: необычное поведение (аномалия) и ожидание ресурсов программами (влияние)
         </span>
@@ -59,12 +60,7 @@ export default function Anomalies() {
           onChange={(v) => set('show', v, 'open')}
         />
         {show === 'all' && (
-          <Segmented<RangeKey>
-            label="Период"
-            options={RANGES.slice(1)}
-            value={range}
-            onChange={(v) => set('range', v, '24h')}
-          />
+          <RangePicker shown={shown} offset={offset} now={now} ranges={['1h', '6h', '24h', '7d']} />
         )}
         <Segmented<Kind>
           label="Вид"

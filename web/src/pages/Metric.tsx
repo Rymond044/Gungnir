@@ -3,11 +3,12 @@ import { useAnomalies, useOverview } from '../api/hooks'
 import RecordChip from '../components/RecordChip'
 import SignalChart, { type SeriesSpec } from '../components/SignalChart'
 import { usedFrom } from '../lib/norm'
-import { Empty, Key, Loading, Panel, Segmented } from '../components/ui'
+import { Empty, Key, Loading, Panel } from '../components/ui'
 import ui from '../components/ui.module.css'
 import { dayClock, duration, formatValue, ms } from '../lib/format'
 import { detectorName, named, signalNames } from '../lib/names'
-import { lastInterval, RANGES, rangeSeconds, type RangeKey } from '../lib/range'
+import { useShownInterval } from '../lib/interval'
+import RangePicker from '../components/RangePicker'
 import { isLevel, recordInterval, scoreText } from '../lib/records'
 import { useNow } from '../lib/useNow'
 import Entity from '../components/Entity'
@@ -26,7 +27,7 @@ function parse(key: string): { signal: string; entity: string } {
  */
 export default function Metric() {
   const { host = '' } = useParams()
-  const [params, setParams] = useSearchParams()
+  const [params] = useSearchParams()
   const now = useNow()
   const overview = useOverview(host)
   const offset = overview.data?.host.utc_offset_s ?? null
@@ -34,11 +35,8 @@ export default function Metric() {
   const keys = params.getAll('s')
   const series = keys.map(parse)
   const main = series[0]
-  const range = (params.get('range') as RangeKey) ?? '1h'
-  const since = params.get('since')
-  const until = params.get('until')
-  const zoomed = !!since && !!until
-  const interval = zoomed ? { since: since!, until: until! } : lastInterval(rangeSeconds(range), now)
+  const shown = useShownInterval('1h', now)
+  const { interval } = shown
 
   const records = useAnomalies(host, {
     ...interval,
@@ -48,12 +46,6 @@ export default function Metric() {
   })
 
   if (!main) return <Empty>Не выбрана ни одна метрика.</Empty>
-
-  const set = (next: Record<string, string | null>) => {
-    const q = new URLSearchParams(params)
-    Object.entries(next).forEach(([k, v]) => (v === null ? q.delete(k) : q.set(k, v)))
-    setParams(q, { replace: false })
-  }
 
   const memory = overview.data?.memory_bytes
   const specs: SeriesSpec[] = series.map((s, i) => {
@@ -80,22 +72,7 @@ export default function Metric() {
         <Key>{keys.join(', ')}</Key>
       </div>
       <div className={ui.head}>
-        <Segmented<RangeKey>
-          label="Период"
-          options={RANGES}
-          value={zoomed ? ('' as RangeKey) : range}
-          onChange={(v) => set({ range: v, since: null, until: null })}
-        />
-        {zoomed && (
-          <>
-            <span className="muted">
-              {dayClock(ms(since!), offset, now)} — {dayClock(ms(until!), offset, now)}
-            </span>
-            <button type="button" className={ui.button} onClick={() => set({ since: null, until: null })}>
-              Сбросить масштаб
-            </button>
-          </>
-        )}
+        <RangePicker shown={shown} offset={offset} now={now} />
         <span className="muted" style={{ marginLeft: 'auto', fontSize: 13 }}>
           выделите участок графика мышью, чтобы приблизить
         </span>
@@ -115,8 +92,8 @@ export default function Metric() {
             fitY={level}
             ceiling={main.signal.endsWith('_ratio') ? 1 : undefined}
             intervals={rows.map((r) => recordInterval(r, now, offset))}
-            onSelect={(a, b) => set({ since: new Date(a).toISOString(), until: new Date(b).toISOString() })}
-            live={!zoomed}
+            onSelect={shown.setSpan}
+            live={shown.live}
           />
         )}
       </Panel>

@@ -1,11 +1,10 @@
-import { useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { useAnomalies, useEvents, useOverview, useProcesses, type Interval } from '../api/hooks'
+import { useAnomalies, useEvents, useOverview, useProcesses } from '../api/hooks'
 import type { Overview as OverviewData } from '../api/types'
 import Entity from '../components/Entity'
 import SignalChart, { type SeriesSpec } from '../components/SignalChart'
 import { usedFrom } from '../lib/norm'
-import { Chip, Empty, Failure, Key, Loading, Panel, Segmented } from '../components/ui'
+import { Chip, Empty, Failure, Key, Loading, Panel } from '../components/ui'
 import ui from '../components/ui.module.css'
 import {
   bytesOf,
@@ -20,7 +19,9 @@ import {
 } from '../lib/format'
 import { classNames, detectorName, kindNames, named, processStates, signalNames } from '../lib/names'
 import { groupEvents, type EventGroup } from '../lib/events'
-import { lastInterval, RANGES, rangeSeconds, type RangeKey } from '../lib/range'
+import { useShownInterval, type Shown } from '../lib/interval'
+import { lastInterval } from '../lib/range'
+import RangePicker from '../components/RangePicker'
 import { metricLink } from '../lib/records'
 import { useNow } from '../lib/useNow'
 import styles from './Overview.module.css'
@@ -38,9 +39,8 @@ function valuesOf(o: OverviewData): Values {
 export default function Overview() {
   const { host = '' } = useParams()
   const overview = useOverview(host)
-  const [range, setRange] = useState<RangeKey>('1h')
   const now = useNow()
-  const interval = lastInterval(rangeSeconds(range), now)
+  const shown = useShownInterval('1h', now)
 
   if (overview.isPending) return <Loading />
   if (overview.isError) return <Failure error={overview.error} />
@@ -64,10 +64,10 @@ export default function Overview() {
       <div className={ui.head}>
         <h2>Ресурсы</h2>
         <span style={{ marginLeft: 'auto' }}>
-          <Segmented label="Период" options={RANGES.slice(0, 4)} value={range} onChange={setRange} />
+          <RangePicker shown={shown} offset={offset} now={now} ranges={['15m', '1h', '6h', '24h']} />
         </span>
       </div>
-      <Resources host={host} o={o} interval={interval} range={range} />
+      <Resources host={host} o={o} shown={shown} />
 
       <OpenStatus host={host} o={o} offset={offset} now={now} />
 
@@ -313,17 +313,9 @@ function resources(o: OverviewData, v: Values): ResourceDef[] {
   return out
 }
 
-function Resources({
-  host,
-  o,
-  interval,
-  range,
-}: {
-  host: string
-  o: OverviewData
-  interval: Interval
-  range: RangeKey
-}) {
+function Resources({ host, o, shown }: { host: string; o: OverviewData; shown: Shown }) {
+  const { interval, live, range } = shown
+  const link: Record<string, string> = live ? { range: range ?? '1h' } : interval
   const v = valuesOf(o)
   const filesystems = o.filesystems.map((fs) => ({
     fs,
@@ -337,7 +329,7 @@ function Resources({
           key={`${r.title}${r.sub}`}
           title={
             <Link
-              to={metricLink(host, r.series, { range })}
+              to={metricLink(host, r.series, link)}
               className={styles.titleLink}
               title={r.hint ? `${r.hint}\n\nНажмите, чтобы открыть крупно.` : 'Открыть крупно'}
             >
@@ -365,6 +357,7 @@ function Resources({
             normOf={r.normOf}
             minMax={r.minMax}
             ceiling={r.ceiling}
+            live={live}
           />
         </Panel>
       ))}
