@@ -135,8 +135,8 @@ def _insert_context(conn: psycopg.Connection, host: Host, batch: Batch, processe
         )
     if processes:
         conn.cursor().executemany(
-            "INSERT INTO process_samples (host_id, ts, pid, ppid, comm, state, threads, cpu_cores,"
-            " rss_bytes, cgroup, unit) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+            "INSERT INTO process_samples (host_id, ts, pid, ppid, pgid, comm, state, threads, cpu_cores,"
+            " rss_bytes, cgroup, unit) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
             " ON CONFLICT DO NOTHING",
             [
                 (
@@ -144,6 +144,7 @@ def _insert_context(conn: psycopg.Connection, host: Host, batch: Batch, processe
                     from_ms(p.ts),
                     p.pid,
                     p.ppid,
+                    p.pgid,
                     p.comm,
                     p.state,
                     p.threads,
@@ -246,6 +247,7 @@ class ProcessRow:
     ts: datetime
     pid: int
     ppid: int
+    pgid: int | None
     comm: str
     state: str
     threads: int
@@ -258,8 +260,8 @@ class ProcessRow:
 def processes_at(conn: psycopg.Connection, host: Host, at: datetime) -> list[ProcessRow]:
     """The latest process snapshot taken at or before `at`."""
     rows = conn.execute(
-        "SELECT ts, pid, ppid, comm, state, threads, cpu_cores, rss_bytes, cgroup, unit FROM process_samples"
-        " WHERE host_id = %(h)s AND ts = (SELECT max(ts) FROM process_samples"
+        "SELECT ts, pid, ppid, pgid, comm, state, threads, cpu_cores, rss_bytes, cgroup, unit"
+        " FROM process_samples WHERE host_id = %(h)s AND ts = (SELECT max(ts) FROM process_samples"
         "  WHERE host_id = %(h)s AND ts <= %(at)s AND ts > %(at)s - interval '1 minute')"
         " ORDER BY cpu_cores DESC, rss_bytes DESC",
         {"h": host.id, "at": at},

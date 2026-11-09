@@ -6,7 +6,7 @@
 //! world-readable files are used (`stat`, `cgroup`), which is also how `top`
 //! and `htop` see other users' processes without privileges.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -22,6 +22,10 @@ const TOP: usize = 10;
 pub struct Process {
     pub pid: u32,
     pub ppid: u32,
+    /// The process group: a shell gives each command it runs its own group,
+    /// which the command's children inherit, so it tells one build from the
+    /// next even when their compilers come and go.
+    pub pgid: u32,
     pub comm: String,
     /// Scheduler state letter: R running, S sleeping, D waiting on I/O, ...
     pub state: String,
@@ -41,6 +45,7 @@ pub(super) struct Stat {
     pub comm: String,
     pub state: char,
     pub ppid: u32,
+    pub pgid: u32,
     /// User plus system time in clock ticks.
     pub cpu_ticks: u64,
     pub threads: u32,
@@ -63,6 +68,7 @@ pub(super) fn parse_stat(text: &str) -> Option<Stat> {
         comm,
         state: rest.first()?.chars().next()?,
         ppid: num(4)? as u32,
+        pgid: num(5)? as u32,
         cpu_ticks: num(14)? + num(15)?,
         threads: num(20)? as u32,
         start_ticks: num(22)?,
@@ -136,6 +142,7 @@ impl ProcPids {
         Process {
             pid: stat.pid,
             ppid: stat.ppid,
+            pgid: stat.pgid,
             comm: stat.comm.clone(),
             state: stat.state.to_string(),
             threads: stat.threads,
@@ -148,7 +155,8 @@ impl ProcPids {
 }
 
 /// Indices of the processes worth reporting: the top consumers of CPU and
-/// of memory, and those waiting on I/O.
+/// of memory, those waiting on I/O, and the leader of each of their process
+/// groups, which names the command (`make`, `cargo`) though it uses little.
 fn select(stats: &[Stat], cpu: &[f64]) -> Vec<usize> {
     let mut by_cpu: Vec<usize> = (0..stats.len()).filter(|&i| cpu[i] > 0.0).collect();
     by_cpu.sort_by(|&a, &b| cpu[b].total_cmp(&cpu[a]));
@@ -159,6 +167,10 @@ fn select(stats: &[Stat], cpu: &[f64]) -> Vec<usize> {
     let mut chosen: Vec<usize> = by_cpu.into_iter().take(TOP).collect();
     chosen.extend(by_rss.into_iter().take(TOP));
     chosen.extend(waiting.take(TOP));
+    let groups: HashSet<u32> = chosen.iter().map(|&i| stats[i].pgid).collect();
+    chosen.extend(
+        (0..stats.len()).filter(|&i| stats[i].pid == stats[i].pgid && groups.contains(&stats[i].pid)),
+    );
     chosen.sort_unstable();
     chosen.dedup();
     chosen
@@ -203,8 +215,12 @@ mod tests {
     use crate::collectors::scratch_dir;
 
     fn stat_line(pid: u32, comm: &str, state: char, ticks: u64, rss: u64) -> String {
+        stat_line_in(pid, pid, comm, state, ticks, rss)
+    }
+
+    fn stat_line_in(pid: u32, pgid: u32, comm: &str, state: char, ticks: u64, rss: u64) -> String {
         format!(
-            "{pid} ({comm}) {state} 1 {pid} {pid} 0 -1 4194304 0 0 0 0 {ticks} 0 0 0 20 0 3 0 777 1000000 {rss} \
+            "{pid} ({comm}) {state} 1 {pgid} {pgid} 0 -1 4194304 0 0 0 0 {ticks} 0 0 0 20 0 3 0 777 1000000 {rss} \
              18446744073709551615 0 0 0 0 0 0 0 0 0 0 0 0 17 3 0 0 0 0 0"
         )
     }
@@ -217,6 +233,7 @@ mod tests {
         assert_eq!(stat.cpu_ticks, 500);
         assert_eq!(stat.threads, 3);
         assert_eq!(stat.start_ticks, 777);
+        assert_eq!(stat.pgid, 42);
         assert_eq!(stat.rss_pages, 100);
     }
 
@@ -255,5 +272,20 @@ mod tests {
         assert_eq!(cc1.rss_bytes, 40960);
         assert!(out.processes.iter().any(|p| p.comm == "idle" && p.state == "D"));
         std::fs::remove_dir_all(proc).unwrap();
+    }
+
+    #[test]
+    fn group_leader_joins_its_busy_member() {
+        let stats: Vec<Stat> = [
+            stat_line_in(20, 20, "make", 'S', 0, 1),
+            stat_line_in(21, 20, "cc1plus", 'R', 0, 1),
+            stat_line_in(30, 30, "bash", 'S', 0, 1),
+        ]
+        .iter()
+        .map(|line| parse_stat(line).unwrap())
+        .collect();
+        let rss_free: Vec<Stat> = stats.into_iter().map(|s| Stat { rss_pages: 0, ..s }).collect();
+        let chosen = select(&rss_free, &[0.0, 1.0, 0.0]);
+        assert_eq!(chosen, vec![0, 1]);
     }
 }

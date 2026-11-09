@@ -43,6 +43,8 @@ class Process(Strict):
     ts: Ms
     pid: Annotated[int, Field(ge=0)]
     ppid: Annotated[int, Field(ge=0)]
+    # Absent from agents older than ADR 0057.
+    pgid: Annotated[int | None, Field(ge=0)] = None
     comm: Annotated[str, Field(max_length=64)]
     state: Annotated[str, Field(max_length=4)]
     threads: Annotated[int, Field(ge=0)]

@@ -82,7 +82,7 @@ def test_rows_outside_retention_are_refused_not_failed(client, token):
 def test_context_is_stored_and_queryable(client, token):
     body = batch(
         facts=[{"ts": RECENT, "name": "power.profile", "entity": "host", "value": "eco"}],
-        processes=[process(), process(pid=1, comm="systemd", cpu_cores=0.0)],
+        processes=[process(pgid=4240), process(pid=1, comm="systemd", cpu_cores=0.0)],
         events=[event()],
     )
     client.post("/api/v1/ingest", json=body, headers=auth(token))
@@ -94,5 +94,6 @@ def test_context_is_stored_and_queryable(client, token):
     procs = client.get("/api/v1/hosts/laptop/processes", params={"at": at}).json()
     assert [p["comm"] for p in procs] == ["stress-ng", "systemd"]
     assert procs[0]["unit"] == "load.service"
+    assert [p["pgid"] for p in procs] == [4240, None]
     (stored,) = client.get("/api/v1/hosts/laptop/events").json()
     assert stored["message"].startswith("Out of memory")
