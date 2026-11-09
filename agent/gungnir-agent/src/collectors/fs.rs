@@ -12,7 +12,10 @@ const SKIP_TYPES: &[&str] = &["squashfs", "iso9660", "udf", "erofs"];
 
 /// Mount points of block-device filesystems, one per device. Btrfs
 /// subvolumes mount one device several times; the first mount stands for all.
-fn mount_points(text: &str) -> Vec<String> {
+/// Devices excluded from the disk collector are left out here too: a loop
+/// device holds an image (Waydroid, Snap) whose fullness says nothing about
+/// the host.
+fn mount_points(text: &str, exclude: &[String]) -> Vec<String> {
     let mut seen = HashSet::new();
     let mut points = Vec::new();
     for line in text.lines() {
@@ -20,7 +23,11 @@ fn mount_points(text: &str) -> Vec<String> {
         let (Some(device), Some(point), Some(fstype)) = (fields.next(), fields.next(), fields.next()) else {
             continue;
         };
-        if device.starts_with("/dev/") && !SKIP_TYPES.contains(&fstype) && seen.insert(device) {
+        let Some(name) = device.strip_prefix("/dev/") else { continue };
+        if exclude.iter().any(|p| name.starts_with(p.as_str())) || SKIP_TYPES.contains(&fstype) {
+            continue;
+        }
+        if seen.insert(device) {
             points.push(unescape(point));
         }
     }
@@ -50,10 +57,11 @@ fn unescape(field: &str) -> String {
 
 pub struct Mounts {
     path: PathBuf,
+    exclude: Vec<String>,
 }
 
 pub fn open_mounts(roots: &Roots, now: Instant) -> io::Result<Box<dyn Source>> {
-    let mut source = Mounts { path: roots.proc.join("self/mounts") };
+    let mut source = Mounts { path: roots.proc.join("self/mounts"), exclude: roots.disk_exclude.clone() };
     source.collect(now, &mut Collected::default())?;
     Ok(Box::new(source))
 }
@@ -64,7 +72,7 @@ impl Source for Mounts {
     }
 
     fn collect(&mut self, _now: Instant, out: &mut Collected) -> io::Result<()> {
-        for point in mount_points(&read(&self.path)?) {
+        for point in mount_points(&read(&self.path)?, &self.exclude) {
             // A mount that vanished or is hidden from this process is skipped,
             // not treated as a failure of the whole source.
             let Ok(st) = rustix::fs::statvfs(point.as_str()) else { continue };
@@ -99,13 +107,14 @@ proc /proc proc rw 0 0
 /dev/sda1 /boot vfat rw 0 0
 /dev/loop0 /snap/core/1 squashfs ro 0 0
 /dev/sdb1 /media/my\\040disk ext4 rw 0 0
+/dev/loop3 /var/lib/waydroid/rootfs ext4 ro 0 0
 ";
-        assert_eq!(mount_points(text), vec!["/", "/boot", "/media/my disk"]);
+        assert_eq!(mount_points(text, &["loop".into()]), vec!["/", "/boot", "/media/my disk"]);
     }
 
     #[test]
     fn reports_root_filesystem() {
-        let mut source = Mounts { path: PathBuf::from("/proc/self/mounts") };
+        let mut source = Mounts { path: PathBuf::from("/proc/self/mounts"), exclude: vec![] };
         let mut out = Collected::default();
         source.collect(Instant::now(), &mut out).unwrap();
         let root = out.readings.iter().find(|r| r.signal == "fs.used_ratio" && r.entity == "/").unwrap();

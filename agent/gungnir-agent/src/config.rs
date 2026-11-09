@@ -30,7 +30,8 @@ pub struct Config {
     pub proc_root: PathBuf,
     pub sys_root: PathBuf,
     pub cgroup_root: PathBuf,
-    /// Name prefixes of block devices that are never reported.
+    /// Name prefixes of block devices that are never reported, neither as
+    /// disks nor as mounted filesystems.
     pub disk_exclude: Vec<String>,
 }
 
