@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
+from gungnir_server.detection import slices
 from gungnir_server.detection.runner import Runner
 from gungnir_server.params import Params
 from tests import seed
@@ -78,3 +79,39 @@ def test_a_disk_record_carries_the_request_size_during_it(conn):
     runner.run(START + timedelta(seconds=5 * 80))
     [(ended, context)] = conn.execute("SELECT ended_at, context FROM anomalies").fetchall()
     assert ended == ticks[52] and context == {"disk.write_request_bytes": 4096.0}
+
+
+def test_a_cpu_record_names_the_commands_behind_it(conn):
+    conn.autocommit = True
+    host = seed.add_host(conn)
+    group = "user.slice/kitty.scope"
+    ticks = seed.ticks(START, 80)
+    busy = range(40, 52)
+    seed.samples(
+        conn, host, [(t, "cpu.idle_ratio", "host", 0.05 if i in busy else 0.5) for i, t in enumerate(ticks)]
+    )
+    # A build: make leads its process group, compilers come and go under it.
+    procs = []
+    for i, t in enumerate(ticks):
+        if i in busy:
+            procs += [(t, 500, 500, "make", 0.0, group), (t, 1000 + 2 * i, 500, "cc1plus", 0.9, group)]
+            procs += [(t, 1001 + 2 * i, 500, "cc1plus", 0.9, group)]
+        procs += [
+            (t, 400, 400, "zsh", 0.01, group),
+            (t, 700, 700, "chromium", 0.3, "app.slice/chromium.scope"),
+        ]
+    seed.process_groups(conn, host, procs)
+
+    runner = Runner.live(conn, host, P)
+    runner.at = START
+    runner.run(START + timedelta(seconds=5 * 80))
+    [(processes,)] = conn.execute("SELECT processes FROM anomalies").fetchall()
+    build, *rest = processes
+    assert build["pgid"] == 500 and build["leader"] == "make"
+    assert build["names"][0] == ["cc1plus", 24] and build["pids"] == 25
+    assert abs(build["cores"] - 1.8) < 0.2
+    assert [c["names"][0][0] for c in rest] == ["chromium", "zsh"]
+
+    # Within a control group only its own processes count.
+    within = slices.commands(conn, host.id, group, ticks[40], ticks[51], "cores")
+    assert [c["names"][0][0] for c in within] == ["cc1plus", "zsh"]

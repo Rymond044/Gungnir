@@ -35,5 +35,18 @@ def processes(conn, host, rows: list[tuple[datetime, str, float, str]]) -> None:
         )
 
 
+def process_groups(conn, host, rows: list[tuple[datetime, int, int, str, float, str]]) -> None:
+    """Rows of (time, pid, process group, command, cores, control group)."""
+    with conn.transaction():
+        conn.cursor().executemany(
+            "INSERT INTO process_samples (host_id, ts, pid, ppid, pgid, comm, state, threads, cpu_cores,"
+            " rss_bytes, cgroup, unit) VALUES (%s, %s, %s, 1, %s, %s, 'R', 1, %s, 1048576, %s, %s)",
+            [
+                (host.id, ts, pid, pgid, comm, cores, cgroup, cgroup.rsplit("/", 1)[-1])
+                for ts, pid, pgid, comm, cores, cgroup in rows
+            ],
+        )
+
+
 def ticks(start: datetime, n: int, step_s: float = 5.0) -> list[datetime]:
     return [start + timedelta(seconds=i * step_s) for i in range(n)]

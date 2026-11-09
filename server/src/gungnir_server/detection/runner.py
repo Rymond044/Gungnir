@@ -17,6 +17,7 @@ from psycopg.types.json import Jsonb
 
 from gungnir_server import frame
 from gungnir_server.baselines import Book, context_on, floor_hour
+from gungnir_server.detection import slices
 from gungnir_server.detection.detectors import (
     BookBaselines,
     Context,
@@ -226,6 +227,7 @@ class Runner:
                 CONTEXT_SQL,
                 {"signals": list(frame.CONTEXT_SIGNALS), "ids": touched, "until": frame.from_ms(until_ms)},
             )
+            slices.attach(self.conn, self.host.id, touched, frame.from_ms(until_ms))
         return written
 
     def save(self) -> None:
