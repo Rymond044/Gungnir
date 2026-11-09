@@ -1,4 +1,5 @@
 import { useChart, useNorm, type Interval as Span } from '../api/hooks'
+import type { Point } from '../api/types'
 import { ms } from '../lib/format'
 import { bandSegments, limitLines } from '../lib/norm'
 import { seriesKey } from '../lib/records'
@@ -10,6 +11,8 @@ export interface SeriesSpec {
   entity?: string
   name: string
   color: string
+  /** Draw `mirror - value`: used memory from available memory and the total. */
+  mirror?: number
 }
 
 interface Props {
@@ -19,7 +22,7 @@ interface Props {
   offsetS: number | null
   format: (v: number) => string
   /** The series whose normal band and limits are drawn. */
-  normOf?: { signal: string; entity?: string }
+  normOf?: { signal: string; entity?: string; mirror?: number }
   height?: number
   intervals?: Interval[]
   /** Limits beyond those of the knowledge base, such as what a record was judged against. */
@@ -54,10 +57,18 @@ export default function SignalChart({
 
   if (chart.isError) return <Failure error={chart.error} />
   const lines = series.map((s, i) => {
-    const points = chart.data?.series[i]?.points ?? []
+    const raw = chart.data?.series[i]?.points ?? []
+    const m = s.mirror
+    const points: Point[] =
+      m === undefined ? raw : raw.map(([t, mean, lo, hi]) => [t, m - mean, m - hi, m - lo])
     return { key: keys[i], name: s.name, color: s.color, points }
   })
-  const own = hasNorm ? limitLines(norm.data) : []
+  const m = normOf?.mirror
+  const turn = (v: number) => (m === undefined ? v : m - v)
+  const own = (hasNorm ? limitLines(norm.data) : []).map((l) => ({ ...l, value: turn(l.value) }))
+  const bands = (hasNorm ? bandSegments(norm.data) : []).map((b) =>
+    m === undefined ? b : { ...b, low: m - b.high, high: m - b.low },
+  )
   const limits = [
     ...own,
     ...extraLimits.filter((e) => !own.some((o) => Math.abs(o.value - e.value) <= Math.abs(e.value) * 1e-6)),
@@ -71,7 +82,7 @@ export default function SignalChart({
       offsetS={offsetS}
       format={format}
       height={height}
-      bands={hasNorm ? bandSegments(norm.data) : []}
+      bands={bands}
       limits={limits}
       intervals={intervals}
       minMax={minMax}

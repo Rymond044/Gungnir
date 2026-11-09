@@ -29,3 +29,9 @@ export function limitLines(norm: Norm | undefined): LimitLine[] {
       return { value, label: 'холодный старт', color: 'var(--faint)' }
     })
 }
+
+/** Used memory is what people read; detection judges available memory, so
+ * the same series is drawn turned over against the total. */
+export function usedFrom(signal: string, memoryBytes: number | null | undefined): number | undefined {
+  return signal === 'mem.available_bytes' && memoryBytes ? memoryBytes : undefined
+}

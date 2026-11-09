@@ -4,9 +4,20 @@ import { useAnomalies, useEvents, useOverview, useProcesses, type Interval } fro
 import type { Overview as OverviewData } from '../api/types'
 import Entity from '../components/Entity'
 import SignalChart, { type SeriesSpec } from '../components/SignalChart'
+import { usedFrom } from '../lib/norm'
 import { Chip, Empty, Failure, Key, Loading, Panel, Segmented } from '../components/ui'
 import ui from '../components/ui.module.css'
-import { clock, dayClock, duration, formatBytes, formatNumber, formatValue, ms, percent } from '../lib/format'
+import {
+  bytesOf,
+  clock,
+  dayClock,
+  duration,
+  formatBytes,
+  formatNumber,
+  formatValue,
+  ms,
+  percent,
+} from '../lib/format'
 import { classNames, detectorName, kindNames, named, processStates, signalNames } from '../lib/names'
 import { groupEvents, type EventGroup } from '../lib/events'
 import { lastInterval, RANGES, rangeSeconds, type RangeKey } from '../lib/range'
@@ -171,9 +182,11 @@ interface Reading {
 interface ResourceDef {
   title: string
   sub: string
+  /** What the metric means, shown on hover over the title. */
+  hint?: string
   now: Reading[]
   series: SeriesSpec[]
-  normOf?: { signal: string; entity?: string }
+  normOf?: { signal: string; entity?: string; mirror?: number }
   format: (v: number) => string
   minMax?: number
   ceiling?: number
@@ -203,28 +216,35 @@ function resources(o: OverviewData, v: Values): ResourceDef[] {
     minMax: 0.05,
     ceiling: 1,
   })
-  // Available memory, not used: it is what detection judges and what the
-  // large view of the same metric shows.
   const total = o.memory_bytes
   const available = v.get('mem.available_bytes@host')
+  const mirror = usedFrom('mem.available_bytes', total)
   out.push({
     title: 'Память',
-    sub: total ? `доступно из ${formatBytes(total)}` : 'доступно',
-    now: [{ value: available === undefined ? '—' : formatBytes(available) }],
+    sub: mirror ? 'использовано, без вытесняемого кэша' : 'доступно',
+    now: [
+      mirror
+        ? { label: 'исп.', value: available === undefined ? '—' : bytesOf(mirror - available, mirror) }
+        : { value: available === undefined ? '—' : formatBytes(available) },
+    ],
     series: [
-      { signal: 'mem.available_bytes', name: 'доступно', color: INK },
+      { signal: 'mem.available_bytes', name: mirror ? 'использовано' : 'доступно', color: INK, mirror },
       { signal: 'mem.cached_bytes', name: 'страничный кэш', color: BLUE },
       { signal: 'mem.dirty_bytes', name: 'грязные страницы', color: OCHRE },
     ],
-    normOf: { signal: 'mem.available_bytes' },
+    normOf: { signal: 'mem.available_bytes', mirror },
     format: formatBytes,
     ceiling: total ?? undefined,
   })
   const swapUsed = v.get('swap.used_bytes@host')
   out.push({
     title: 'Swap',
-    sub: o.swap_bytes ? `из ${formatBytes(o.swap_bytes)}` : 'выключен или пуст',
-    now: [{ value: swapUsed === undefined ? '—' : formatBytes(swapUsed) }],
+    sub: o.swap_bytes ? 'использовано' : 'выключен или пуст',
+    now: [
+      o.swap_bytes
+        ? { label: 'исп.', value: swapUsed === undefined ? '—' : bytesOf(swapUsed, o.swap_bytes) }
+        : { value: swapUsed === undefined ? '—' : formatBytes(swapUsed) },
+    ],
     series: [{ signal: 'swap.used_bytes', name: 'занято', color: INK }],
     normOf: { signal: 'swap.used_bytes' },
     format: formatBytes,
@@ -250,7 +270,10 @@ function resources(o: OverviewData, v: Values): ResourceDef[] {
     })
     out.push({
       title: 'Задержка диска',
-      sub: `${dev} · await`,
+      sub: `${dev} · среднее время одного запроса`,
+      hint:
+        'Сколько в среднем длится один запрос к диску, от постановки в очередь до ответа (await). ' +
+        'На NVMe обычно доли миллисекунды; рост значит, что диск не успевает за запросами.',
       now: [
         { label: 'запись', value: formatValue('disk.write_await_ms', v.get(`disk.write_await_ms@${dev}`)) },
         { label: 'чтение', value: formatValue('disk.read_await_ms', v.get(`disk.read_await_ms@${dev}`)) },
@@ -316,7 +339,7 @@ function Resources({
             <Link
               to={metricLink(host, r.series, { range })}
               className={styles.titleLink}
-              title="Открыть крупно"
+              title={r.hint ? `${r.hint}\n\nНажмите, чтобы открыть крупно.` : 'Открыть крупно'}
             >
               {r.title} <span className={styles.sub}>{r.sub}</span>{' '}
               <span className={styles.expandIcon}>⤢</span>

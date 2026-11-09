@@ -2,6 +2,7 @@ import { Link, useParams, useSearchParams } from 'react-router'
 import { useAnomalies, useOverview } from '../api/hooks'
 import RecordChip from '../components/RecordChip'
 import SignalChart, { type SeriesSpec } from '../components/SignalChart'
+import { usedFrom } from '../lib/norm'
 import { Empty, Key, Loading, Panel, Segmented } from '../components/ui'
 import ui from '../components/ui.module.css'
 import { dayClock, duration, formatValue, ms } from '../lib/format'
@@ -54,15 +55,18 @@ export default function Metric() {
     setParams(q, { replace: false })
   }
 
-  const specs: SeriesSpec[] = series.map((s, i) => ({
-    signal: s.signal,
-    entity: s.entity,
-    name:
-      series.length > 1 && s.entity !== main.entity
-        ? `${named(signalNames, s.signal)} · ${entityName(s.entity)}`
-        : named(signalNames, s.signal),
-    color: COLORS[i % COLORS.length],
-  }))
+  const memory = overview.data?.memory_bytes
+  const specs: SeriesSpec[] = series.map((s, i) => {
+    const mirror = usedFrom(s.signal, memory)
+    const name = mirror ? 'Использованная память' : named(signalNames, s.signal)
+    return {
+      signal: s.signal,
+      entity: s.entity,
+      name: series.length > 1 && s.entity !== main.entity ? `${name} · ${entityName(s.entity)}` : name,
+      color: COLORS[i % COLORS.length],
+      mirror,
+    }
+  })
   const rows = records.data ?? []
   const level = isLevel(main.signal)
 
@@ -106,7 +110,7 @@ export default function Metric() {
             interval={interval}
             offsetS={offset}
             format={(v) => formatValue(main.signal, v)}
-            normOf={main}
+            normOf={{ ...main, mirror: usedFrom(main.signal, memory) }}
             height={380}
             fitY={level}
             ceiling={main.signal.endsWith('_ratio') ? 1 : undefined}

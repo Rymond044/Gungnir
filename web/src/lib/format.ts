@@ -19,6 +19,14 @@ export function formatBytes(value: number): string {
   return `${trim(v, i === 0 ? 0 : Math.abs(v) < 10 ? 2 : 1)}${nbsp}${units[i]}`
 }
 
+/** `used / total` in the unit of the total: "7,81 / 15,1 ГиБ". */
+export function bytesOf(used: number, total: number): string {
+  const [num, unit] = formatBytes(total).split(nbsp)
+  const scale = 1024 ** ['Б', 'КиБ', 'МиБ', 'ГиБ', 'ТиБ'].indexOf(unit)
+  const v = used / scale
+  return `${trim(v, scale === 1 ? 0 : Math.abs(v) < 10 ? 2 : 1)} / ${num}${nbsp}${unit}`
+}
+
 export function formatNumber(value: number): string {
   if (Number.isInteger(value)) return trim(value, 0)
   const a = Math.abs(value)
