@@ -34,82 +34,29 @@
   gap: 6px;
 }
 
-.ends {
+.calendar {
+  --rdp-accent-color: var(--btn);
+  --rdp-accent-background-color: var(--chip);
+  --rdp-day-height: 34px;
+  --rdp-day-width: 36px;
+  --rdp-day_button-height: 32px;
+  --rdp-day_button-width: 34px;
+  --rdp-day_button-border-radius: 6px;
+  --rdp-today-color: var(--blue);
+  --rdp-nav-height: 2.25rem;
+  margin: 0;
+  font-size: 14px;
+}
+
+.times {
   display: flex;
   flex-wrap: wrap;
-  gap: 20px;
-}
-
-.end {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.endHead {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-}
-
-.month {
-  display: flex;
   align-items: center;
-  justify-content: space-between;
-}
-
-.month button {
-  border: 0;
-  background: transparent;
-  font-size: 18px;
-  padding: 0 8px;
-  cursor: pointer;
-}
-
-.calendar {
-  border-collapse: collapse;
-}
-
-.calendar th {
-  font-weight: 400;
-  font-size: 12px;
-  color: var(--muted);
-  padding: 2px 0;
-}
-
-.calendar td {
-  padding: 1px;
-}
-
-.calendar button {
-  width: 32px;
-  height: 28px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  cursor: pointer;
-}
-
-.calendar button:hover:not(:disabled) {
-  background: var(--hover);
-}
-
-.calendar button:disabled {
-  color: var(--gray);
-  cursor: default;
-}
-
-.calendar button.today {
-  box-shadow: inset 0 0 0 1px var(--line);
-}
-
-.calendar button[aria-pressed='true'] {
-  background: var(--btn);
-  color: var(--btn-text);
+  gap: 8px;
 }
 
 .time {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 4px;
 }

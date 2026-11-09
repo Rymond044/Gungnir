@@ -6,11 +6,12 @@ import Entity from '../components/Entity'
 import Evidence from '../components/Evidence'
 import Hypothesis, { Actions } from '../components/Hypothesis'
 import RangePicker from '../components/RangePicker'
+import type { Mark } from '../components/Chart'
 import SignalChart, { type SeriesSpec } from '../components/SignalChart'
 import { Chip, Empty, Failure, Key, Loading, Panel, Segmented, Source } from '../components/ui'
 import ui from '../components/ui.module.css'
 import { confidence, dayClock, formatBytes, formatNumber, formatValue } from '../lib/format'
-import { folded, packed } from '../lib/audit'
+import { folded } from '../lib/audit'
 import { useShownInterval } from '../lib/interval'
 import { causeNames, classNames, named, signalNames, symptomNames } from '../lib/names'
 import { entityName } from '../lib/entity'
@@ -25,7 +26,6 @@ const LANES: { lane: Exclude<Lane, 'other'>; title: string }[] = [
   { lane: 'disk', title: 'Диск' },
 ]
 const LANE_WORDS: Record<Lane, string> = { cpu: 'CPU', memory: 'память', disk: 'диск', other: 'прочее' }
-const ROW_PX = 12
 // Context around a stretch on its own graph.
 const MARGIN_MS = 120_000
 
@@ -60,7 +60,10 @@ export default function Audit() {
   const since = Math.max(Date.parse(shown.interval.since), first ?? 0)
   const span = { since: new Date(since).toISOString(), until: shown.interval.until }
 
-  const all = (audit.data?.stretches ?? []).map((s) => ({ s, id: stretchId(s) }))
+  // Numbered from the earliest, as the graphs read left to right.
+  const all = [...(audit.data?.stretches ?? [])]
+    .sort((a, b) => a.start - b.start)
+    .map((s, i) => ({ s, id: stretchId(s), n: i + 1 }))
 
   // Opened from a record: show the stretch that holds it.
   const record = params.get('record')
@@ -107,6 +110,24 @@ export default function Audit() {
                 now={now}
               />
             ))}
+            <div className={styles.legend}>
+              <span>
+                Номер и заливка — эпизод из списка ниже: наведите, чтобы подсветить его, нажмите, чтобы
+                перейти.
+              </span>
+              <span>
+                <i className={`${styles.swatch} ${styles.red}`} /> мешало другим
+              </span>
+              <span>
+                <i className={`${styles.swatch} ${styles.plain}`} /> никому не мешало
+              </span>
+              <span>
+                <i className={`${styles.swatch} ${styles.green}`} /> ожидаемое поведение
+              </span>
+              <span>
+                <i className={styles.long} /> длиннее половины графика
+              </span>
+            </div>
           </div>
         </Panel>
       )}
@@ -155,10 +176,11 @@ export default function Audit() {
                 <h2>
                   {g.title} <span className="muted">{g.items.length}</span>
                 </h2>
-                {g.items.map(({ s, id }) => (
+                {g.items.map(({ s, id, n }) => (
                   <Card
                     key={id}
                     id={id}
+                    n={n}
                     s={s}
                     host={host}
                     offset={offset}
@@ -251,16 +273,22 @@ function LaneChart({
   live: boolean
   offset: number | null
   onSelect: (a: number, b: number) => void
-  stretches: { s: Stretch; id: string }[]
+  stretches: { s: Stretch; id: string; n: number }[]
   hovered: string | null
   onHover: (id: string | null) => void
   now: number
 }) {
   const g = LANE_SERIES[lane](device ?? '', memory)
-  const since = Date.parse(span.since)
-  const until = Date.parse(span.until)
-  const share = (t: number) => Math.max(0, Math.min(1, (t - since) / (until - since)))
-  const rows = packed(stretches, now)
+  const tone = { red: 'red', green: 'green', plain: 'gray' } as const
+  const marks: Mark[] = stretches.map(({ s, id, n }) => ({
+    key: id,
+    from: s.start * 1000,
+    to: s.end === null ? now : s.end * 1000,
+    label: String(n),
+    tone: tone[toneOf(s)],
+    title: `${n}. ${titleOf(s)}, ${dayClock(s.start * 1000, offset, now)}`,
+    lit: hovered === id,
+  }))
   return (
     <div className={styles.lane}>
       <Link
@@ -283,35 +311,13 @@ function LaneChart({
           minMax={g.minMax}
           onSelect={onSelect}
           live={live}
+          marks={marks}
+          withLimits={false}
+          onMark={onHover}
+          onMarkClick={(id) =>
+            document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }
         />
-        <div
-          className={styles.track}
-          style={{ height: Math.max(1, ...rows.values()) * ROW_PX + 4 }}
-          aria-label={`Отрезки: ${title}`}
-        >
-          {stretches.map(({ s, id }) => {
-            const from = share(s.start * 1000)
-            const to = share(s.end === null ? now : s.end * 1000)
-            return (
-              <button
-                key={id}
-                type="button"
-                className={`${styles.bar} ${styles[toneOf(s)]} ${hovered === id ? styles.lit : ''}`}
-                style={{
-                  left: `${from * 100}%`,
-                  width: `max(4px, ${(to - from) * 100}%)`,
-                  top: 2 + ((rows.get(id) ?? 1) - 1) * ROW_PX,
-                }}
-                title={`${titleOf(s)}, ${dayClock(s.start * 1000, offset, now)}`}
-                onMouseEnter={() => onHover(id)}
-                onMouseLeave={() => onHover(null)}
-                onClick={() =>
-                  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                }
-              />
-            )
-          })}
-        </div>
       </div>
     </div>
   )
@@ -331,6 +337,7 @@ function certainty(c: number): string {
 
 function Card({
   id,
+  n,
   s,
   host,
   offset,
@@ -340,6 +347,7 @@ function Card({
   onHover,
 }: {
   id: string
+  n: number
   s: Stretch
   host: string
   offset: number | null
@@ -357,6 +365,9 @@ function Card({
       onMouseLeave={() => onHover(null)}
     >
       <header className={styles.cardHead}>
+        <span className={`${styles.badge} ${styles[tone]}`} title="номер эпизода на графиках">
+          {n}
+        </span>
         <span className={styles.when}>
           {dayClock(s.start * 1000, offset, now)} —{' '}
           {s.end === null ? <b>идёт сейчас</b> : dayClock(s.end * 1000, offset, now)}

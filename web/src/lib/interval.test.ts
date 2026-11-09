@@ -1,12 +1,5 @@
 import { expect, it } from 'vitest'
-import { fromWall, monthGrid, toWall } from './interval'
-
-it('lays out a month from Monday', () => {
-  // November 2026 starts on a Sunday.
-  const weeks = monthGrid(2026, 10)
-  expect(weeks[0]).toEqual([null, null, null, null, null, null, 1])
-  expect(weeks.at(-1)).toEqual([30, null, null, null, null, null, null])
-})
+import { fromWall, toWall } from './interval'
 
 it('reads and writes times in the host clock', () => {
   const minsk = 3 * 3600

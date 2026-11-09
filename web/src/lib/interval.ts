@@ -59,15 +59,3 @@ export function toWall(ms: number, offsetS: number | null): Wall {
 export function fromWall(w: Wall, offsetS: number | null): number {
   return Date.UTC(w.year, w.month, w.day, w.hour, w.minute) - (offsetS ?? 0) * 1000
 }
-
-/** Weeks of a month from Monday, with null before the first and after the last day. */
-export function monthGrid(year: number, month: number): (number | null)[][] {
-  const first = (new Date(Date.UTC(year, month, 1)).getUTCDay() + 6) % 7
-  const days = new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
-  const cells: (number | null)[] = [
-    ...Array(first).fill(null),
-    ...Array.from({ length: days }, (_, i) => i + 1),
-  ]
-  while (cells.length % 7) cells.push(null)
-  return Array.from({ length: cells.length / 7 }, (_, i) => cells.slice(i * 7, i * 7 + 7))
-}

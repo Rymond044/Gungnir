@@ -37,6 +37,17 @@ export interface Interval {
   current?: boolean
 }
 
+/** A stretch of the audit drawn behind the lines, numbered as its card (ADR 0056). */
+export interface Mark {
+  key: string
+  from: number
+  to: number
+  label: string
+  tone: 'red' | 'gray' | 'green'
+  title: string
+  lit?: boolean
+}
+
 interface Props {
   lines: Line[]
   since: number
@@ -60,10 +71,18 @@ interface Props {
   onSelect?: (from: number, to: number) => void
   /** False while the samples are still on their way: nothing is marked missing yet. */
   loaded?: boolean
+  marks?: Mark[]
+  onMark?: (key: string | null) => void
+  onMarkClick?: (key: string) => void
 }
 
 const W = 1000
 const STRIP = 7
+const TAG = 18
+// Tags closer than this share of the width go to the next row.
+const TAG_SHARE = 0.03
+// A mark longer than this share of the plot is a thin line, not a fill that hides the plot.
+const LONG_SHARE = 0.5
 // Shorter silences are the agent's batching and the detection lag.
 const SILENCE_MS = 60_000
 
@@ -84,6 +103,9 @@ export default function Chart({
   binary = false,
   onSelect,
   loaded = true,
+  marks = [],
+  onMark,
+  onMarkClick,
 }: Props) {
   const plot = useRef<HTMLDivElement>(null)
   const [hover, setHover] = useState<number | null>(null)
@@ -134,7 +156,10 @@ export default function Chart({
         Math.max(gap, SILENCE_MS),
       )
     : []
-  const stripsH = strips.length ? STRIP + 4 : 0
+  const visibleMarks = marks.filter((m) => m.to >= since && m.from <= until)
+  const tagRows = tagRowsOf(visibleMarks, since, until)
+  const stripsH =
+    (strips.length ? STRIP + 4 : 0) + (visibleMarks.length ? (Math.max(...tagRows.values()) + 1) * TAG : 0)
 
   function timeAt(e: React.PointerEvent): number {
     const box = plot.current!.getBoundingClientRect()
@@ -199,10 +224,36 @@ export default function Chart({
             />
           )
         })}
+        {visibleMarks.map((m) => (
+          <button
+            key={m.key}
+            type="button"
+            className={`${styles.tag} ${styles[`tag_${m.tone}`]} ${m.lit ? styles.tagLit : ''}`}
+            style={{ left: pct(Math.max(since, m.from)), top: (tagRows.get(m.key) ?? 0) * TAG }}
+            title={m.title}
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseEnter={() => onMark?.(m.key)}
+            onMouseLeave={() => onMark?.(null)}
+            onClick={() => onMarkClick?.(m.key)}
+          >
+            {m.label}
+          </button>
+        ))}
         <div className={styles.area} style={{ top: stripsH, height }}>
           {timeMarks.map((t) => (
             <span key={t} className={styles.tick} style={{ left: pct(t) }} />
           ))}
+          {visibleMarks.map((m) => {
+            const from = share(Math.max(since, m.from))
+            const to = share(Math.min(until, m.to))
+            return (
+              <span
+                key={m.key}
+                className={`${to - from > LONG_SHARE ? styles.markLong : styles.mark} ${styles[`mark_${m.tone}`]} ${m.lit ? styles.markLit : ''}`}
+                style={{ left: `${from * 100}%`, width: `max(3px, ${(to - from) * 100}%)` }}
+              />
+            )
+          })}
           {strips
             .filter((s) => s.current)
             .map((s, i) => (
@@ -400,4 +451,18 @@ export default function Chart({
       )}
     </div>
   )
+}
+
+/** The row of each tag from zero: a tag goes to the first row where it keeps clear of the last one. */
+function tagRowsOf(marks: Mark[], since: number, until: number): Map<string, number> {
+  const last: number[] = []
+  const rows = new Map<string, number>()
+  for (const m of [...marks].sort((a, b) => a.from - b.from)) {
+    const at = (Math.max(since, m.from) - since) / (until - since)
+    let row = last.findIndex((x) => at - x >= TAG_SHARE)
+    if (row === -1) row = last.length
+    last[row] = at
+    rows.set(m.key, row)
+  }
+  return rows
 }

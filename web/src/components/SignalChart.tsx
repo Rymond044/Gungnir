@@ -3,7 +3,7 @@ import type { Point } from '../api/types'
 import { ms } from '../lib/format'
 import { bandSegments, limitLines } from '../lib/norm'
 import { seriesKey } from '../lib/records'
-import Chart, { type Interval, type LimitLine } from './Chart'
+import Chart, { type Interval, type LimitLine, type Mark } from './Chart'
 import { Failure } from './ui'
 
 export interface SeriesSpec {
@@ -32,6 +32,11 @@ interface Props {
   fitY?: boolean
   onSelect?: (from: number, to: number) => void
   live?: boolean
+  marks?: Mark[]
+  /** Overviews draw only the norm; limits are read on the large graph. */
+  withLimits?: boolean
+  onMark?: (key: string | null) => void
+  onMarkClick?: (key: string) => void
 }
 
 export default function SignalChart({
@@ -49,6 +54,10 @@ export default function SignalChart({
   fitY,
   onSelect,
   live = true,
+  marks,
+  withLimits = true,
+  onMark,
+  onMarkClick,
 }: Props) {
   const keys = series.map(seriesKey)
   const chart = useChart(host, keys, interval, 600, live)
@@ -65,7 +74,10 @@ export default function SignalChart({
   })
   const m = normOf?.mirror
   const turn = (v: number) => (m === undefined ? v : m - v)
-  const own = (hasNorm ? limitLines(norm.data) : []).map((l) => ({ ...l, value: turn(l.value) }))
+  const own = (hasNorm && withLimits ? limitLines(norm.data) : []).map((l) => ({
+    ...l,
+    value: turn(l.value),
+  }))
   const bands = (hasNorm ? bandSegments(norm.data) : []).map((b) =>
     m === undefined ? b : { ...b, low: m - b.high, high: m - b.low },
   )
@@ -91,6 +103,9 @@ export default function SignalChart({
       binary={series[0]?.signal.includes('_bytes') ?? false}
       onSelect={onSelect}
       loaded={!!chart.data}
+      marks={marks}
+      onMark={onMark}
+      onMarkClick={onMarkClick}
     />
   )
 }

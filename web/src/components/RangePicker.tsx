@@ -1,33 +1,32 @@
 import { useEffect, useRef, useState } from 'react'
+import { DayPicker, type DateRange } from 'react-day-picker'
+import { ru } from 'react-day-picker/locale'
+import 'react-day-picker/style.css'
 import { dayClock } from '../lib/format'
-import { fromWall, monthGrid, toWall, type Shown, type Wall } from '../lib/interval'
+import { fromWall, toWall, type Shown, type Wall } from '../lib/interval'
 import { RANGES, type RangeKey } from '../lib/range'
 import { Segmented } from './ui'
 import ui from './ui.module.css'
 import styles from './RangePicker.module.css'
 
-const MONTHS = [
-  'январь',
-  'февраль',
-  'март',
-  'апрель',
-  'май',
-  'июнь',
-  'июль',
-  'август',
-  'сентябрь',
-  'октябрь',
-  'ноябрь',
-  'декабрь',
-]
-const WEEKDAYS = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс']
 const HOURS = Array.from({ length: 24 }, (_, h) => h)
 const MINUTES = Array.from({ length: 12 }, (_, i) => i * 5)
 const DAY = 86_400_000
 
+// The calendar knows days only; a day of the host's clock travels as a local
+// date with the same year, month and day.
+const asDate = (w: Wall) => new Date(w.year, w.month, w.day)
+const onDay = (w: Wall, d: Date): Wall => ({
+  ...w,
+  year: d.getFullYear(),
+  month: d.getMonth(),
+  day: d.getDate(),
+})
+
 /**
- * Periods ending now, and a stretch of one's own: a day from a calendar and
- * an hour and minute from lists, in the host's clock, all by mouse.
+ * Periods ending now, and an interval of one's own: one calendar where the
+ * first click picks the start day and the second the end day, and the hour
+ * and minute of each end from lists, in the host's clock, all by mouse.
  */
 export default function RangePicker({
   shown,
@@ -112,10 +111,13 @@ function Panel({
   const round = (w: Wall): Wall => ({ ...w, minute: Math.floor(w.minute / 5) * 5 })
   const [from, setFrom] = useState(() => round(toWall(since, offset)))
   const [to, setTo] = useState(() => round(toWall(until, offset)))
+  // While only the start day is picked, the end waits for the second click.
+  const [picking, setPicking] = useState(false)
   const a = fromWall(from, offset)
   const b = fromWall(to, offset)
-  const problem =
-    b <= a
+  const problem = picking
+    ? 'Выберите день конца.'
+    : b <= a
       ? 'Конец должен быть позже начала.'
       : b - a > maxDays * DAY
         ? `Не больше ${maxDays} дней.`
@@ -124,35 +126,53 @@ function Panel({
           : null
 
   const today = toWall(now, offset)
-  const day = (back: number): [Wall, Wall] => {
-    const start = toWall(fromWall({ ...today, hour: 0, minute: 0 }, offset) - back * DAY, offset)
-    const end = back === 0 ? round(today) : { ...start, hour: 23, minute: 55 }
-    return [start, end]
+  const pickDays = (_: DateRange | undefined, day: Date) => {
+    // Each click on a finished range starts a new one: start, then end.
+    if (!picking) {
+      setFrom(onDay(from, day))
+      setTo(onDay(to, day))
+      setPicking(true)
+      return
+    }
+    const first = asDate(from)
+    const [start, end] = day < first ? [day, first] : [first, day]
+    setFrom(onDay(from, start))
+    setTo(onDay(to, end))
+    setPicking(false)
   }
+  const quick = (back: number) => {
+    const start = toWall(fromWall({ ...today, hour: 0, minute: 0 }, offset) - back * DAY, offset)
+    setFrom(start)
+    setTo(back === 0 ? round(today) : { ...start, hour: 23, minute: 55 })
+    setPicking(false)
+  }
+
   return (
     <div className={styles.panel} role="dialog" aria-label="Свой интервал">
       <div className={styles.quick}>
-        {[
-          ['Сегодня', 0],
-          ['Вчера', 1],
-        ].map(([label, back]) => (
-          <button
-            key={label}
-            type="button"
-            className={ui.button}
-            onClick={() => {
-              const [s, e] = day(back as number)
-              setFrom(s)
-              setTo(e)
-            }}
-          >
-            {label}
-          </button>
-        ))}
+        <button type="button" className={ui.button} onClick={() => quick(0)}>
+          Сегодня
+        </button>
+        <button type="button" className={ui.button} onClick={() => quick(1)}>
+          Вчера
+        </button>
       </div>
-      <div className={styles.ends}>
-        <End title="От" value={from} onChange={setFrom} today={today} />
-        <End title="До" value={to} onChange={setTo} today={today} />
+      <DayPicker
+        className={styles.calendar}
+        mode="range"
+        locale={ru}
+        weekStartsOn={1}
+        selected={{ from: asDate(from), to: picking ? undefined : asDate(to) }}
+        onSelect={pickDays}
+        defaultMonth={asDate(to)}
+        disabled={{ after: asDate(today) }}
+        endMonth={asDate(today)}
+        showOutsideDays
+      />
+      <div className={styles.times}>
+        <Time title="с" value={from} onChange={setFrom} />
+        <span className="muted">—</span>
+        <Time title="по" value={to} onChange={setTo} />
       </div>
       <div className={styles.foot}>
         {problem && <span className={styles.problem}>{problem}</span>}
@@ -169,103 +189,37 @@ function Panel({
   )
 }
 
-function End({
-  title,
-  value,
-  onChange,
-  today,
-}: {
-  title: string
-  value: Wall
-  onChange: (w: Wall) => void
-  today: Wall
-}) {
-  const [page, setPage] = useState({ year: value.year, month: value.month })
-  const shift = (n: number) => {
-    const m = page.month + n
-    setPage({ year: page.year + Math.floor(m / 12), month: ((m % 12) + 12) % 12 })
-  }
-  const future = (d: number) =>
-    page.year > today.year ||
-    (page.year === today.year && (page.month > today.month || (page.month === today.month && d > today.day)))
+const pad = (n: number) => String(n).padStart(2, '0')
+
+function Time({ title, value, onChange }: { title: string; value: Wall; onChange: (w: Wall) => void }) {
   return (
-    <div className={styles.end}>
-      <div className={styles.endHead}>
-        <b>{title}</b>
-        <span className="muted">
-          {String(value.day).padStart(2, '0')}.{String(value.month + 1).padStart(2, '0')}.{value.year}
-        </span>
-      </div>
-      <div className={styles.month}>
-        <button type="button" onClick={() => shift(-1)} aria-label="Предыдущий месяц">
-          ‹
-        </button>
-        <span>
-          {MONTHS[page.month]} {page.year}
-        </span>
-        <button type="button" onClick={() => shift(1)} aria-label="Следующий месяц">
-          ›
-        </button>
-      </div>
-      <table className={styles.calendar}>
-        <thead>
-          <tr>
-            {WEEKDAYS.map((d) => (
-              <th key={d}>{d}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {monthGrid(page.year, page.month).map((week, i) => (
-            <tr key={i}>
-              {week.map((d, j) => (
-                <td key={j}>
-                  {d && (
-                    <button
-                      type="button"
-                      disabled={future(d)}
-                      aria-pressed={value.year === page.year && value.month === page.month && value.day === d}
-                      className={
-                        today.year === page.year && today.month === page.month && today.day === d
-                          ? styles.today
-                          : undefined
-                      }
-                      onClick={() => onChange({ ...value, year: page.year, month: page.month, day: d })}
-                    >
-                      {d}
-                    </button>
-                  )}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className={styles.time}>
-        <select
-          aria-label={`${title}: час`}
-          value={value.hour}
-          onChange={(e) => onChange({ ...value, hour: Number(e.target.value) })}
-        >
-          {HOURS.map((h) => (
-            <option key={h} value={h}>
-              {String(h).padStart(2, '0')}
-            </option>
-          ))}
-        </select>
-        <span>:</span>
-        <select
-          aria-label={`${title}: минуты`}
-          value={value.minute}
-          onChange={(e) => onChange({ ...value, minute: Number(e.target.value) })}
-        >
-          {MINUTES.map((m) => (
-            <option key={m} value={m}>
-              {String(m).padStart(2, '0')}
-            </option>
-          ))}
-        </select>
-      </div>
-    </div>
+    <span className={styles.time}>
+      <span className="muted">
+        {title} {pad(value.day)}.{pad(value.month + 1)}
+      </span>
+      <select
+        aria-label={`${title}: час`}
+        value={value.hour}
+        onChange={(e) => onChange({ ...value, hour: Number(e.target.value) })}
+      >
+        {HOURS.map((h) => (
+          <option key={h} value={h}>
+            {pad(h)}
+          </option>
+        ))}
+      </select>
+      :
+      <select
+        aria-label={`${title}: минуты`}
+        value={value.minute}
+        onChange={(e) => onChange({ ...value, minute: Number(e.target.value) })}
+      >
+        {MINUTES.map((m) => (
+          <option key={m} value={m}>
+            {pad(m)}
+          </option>
+        ))}
+      </select>
+    </span>
   )
 }

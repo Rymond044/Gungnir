@@ -22,35 +22,61 @@
   text-decoration: underline;
 }
 
-.track {
-  position: relative;
-  margin-top: 2px;
-  border-radius: 3px;
-  background: var(--divider);
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  margin-left: 86px;
+  font-size: 13px;
+  color: var(--muted);
 }
 
-.bar {
-  position: absolute;
-  top: 2px;
-  height: 10px;
-  padding: 0;
-  border: 0;
-  border-radius: 3px;
-  cursor: pointer;
-  background: var(--gray);
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.bar.red {
+.swatch {
+  display: inline-block;
+  width: 18px;
+  height: 12px;
+  border-radius: 3px;
+  opacity: 0.6;
+}
+
+.long {
+  display: inline-block;
+  width: 18px;
+  height: 3px;
+  background: var(--ink);
+  opacity: 0.7;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 5px;
+  font-weight: 700;
+  font-size: 13px;
+  color: #fff;
+}
+
+.red {
   background: var(--red);
 }
 
-.bar.green {
-  background: var(--green);
+.plain {
+  background: var(--faint);
 }
 
-.bar.lit {
-  outline: 2px solid var(--ink);
-  outline-offset: 1px;
+.green {
+  background: var(--green);
 }
 
 .toggle {

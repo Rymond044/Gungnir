@@ -34,10 +34,12 @@ LANES = {
 OTHER = "other"
 # Commands shown per stretch.
 TOP = 5
-# A long record belongs to the stretch it starts in but draws later records
-# into it only this far: a level that stays unusual all evening is not one
-# event with everything that happens meanwhile.
-REACH_S = 900.0
+# Records no hypothesis uses join while they overlap or follow within a
+# minute, so a stretch drawn on a graph covers a burst, not the quiet between
+# bursts; a long record draws others in for five minutes at most, and a level
+# that stays unusual all evening is not one event with everything meanwhile.
+JOIN_S = 60.0
+REACH_S = 300.0
 
 
 @dataclass
@@ -163,7 +165,7 @@ def _continues(s: Stretch, start: float, records: list[Record], culprit: str | N
 
 def _cluster(records: list[Record], events: list[Event], expected: set[str], onto) -> list[Stretch]:
     """Records and events no hypothesis uses, by lane and kind, joined while
-    they overlap or follow within GAP_S, a long record counting for REACH_S."""
+    they overlap or follow within JOIN_S, a long record counting for REACH_S."""
     items = sorted([*records, *events], key=lambda i: i.start if isinstance(i, Record) else i.at)
     open_: dict[tuple[str, str], Stretch] = {}
     out = []
@@ -172,7 +174,7 @@ def _cluster(records: list[Record], events: list[Event], expected: set[str], ont
         kind = "expected" if isinstance(item, Record) and item.id in expected else "unexplained"
         start = item.start if isinstance(item, Record) else item.at
         end = item.end if isinstance(item, Record) else item.at
-        reach = min(end if end is not None else float("inf"), start + REACH_S) + GAP_S
+        reach = min(end if end is not None else float("inf"), start + REACH_S) + JOIN_S
         s = open_.get((lane, kind))
         if s and start <= s.reach:
             s.end = None if end is None or s.end is None else max(s.end, end)
