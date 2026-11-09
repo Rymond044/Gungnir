@@ -4,8 +4,10 @@ return. Read from `knowledge/tests/*.toml`; the format is described at the
 top of `knowledge/tests/disk.toml`.
 
 A case runs through the inference engine (slice S5): the expected cause must rank
-within `within`, the causes listed in `not` must stay below the cut-off,
-and a case without `expect` is a negative one, with no hypothesis at all.
+within `within` among the hypotheses that harm, or, with `harm = false`, be
+named as activity that hurt nobody (ADR 0056); the causes listed in `not`
+must stay below the cut-off, and a case without `expect` is a negative one,
+with no hypothesis that harms.
 Roles become fixed entities, so a case needs no group names.
 """
 
@@ -25,6 +27,7 @@ FIELDS = {
     "within",
     "not",
     "expected",
+    "harm",
     "unavailable",
     "facts",
     CULPRIT_CLASS,
@@ -74,6 +77,8 @@ class Case:
     expected: bool = False
     # Signals, event types and process symptoms the host does not provide.
     unavailable: frozenset[str] = frozenset()
+    # The expected cause hurts others; false for activity that hurts nobody.
+    harm: bool = True
 
 
 def directory() -> Path:
@@ -126,6 +131,9 @@ def _read(
     expected = item.get("expected", False)
     if not isinstance(expected, bool) or (expected and expect is None):
         fail(f"{where}: expected is true or false, and needs an expected cause")
+    harm = item.get("harm", True)
+    if not isinstance(harm, bool) or (not harm and expect is None):
+        fail(f"{where}: harm is true or false, and false needs an expected cause")
     unavailable = item.get("unavailable", [])
     for unseen in unavailable if isinstance(unavailable, list) else [None]:
         if not any(unseen in onto.names(c) for c in ("signal", "event", "process")):
@@ -155,6 +163,7 @@ def _read(
         domain,
         expected,
         frozenset(unavailable),
+        harm,
     )
 
 
@@ -244,6 +253,6 @@ def coverage(rules: dict[str, Rule], cases: list[Case]) -> list[str]:
         f"rule {cause} has no positive case" for cause in rules if not any(c.expect == cause for c in cases)
     ]
     for domain in sorted({c.domain for c in cases}):
-        if not any(c.expect is None for c in cases if c.domain == domain):
+        if not any(c.expect is None or not c.harm for c in cases if c.domain == domain):
             problems.append(f"tests/{domain}.toml has no negative case")
     return problems

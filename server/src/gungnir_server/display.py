@@ -278,7 +278,7 @@ def render_diagnosis(d, zone: timezone, title: str) -> str:
             )
             if value
         )
-        flag = "  [expected behavior]" if h.expected else ""
+        flag = ("  [expected behavior]" if h.expected else "") + ("" if h.harm else "  [hurt nobody]")
         head = f"{n}. {h.cause}  {h.confidence:.2f} (support {h.support:.2f})"
         lines.append("  ".join(x for x in (head, bound, flag.strip()) if x))
         if h.binding.culprit:

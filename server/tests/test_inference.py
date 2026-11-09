@@ -62,12 +62,17 @@ def copy(writer=WRITER, victim=READER, at=100):
     ]
 
 
+def harmful(d) -> list[str]:
+    return list(dict.fromkeys(h.cause for h in d.harmful()))
+
+
 def test_a_rule_needs_its_manifestations_in_their_windows(engine):
     seen = copy()
-    assert "bulk_sequential_writer" in engine.diagnose(ev(*seen)).causes()
-    # The impact long after the writes is not this cause.
+    assert "bulk_sequential_writer" in harmful(engine.diagnose(ev(*seen)))
+    # The impact long after the writes is not this cause's: the writes hurt nobody.
     late = dataclasses.replace(seen[3], start=400.0)
-    assert engine.diagnose(ev(*seen[:3], late)).causes() == []
+    d = engine.diagnose(ev(*seen[:3], late))
+    assert harmful(d) == [] and d.causes() == ["bulk_sequential_writer"]
     # Small requests contradict a characteristic symptom.
     small = dataclasses.replace(seen[2], value=4096)
     assert "bulk_sequential_writer" not in engine.diagnose(ev(seen[0], seen[1], small, seen[3])).causes()
@@ -115,7 +120,7 @@ def test_the_deepest_group_is_the_culprit_and_its_ancestors_are_not_the_others(e
     seen = writes + copy()[1:3]
     # The pressure of the slice that holds the writer is not impact to others.
     on_own_slice = rec("cgroup.io_pressure_some_ratio", APPS, 110)
-    assert engine.diagnose(ev(*seen, on_own_slice)).causes() == []
+    assert harmful(engine.diagnose(ev(*seen, on_own_slice))) == []
     d = engine.diagnose(ev(*seen, rec("cgroup.io_pressure_some_ratio", READER, 110)))
     [writer] = [h for h in d.hypotheses if h.cause == "bulk_sequential_writer"]
     assert writer.binding.culprit == WRITER
@@ -183,8 +188,8 @@ def test_a_process_sign_on_the_others_is_outside_the_culprits_line(engine):
     own = SeenProcess("waiting_on_io", "cp", 10, "D", WRITER, 110.0)
     theirs = dataclasses.replace(own, comm="editor", pid=11, group=READER)
     no_psi = {"cgroup.io_pressure_some_ratio", "cgroup.io_pressure_full_ratio"}
-    assert engine.diagnose(ev(*seen, own, unobservable=no_psi)).causes() == []
-    assert "bulk_sequential_writer" in engine.diagnose(ev(*seen, theirs, unobservable=no_psi)).causes()
+    assert harmful(engine.diagnose(ev(*seen, own, unobservable=no_psi))) == []
+    assert "bulk_sequential_writer" in harmful(engine.diagnose(ev(*seen, theirs, unobservable=no_psi)))
 
 
 def test_a_window_still_open_is_pending_not_missing(engine):
@@ -304,16 +309,30 @@ def test_an_event_keeps_its_kind_and_type_apart_in_json():
     }
 
 
-def test_a_writer_that_hurts_nobody_is_a_near_miss_with_its_reason(engine):
-    from gungnir_server.inference import NO_IMPACT, as_dict
+def test_a_writer_that_hurts_nobody_is_explained_without_harm(engine):
+    from gungnir_server.inference import as_dict
 
     quiet = copy()[:3]  # the writes, without the reader waiting
     d = engine.diagnose(ev(*quiet))
-    assert d.hypotheses == ()
-    near = {h.cause: h for h in d.near}
-    assert near["bulk_sequential_writer"].rejected == NO_IMPACT
-    assert as_dict(d)["near"][0]["reason"] == NO_IMPACT
-    # The same copy with the reader waiting is a hypothesis and no near miss.
+    [writer] = [h for h in d.hypotheses if h.cause == "bulk_sequential_writer"]
+    assert not writer.harm and writer.binding.culprit == WRITER
+    assert as_dict(d)["hypotheses"][0]["harm"] is False
+    assert "bulk_sequential_writer" not in {h.cause for h in d.near}
+    # Nobody waiting does not make the writer less likely the writer.
     hurt = engine.diagnose(ev(*copy()))
-    assert "bulk_sequential_writer" in hurt.causes()
-    assert "bulk_sequential_writer" not in {h.cause for h in hurt.near}
+    [same] = [h for h in hurt.hypotheses if h.cause == "bulk_sequential_writer"]
+    assert same.harm and same.confidence >= writer.confidence
+
+
+def test_each_burst_of_the_leading_symptom_is_its_own_hypothesis(engine):
+    first, second = copy(at=100)[:3], copy(at=4000)[:3]
+    d = engine.diagnose(ev(*first, *second))
+    starts = sorted(h.leading_at for h in d.hypotheses if h.cause == "bulk_sequential_writer")
+    assert starts == [100.0, 4000.0]
+
+
+def test_an_advisory_answers_impact_that_no_harmful_hypothesis_explains(engine):
+    # A reader waits on the disk while no writer is seen.
+    alone = engine.diagnose(ev(rec("cgroup.io_pressure_some_ratio", READER, 10)))
+    assert [a.resource for a in alone.advisories] == ["disk"]
+    assert engine.diagnose(ev(*copy())).advisories == ()

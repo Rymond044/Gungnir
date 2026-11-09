@@ -167,6 +167,8 @@ at = 10
 
 [[case]]
 name = "half the CPUs busy and nobody waits"
+expect = "cpu_hog"
+harm = false
 provenance = { source = "calibration run 20261029T114359Z cpu-50: 9 workers on 18 CPUs, pressure under 0.002; Gregg p. 257 table 6.10", grade = "measured" }
 
 [[case.record]]

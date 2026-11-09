@@ -2,8 +2,10 @@
 # cause the base must return.
 #
 # [[case]]: `expect` is the cause the inference engine must rank within `within`
-# (default 1); without it the inference engine may give no hypothesis at all (a
-# negative case). `not` lists causes that must stay below the cut-off.
+# (default 1) among the hypotheses that harm; `harm = false` asks instead that
+# it be named as activity that hurt nobody (ADR 0056). Without `expect` no
+# hypothesis may harm (a negative case); `harm = false` cases are negative
+# too. `not` lists causes that must stay below the cut-off.
 # `expected = true` asks that the top hypothesis be marked expected
 # behavior. `unavailable` lists signals, event types or process symptoms the
 # host does not provide. `facts` and `culprit_class` give the context the
@@ -472,6 +474,8 @@ at = 10
 
 [[case]]
 name = "a large copy that nobody waits for"
+expect = "bulk_sequential_writer"
+harm = false
 provenance = { source = "docs/research/disk-io.md, Two lessons: a single stream on this NVMe disk barely harms the others; ADR 0034", grade = "measured" }
 
 [[case.record]]
@@ -507,6 +511,9 @@ at = 5
 
 [[case]]
 name = "a scrub on an idle host"
+expect = "filesystem_maintenance"
+harm = false
+expected = true
 culprit_class = "maintenance"
 provenance = { source = "docs/research/disk-io.md D9 (expected behavior); ADR 0002", grade = "documented" }
 

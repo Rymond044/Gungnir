@@ -247,6 +247,8 @@ at = 20_000
 
 [[case]]
 name = "a large allocation that fits"
+expect = "memory_hog"
+harm = false
 facts = { "swap.enabled" = "yes" }
 provenance = { source = "calibration run 20261029T114359Z mem-50: 4.4 GiB kept, no direct reclaim at the median, others' pressure under 0.02", grade = "measured" }
 

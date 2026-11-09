@@ -42,15 +42,21 @@ def run_tests(base: Base, params: Params | None = None) -> tuple[int, list[str]]
     failures = cases.coverage(base.rules, found)
     for case in found:
         diagnosis = engine.diagnose(cases.evidence_of(case))
-        ranked = diagnosis.causes()
-        shown = ", ".join(f"{h.cause} {h.confidence:.2f}" for h in diagnosis.hypotheses) or "-"
+        harmful = list(dict.fromkeys(h.cause for h in diagnosis.harmful()))
+        shown = (
+            ", ".join(
+                f"{h.cause} {h.confidence:.2f}{'' if h.harm else ' (no harm)'}" for h in diagnosis.hypotheses
+            )
+            or "-"
+        )
+        if (case.expect is None or not case.harm) and harmful:
+            failures.append(f"{case.where}: expected no cause that harms, got {shown}")
         if case.expect is None:
-            if ranked:
-                failures.append(f"{case.where}: expected no cause, got {shown}")
             continue
+        ranked = harmful if case.harm else diagnosis.causes()
         if case.expect not in ranked[: case.within]:
             failures.append(f"{case.where}: {case.expect} is not within the top {case.within} (got {shown})")
-        wrong = sorted(set(case.not_) & set(ranked))
+        wrong = sorted(set(case.not_) & set(diagnosis.causes()))
         if wrong:
             failures.append(f"{case.where}: {', '.join(wrong)} must stay below the cut-off (got {shown})")
         if case.expected and not (diagnosis.hypotheses and diagnosis.hypotheses[0].expected):

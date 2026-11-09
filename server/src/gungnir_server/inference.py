@@ -1,13 +1,15 @@
 """The inference engine (slice S5; ADRs 0005, 0034, 0043, 0044): ranked hypotheses
 from the evidence of an interval and the knowledge base.
 
-Each culprit candidate of a rule gives a hypothesis when the rule's
-conditions hold, its leading symptom is matched, every characteristic symptom
-is matched, pending or unobservable, some impact is matched and no
-contradicting symptom is; without its leading symptom it must also match
-something besides the impact. Confidence
-combines the weights of the matched symptoms as 1 - Π(1 - w) and
-lowers it by 1 - alpha * w for each missing one. The inference engine sees
+Each culprit candidate of a rule gives a hypothesis for each time its leading
+symptom is matched, when the rule's conditions hold, every characteristic
+symptom besides the impact is matched, pending or unobservable, and no
+contradicting symptom is. A hypothesis explains the activity; it harms when
+some of its impact is matched as well (ADR 0056). Without its leading symptom
+a cause must show its impact and something besides it. Confidence combines
+the weights of the matched symptoms as 1 - Π(1 - w) and lowers it by
+1 - alpha * w for each missing one; missing impact says nobody was hurt, not
+that the cause is wrong, and lowers nothing. The inference engine sees
 records, never samples (ADR 0001), and reads no database.
 """
 
@@ -85,6 +87,8 @@ class Hypothesis:
     expected: bool = False
     # Why the gate refused it; None for a hypothesis (ADR 0055).
     rejected: str | None = None
+    # Some of its impact is matched: it hurt the others, not only ran.
+    harm: bool = True
 
     def with_status(self, status: str) -> list[Found]:
         return [f for f in self.found if f.status == status]
@@ -107,6 +111,10 @@ class Diagnosis:
     def causes(self) -> list[str]:
         """Causes in rank order, each once."""
         return list(dict.fromkeys(h.cause for h in self.hypotheses))
+
+    def harmful(self) -> list[Hypothesis]:
+        """The hypotheses that hurt: what an incident is about (ADR 0002)."""
+        return [h for h in self.hypotheses if h.harm]
 
 
 class InferenceEngine(Protocol):
@@ -141,7 +149,8 @@ class RuleEngine:
         used = {f.item for h in shown for f in h.with_status(MATCHED)}
         unexplained = [r for r in ev.records if r not in used and r.id not in explained and inside(r, ev)]
         unexplained += [e for e in ev.events if e not in used and inside(e, ev)]
-        advisories = () if shown else self._advisories(ev)
+        hurt = {f.item for h in shown if h.harm for f in h.with_status(MATCHED) if f.symptom.impact}
+        advisories = self._advisories(ev, hurt)
         expected = sorted(r.id for r in ev.records if r.id in explained and inside(r, ev))
         return Diagnosis(tuple(shown), tuple(unexplained), tuple(expected), advisories, near)
 
@@ -177,19 +186,23 @@ class RuleEngine:
         candidates = self._culprits(rule, ev)
         out = []
         for culprit in candidates:
-            hypothesis = self._bound(rule, ev, Binding(culprit, device, filesystem))
             # A candidate comes from evidence anywhere in the look-back; it is
             # named only when its own evidence fits this hypothesis.
-            if hypothesis and (culprit is None or _culprit_items(hypothesis)):
-                out.append(hypothesis)
+            out += [
+                h
+                for h in self._bound(rule, ev, Binding(culprit, device, filesystem))
+                if culprit is None or _culprit_items(h)
+            ]
         if not any(h.rejected is None for h in out) and None not in candidates:
-            hypothesis = self._bound(rule, ev, Binding(None, device, filesystem))
-            if hypothesis and hypothesis.rejected is None:
-                out = [h for h in out if h.rejected is None] + [hypothesis]
+            unbound = [
+                h for h in self._bound(rule, ev, Binding(None, device, filesystem)) if h.rejected is None
+            ]
+            if unbound:
+                out = unbound
         return out
 
-    def _bound(self, rule: Rule, ev: Evidence, b: Binding) -> Hypothesis | None:
-        return self._evaluate(rule, ev, b) if self._conditions_hold(rule, ev, b) else None
+    def _bound(self, rule: Rule, ev: Evidence, b: Binding) -> list[Hypothesis]:
+        return self._evaluate(rule, ev, b) if self._conditions_hold(rule, ev, b) else []
 
     def _culprits(self, rule: Rule, ev: Evidence) -> list[str | None]:
         """Groups that match the leading symptom, or any culprit symptom when
@@ -259,13 +272,16 @@ class RuleEngine:
 
     # The gate and the confidence (ADR 0043)
 
-    def _evaluate(self, rule: Rule, ev: Evidence, b: Binding) -> Hypothesis | None:
+    def _evaluate(self, rule: Rule, ev: Evidence, b: Binding) -> list[Hypothesis]:
+        """One hypothesis for each time the leading symptom was seen: a build
+        at two and another at six are two stretches of activity. Of the
+        candidates of one time, a hypothesis beats a refused one."""
         leading = rule.leading
         starts = sorted({at(i) for i in self._items(leading, ev) if self._matches(leading, i, b)})
         has_leading = bool(starts)
         if not has_leading:
             if self._observable(leading, ev):
-                return None
+                return []
             # Windows then count from the earliest matched symptom.
             times = [
                 at(i)
@@ -275,19 +291,13 @@ class RuleEngine:
                 if self._matches(m, i, b)
             ]
             if not times:
-                return None
+                return []
             starts = [min(times)]
-        best = None
-        for t0 in starts:
-            hypothesis = self._assign(rule, ev, b, t0, has_leading)
-            # A hypothesis beats a refused candidate whatever their confidence.
-            if hypothesis and (
-                best is None
-                or (hypothesis.rejected is None, hypothesis.confidence)
-                > (best.rejected is None, best.confidence)
-            ):
-                best = hypothesis
-        return best
+        found = [h for t0 in starts if (h := self._assign(rule, ev, b, t0, has_leading))]
+        accepted = [h for h in found if h.rejected is None]
+        if accepted:
+            return accepted
+        return [max(found, key=lambda h: h.confidence)] if found else []
 
     def _assign(
         self, rule: Rule, ev: Evidence, b: Binding, t0: float, has_leading: bool
@@ -333,15 +343,17 @@ class RuleEngine:
         found = tuple(outcome[i] for i in range(len(rule.symptoms)))
 
         impact = [f for f in found if f.symptom.impact]
+        harm = any(f.status == MATCHED for f in impact)
         rejected = None
         if contradicted:
             rejected = CONTRADICTED
-        # Nobody waiting is the reason an operator needs first.
-        elif not any(f.status == MATCHED for f in impact) and not all(
-            f.status == UNOBSERVABLE for f in impact
-        ):
+        # Without its leading symptom only the impact tells that something happened.
+        elif not has_leading and not harm and not all(f.status == UNOBSERVABLE for f in impact):
             rejected = NO_IMPACT
-        elif any(f.status == MISSING and f.symptom.strength == "characteristic" for f in found):
+        elif any(
+            f.status == MISSING and f.symptom.strength == "characteristic" and not f.symptom.impact
+            for f in found
+        ):
             rejected = CHARACTERISTIC_MISSING
         # Without its leading symptom a cause must still show something besides the
         # impact, or any impact of the resource would name it.
@@ -352,9 +364,9 @@ class RuleEngine:
         weighed = [f for f in found if f.symptom.strength != CONTRADICTING]
         support = 1 - math.prod(1 - self._weight(f) for f in weighed if f.status == MATCHED)
         confidence = support * math.prod(
-            1 - self.alpha * self._weight(f) for f in weighed if f.status == MISSING
+            1 - self.alpha * self._weight(f) for f in weighed if f.status == MISSING and not f.symptom.impact
         )
-        return Hypothesis(rule.cause, b, confidence, support, t0, found, rule, rejected=rejected)
+        return Hypothesis(rule.cause, b, confidence, support, t0, found, rule, rejected=rejected, harm=harm)
 
     def _weight(self, f: Found) -> float:
         return self.weights[f.symptom.strength]
@@ -380,11 +392,13 @@ class RuleEngine:
         ]
         return bool(activity) and all(r.id in explained for r in activity)
 
-    def _advisories(self, ev: Evidence) -> tuple[Advisory, ...]:
+    def _advisories(self, ev: Evidence, hurt: set[Item]) -> tuple[Advisory, ...]:
+        """Advice for each resource with impact that no harmful hypothesis explains."""
         impacted = {
             self.onto.signals[r.signal].resource
             for r in ev.records
             if inside(r, ev)
+            and r not in hurt
             and r.signal in self.onto.signals
             and (r.kind == "impact" or self.onto.signals[r.signal].impact)
         }
@@ -411,6 +425,7 @@ def _hypothesis_dict(h: Hypothesis) -> dict:
         "confidence": round(h.confidence, 4),
         "support": round(h.support, 4),
         "expected": h.expected,
+        "harm": h.harm,
         "leading_at": h.leading_at,
         "rule": {"source": h.rule.source, "grade": h.rule.grade},
         "symptoms": [
