@@ -22,7 +22,7 @@ import { groupEvents, type EventGroup } from '../lib/events'
 import { useShownInterval, type Shown } from '../lib/interval'
 import { lastInterval } from '../lib/range'
 import RangePicker from '../components/RangePicker'
-import { metricLink } from '../lib/records'
+import { auditLink, metricLink } from '../lib/records'
 import { useNow } from '../lib/useNow'
 import styles from './Overview.module.css'
 
@@ -132,7 +132,7 @@ function OpenStatus({
       {rows.length > 0 && (
         <div className={styles.openList}>
           {rows.slice(0, SHOWN_OPEN).map((r) => (
-            <Link key={r.id} to={`/hosts/${host}/anomalies/${r.id}`} className={styles.openItem}>
+            <Link key={r.id} to={auditLink(host, r)} className={styles.openItem}>
               <span>
                 <Chip tone={r.kind === 'impact' ? 'red' : r.expected ? 'green' : 'ochre'}>
                   {r.expected ? 'ожидаемая' : kindNames[r.kind]}

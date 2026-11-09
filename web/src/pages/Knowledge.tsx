@@ -28,6 +28,7 @@ import {
   unitNames,
 } from '../lib/names'
 import styles from './Knowledge.module.css'
+import Runs from './Runs'
 
 // React Flow is the largest dependency; only the graph tab loads it.
 const Graph = lazy(() => import('./KnowledgeGraph'))
@@ -110,7 +111,10 @@ export default function Knowledge() {
             <Limits k={k} />
           </Tabs.Content>
           <Tabs.Content value="tests">
-            <Tests k={k} host={host} />
+            <div className={ui.page}>
+              <Tests k={k} host={host} />
+              <Runs host={host} />
+            </div>
           </Tabs.Content>
         </div>
       </Tabs.Root>
@@ -541,9 +545,12 @@ function Tests({ k, host }: { k: KB; host: string }) {
               </td>
               <td>
                 {t.expect ? (
-                  <Link to={`/hosts/${host}/knowledge/${t.expect}`}>{named(causeNames, t.expect)}</Link>
+                  <>
+                    <Link to={`/hosts/${host}/knowledge/${t.expect}`}>{named(causeNames, t.expect)}</Link>
+                    {!t.harm && <span className="muted"> · никому не мешает</span>}
+                  </>
                 ) : (
-                  'ни одной причины'
+                  'ни одной причины, которая мешает'
                 )}
                 {t.within > 1 && <span className="muted"> · в первых {t.within}</span>}
                 {t.not.length > 0 && (

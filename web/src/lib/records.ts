@@ -80,3 +80,21 @@ export function metricLink(
   Object.entries(extra).forEach(([k, v]) => q.set(k, v))
   return `/hosts/${host}/metric?${q}`
 }
+
+// Room around a record on the audit, so its stretch is seen whole.
+const AUDIT_MARGIN_MS = 10 * 60_000
+
+/** The audit around a record, opened at the stretch that holds it. */
+export function auditLink(
+  host: string,
+  r: { id: number | string; started_at: string; ended_at: string | null },
+) {
+  const q = new URLSearchParams({ record: String(r.id) })
+  if (r.ended_at) {
+    q.set('since', new Date(Date.parse(r.started_at) - AUDIT_MARGIN_MS).toISOString())
+    q.set('until', new Date(Math.min(Date.now(), Date.parse(r.ended_at) + AUDIT_MARGIN_MS)).toISOString())
+  } else if (Date.now() - Date.parse(r.started_at) > 3600_000) {
+    q.set('range', Date.now() - Date.parse(r.started_at) > 6 * 3600_000 ? '24h' : '6h')
+  }
+  return `/hosts/${host}/audit?${q}`
+}

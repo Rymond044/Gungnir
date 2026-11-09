@@ -1,11 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { createBrowserRouter, RouterProvider } from 'react-router'
+import { createBrowserRouter, Navigate, RouterProvider } from 'react-router'
 import Crash from './app/Crash'
 import Home from './app/Home'
 import Layout from './app/Layout'
-import Analysis from './pages/Analysis'
+import Audit from './pages/Audit'
 import Anomalies from './pages/Anomalies'
 import Anomaly from './pages/Anomaly'
 import Cause from './pages/Cause'
@@ -33,7 +33,8 @@ const router = createBrowserRouter([
           { index: true, element: <Overview /> },
           { path: 'anomalies', element: <Anomalies /> },
           { path: 'anomalies/:id', element: <Anomaly /> },
-          { path: 'analysis', element: <Analysis /> },
+          { path: 'audit', element: <Audit /> },
+          { path: 'analysis', element: <Navigate to="../audit" relative="path" replace /> },
           { path: 'collectors', element: <Collectors /> },
           { path: 'metric', element: <Metric /> },
           { path: 'knowledge', element: <Knowledge /> },

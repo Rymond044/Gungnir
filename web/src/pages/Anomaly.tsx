@@ -9,15 +9,12 @@ import ui from '../components/ui.module.css'
 import { against } from '../lib/basis'
 import { dayClock, duration, formatValue, ms } from '../lib/format'
 import { classNames, detectorName, directionNames, named, powerName, signalNames } from '../lib/names'
-import { isLevel, metricLink, recordInterval, recordLimit, scoreText } from '../lib/records'
+import { auditLink, isLevel, metricLink, recordInterval, recordLimit, scoreText } from '../lib/records'
 import { useNow } from '../lib/useNow'
 
 // The graph shows the record with room before it for what led up to it.
 const BEFORE_MS = 10 * 60_000
 const AFTER_MS = 5 * 60_000
-// The interval handed to analysis: the windows of the rules reach about a
-// minute around the leading symptom.
-const ANALYSIS_MARGIN_MS = 60_000
 const HOUR = 3600_000
 
 /** What the graph must cover to show why the record opened. */
@@ -81,10 +78,6 @@ export default function Anomaly() {
   if (!r || !interval) return null
   const start = ms(r.started_at)
   const end = r.ended_at ? ms(r.ended_at) : now
-  const analysis = new URLSearchParams({
-    since: new Date(start - ANALYSIS_MARGIN_MS).toISOString(),
-    until: new Date(Math.min(now, end + ANALYSIS_MARGIN_MS)).toISOString(),
-  })
   const fmt = (v: number) => formatValue(r.signal, v)
   const limit = recordLimit(r)
   const others = (neighbours.data ?? []).filter((o) => o.id !== r.id)
@@ -92,7 +85,7 @@ export default function Anomaly() {
   return (
     <div className={ui.page}>
       <div className={ui.crumbs}>
-        <Link to={`/hosts/${host}/anomalies`}>Аномалии</Link>
+        <Link to={`/hosts/${host}/anomalies`}>Журнал аномалий</Link>
         <span>/</span>
         <span>{r.id}</span>
       </div>
@@ -113,12 +106,8 @@ export default function Anomaly() {
           {r.ended_at ? ` — ${dayClock(end, offset, now)}` : ', всё ещё идёт'} ·{' '}
           {duration((end - start) / 1000)}
         </span>
-        <Link
-          to={`/hosts/${host}/analysis?${analysis}`}
-          className={`${ui.button} ${ui.primary}`}
-          style={{ marginLeft: 'auto' }}
-        >
-          Анализ причин
+        <Link to={auditLink(host, r)} className={`${ui.button} ${ui.primary}`} style={{ marginLeft: 'auto' }}>
+          Что это было — аудит
         </Link>
       </div>
 

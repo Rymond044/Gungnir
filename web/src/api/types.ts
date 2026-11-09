@@ -153,6 +153,8 @@ export interface ProcessRow {
   ts: string
   pid: number
   ppid: number
+  /** The process group; null from agents that do not report it. */
+  pgid: number | null
   comm: string
   state: string
   threads: number
@@ -230,6 +232,8 @@ export interface Hypothesis {
   confidence: number
   support: number
   expected: boolean
+  /** It hurt the others, not only ran (ADR 0056). */
+  harm?: boolean
   leading_at: number
   rule: { source: string; grade: string }
   symptoms: FoundSymptom[]
@@ -331,6 +335,8 @@ export interface KnowledgeTest {
   domain: string
   expect: string | null
   within: number
+  /** False: the cause is named as activity that hurt nobody (ADR 0056). */
+  harm: boolean
   not: string[]
   expected: boolean
   facts: Record<string, string>
@@ -378,4 +384,68 @@ export interface Knowledge {
   }[]
   tests: KnowledgeTest[]
   grades: string[]
+}
+
+/** A command behind a record: the processes of one process group (ADR 0057). */
+export interface Command {
+  pgid: number | null
+  /** The group's leader, such as `make`, which names the command. */
+  leader: string | null
+  /** The busiest names in the group, each with how many processes had it. */
+  names: [string, number][]
+  pids: number
+  /** Average over the snapshots of the record. */
+  cores: number
+  rss_bytes: number
+  unit: string | null
+}
+
+export type Lane = 'cpu' | 'memory' | 'disk' | 'other'
+
+interface StretchBase {
+  lane: Lane
+  /** Seconds since the epoch; `end` is null while it lasts. */
+  start: number
+  end: number | null
+  harm: boolean
+  processes: Command[]
+}
+
+export type RecordItem = Extract<EvidenceItem, { type: 'record' }>
+
+/** One cause and culprit over one stretch: a build, a copy, a leak. */
+export interface ExplainedStretch extends StretchBase {
+  kind: 'explained'
+  expected: boolean
+  cause: string
+  culprit: string | null
+  device: string | null
+  filesystem: string | null
+  confidence: number
+  bursts: [number, number | null][]
+  records: string[]
+  impact: EvidenceItem[]
+  hypothesis: Omit<Hypothesis, 'actions'>
+  actions: PolicyAction[]
+}
+
+/** Records no hypothesis uses, by resource and time. */
+export interface OpenStretch extends StretchBase {
+  kind: 'unexplained' | 'expected'
+  records: RecordItem[]
+  events: EvidenceItem[]
+  workload_class: string | null
+  groups: { group: string; processes: Command[] }[]
+  advice: { resource: string; text: string; source: string }[]
+  near: (Omit<Hypothesis, 'actions'> & { reason: string }) | null
+}
+
+export type Stretch = ExplainedStretch | OpenStretch
+
+export interface Audit {
+  since: string
+  until: string
+  /** The first snapshot of the host in the interval. */
+  data_since: string | null
+  stretches: Stretch[]
 }

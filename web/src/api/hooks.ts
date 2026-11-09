@@ -1,6 +1,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { get } from './client'
 import type {
+  Audit,
   Chart,
   Diagnosis,
   EventRow,
@@ -127,6 +128,15 @@ export function useDiagnosis(host: string, request: DiagnosisRequest | null, liv
     queryKey: ['diagnosis', host, request],
     queryFn: () => get<Diagnosis[]>(`/hosts/${host}/diagnosis`, { ...request }),
     enabled: request !== null,
+    refetchInterval: live ? LIVE_MS : false,
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function useAudit(host: string, interval: Interval, live: boolean) {
+  return useQuery({
+    queryKey: ['audit', host, interval],
+    queryFn: () => get<Audit>(`/hosts/${host}/audit`, { ...interval }),
     refetchInterval: live ? LIVE_MS : false,
     placeholderData: keepPreviousData,
   })

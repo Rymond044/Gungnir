@@ -211,6 +211,7 @@ def document(base: Base, host: str | None = None) -> dict:
                 "domain": c.domain,
                 "expect": c.expect,
                 "within": c.within,
+                "harm": c.harm,
                 "not": list(c.not_),
                 "expected": c.expected,
                 "facts": c.facts,

@@ -1,0 +1,219 @@
+.lanes {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lane {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.laneTitle {
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+  padding-top: 4px;
+}
+
+.laneTitle:hover {
+  text-decoration: underline;
+}
+
+.track {
+  position: relative;
+  margin-top: 2px;
+  border-radius: 3px;
+  background: var(--divider);
+}
+
+.bar {
+  position: absolute;
+  top: 2px;
+  height: 10px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+  background: var(--gray);
+}
+
+.bar.red {
+  background: var(--red);
+}
+
+.bar.green {
+  background: var(--green);
+}
+
+.bar.lit {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.group h2 {
+  margin: 6px 0 0;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--gray);
+  border-radius: var(--radius);
+  scroll-margin-top: 16px;
+}
+
+.card_red {
+  border-left-color: var(--red);
+}
+
+.card_green {
+  border-left-color: var(--green);
+}
+
+.cardLit {
+  box-shadow: 0 0 0 2px var(--ink);
+}
+
+.cardHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.when {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.cardTitle {
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.certainty {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.number {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.rowLabel {
+  color: var(--muted);
+  font-size: 13px;
+  padding-top: 2px;
+}
+
+.rowBody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.commands {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.command {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 160px 80px;
+  gap: 10px;
+  align-items: center;
+}
+
+.commandName {
+  overflow-wrap: anywhere;
+}
+
+.commandBar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--divider);
+  overflow: hidden;
+}
+
+.commandBar span {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+}
+
+.commandValue {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.groups {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.chart {
+  margin-left: 120px;
+}
+
+.advice {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.why summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.why[open] summary {
+  margin-bottom: 8px;
+}
+
+@media (max-width: 720px) {
+  .row {
+    grid-template-columns: 1fr;
+  }
+  .chart {
+    margin-left: 0;
+  }
+  .command {
+    grid-template-columns: minmax(0, 1fr) 70px;
+  }
+  .commandBar {
+    display: none;
+  }
+}

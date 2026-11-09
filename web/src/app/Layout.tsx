@@ -37,7 +37,7 @@ export default function Layout() {
           </NavLink>
           <NavLink to={`/hosts/${host}/anomalies`} className={link}>
             <AnomalyIcon />
-            Аномалии
+            Журнал аномалий
             {open > 0 && (
               <span
                 className={`${styles.badge} ${o?.open.impact ? '' : styles.badgeQuiet}`}
@@ -47,9 +47,9 @@ export default function Layout() {
               </span>
             )}
           </NavLink>
-          <NavLink to={`/hosts/${host}/analysis`} className={link}>
+          <NavLink to={`/hosts/${host}/audit`} className={link}>
             <AnalysisIcon />
-            Анализ
+            Аудит
           </NavLink>
           <NavLink to={`/hosts/${host}/knowledge`} className={link}>
             <KnowledgeIcon />

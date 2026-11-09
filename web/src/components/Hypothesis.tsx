@@ -1,5 +1,5 @@
 import { Link } from 'react-router'
-import type { FoundSymptom, Hypothesis as H } from '../api/types'
+import type { FoundSymptom, Hypothesis as H, PolicyAction } from '../api/types'
 import { confidence, dayClock, formatNumber, symptomWindow } from '../lib/format'
 import {
   actionNames,
@@ -158,25 +158,36 @@ export default function Hypothesis({
         ))}
       </div>
       <Source source={h.rule.source} grade={h.rule.grade} />
-      {withActions && h.actions.length > 0 && (
-        <div className={styles.actions}>
-          <span style={{ fontWeight: 600 }}>Действия по политике</span>
-          {h.actions.map((a) => (
-            <span key={a.action + (a.when ?? '')}>
-              {named(actionNames, a.action)} <Key>{a.action}</Key>
-              <span className="muted">
-                {' '}
-                ·{' '}
-                {a.signal
-                  ? `до ${Math.round(a.share * 100)} % от текущего «${named(signalNames, a.signal)}» виновника`
-                  : `вес ×${formatNumber(a.share)}`}
-                {a.when ? ` · если ${named(signalNames, a.when)}` : ''} · помогает{' '}
-                {likelihoodNames[a.effectiveness] ?? a.effectiveness}
-              </span>
-            </span>
-          ))}
-        </div>
-      )}
+      {withActions && h.actions.length > 0 && <Actions actions={h.actions} />}
+    </div>
+  )
+}
+
+/** The actions the policy holds for a cause. */
+export function Actions({
+  actions,
+  title = 'Действия по политике',
+}: {
+  actions: PolicyAction[]
+  title?: string
+}) {
+  return (
+    <div className={styles.actions}>
+      <span style={{ fontWeight: 600 }}>{title}</span>
+      {actions.map((a) => (
+        <span key={a.action + (a.when ?? '')}>
+          {named(actionNames, a.action)} <Key>{a.action}</Key>
+          <span className="muted">
+            {' '}
+            ·{' '}
+            {a.signal
+              ? `до ${Math.round(a.share * 100)} % от текущего «${named(signalNames, a.signal)}» виновника`
+              : `вес ×${formatNumber(a.share)}`}
+            {a.when ? ` · если ${named(signalNames, a.when)}` : ''} · помогает{' '}
+            {likelihoodNames[a.effectiveness] ?? a.effectiveness}
+          </span>
+        </span>
+      ))}
     </div>
   )
 }
