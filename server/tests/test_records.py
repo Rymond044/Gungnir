@@ -62,3 +62,14 @@ def test_a_key_no_longer_evaluated_expires():
     assert t.expire(set(), 5, 40000) == []
     [closed] = t.expire(set(), 10, 90000)
     assert closed.ended_ms == 15000
+
+
+def test_a_record_ends_where_the_host_fell_asleep():
+    t = Tracker(P)
+    [opened] = t.feed(ev([1, 1, 1, 1]))
+    t = Tracker.from_json(P, t.to_json())
+    # Eight hours later the condition still holds: a new record, not one of eight hours.
+    events = t.feed(ev([1, 1, 1], start_ms=8 * 3_600_000))
+    closed, reopened = events
+    assert isinstance(closed, Closed) and closed.token == opened.token and closed.ended_ms == 20000
+    assert isinstance(reopened, Opened) and reopened.started_ms == 8 * 3_600_000

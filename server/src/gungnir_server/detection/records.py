@@ -5,7 +5,9 @@ forest, every window). A record opens when the condition holds on
 `open_after` evaluations in a row and starts at the first of them; it is
 extended while the condition holds and closes after `close_after` normal
 evaluations, ending where the condition stopped. A series that stops
-sending closes its record after `stale_after` evaluations without data.
+sending closes its record after `stale_after` evaluations without data, and
+a gap in the ticks as long as that (the host asleep or switched off) closes
+it where the data stopped, never across the gap.
 
 The tracker's state is plain JSON, saved with every step of the live loop.
 """
@@ -105,8 +107,16 @@ class Tracker:
         open_after = ev.open_after or p.open_after
         step_ms = int(p.step_s * 1000)
         events: list[Event] = []
+        gap_ms = p.stale_after * step_ms
         for i in range(ev.ticks.size):
             t = int(ev.ticks[i])
+            seen = track.get("seen")
+            track["seen"] = t
+            if seen is not None and t - seen > gap_ms:
+                # No ticks at all: the host slept. What ran before is over.
+                track["hits"] = 0
+                if track.get("open"):
+                    events.append(self._close(ev.key, track, track["open"]["last_hit"] + step_ms))
             current = track.get("open")
             if not valid[i]:
                 track["hits"] = 0
