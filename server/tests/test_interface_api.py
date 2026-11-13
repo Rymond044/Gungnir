@@ -144,3 +144,13 @@ def test_knowledge_lists_every_cause_with_its_rule_and_provenance(client):
     assert all(s["source"] for r in kb["rules"] for s in r["symptoms"])
     assert all(e["source"] for e in kb["policy"])
     assert len(kb["tests"]) > 0
+
+
+def test_incidents_list_one_and_a_decision_on_nothing(client, token):
+    assert client.get("/api/v1/hosts/laptop/incidents").json() == []
+    assert client.get("/api/v1/hosts/laptop/incidents/1").status_code == 404
+    assert client.get("/api/v1/hosts/laptop/overview").json()["incident"] is None
+    refused = client.post("/api/v1/hosts/laptop/incidents/1/proposals/1", json={"decision": "confirm"})
+    assert refused.status_code == 409
+    wrong = client.post("/api/v1/hosts/laptop/incidents/1/proposals/1", json={"decision": "apply"})
+    assert wrong.status_code == 409

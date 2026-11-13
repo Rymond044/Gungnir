@@ -1,5 +1,5 @@
 """The processing loop of the server: every few seconds, for every host, the
-workload classifier, then hourly histograms, then detection.
+workload classifier, then hourly histograms, then detection, then incidents.
 
 Each stage keeps its own progress in the database, so a restart continues
 where it stopped and a stage that fails for one host does not hold up the
@@ -69,10 +69,12 @@ Stage = Callable[[psycopg.Connection, Host, Params, datetime], None]
 
 
 class Worker:
-    def __init__(self, pool: ConnectionPool, stages: list[Stage] | None = None) -> None:
+    def __init__(
+        self, pool: ConnectionPool, stages: list[Stage] | None = None, after: list[Stage] | None = None
+    ) -> None:
         self._pool = pool
         self._params = params.load()
-        self._stages = stages or [run_host, Detection(pool.conninfo)]
+        self._stages = [*(stages or [run_host, Detection(pool.conninfo)]), *(after or [])]
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._loop, name="pipeline", daemon=True)
 

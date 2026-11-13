@@ -149,6 +149,16 @@ class Params:
     penalty_alpha: float = 0.5
     hypothesis_cutoff: float = 0.3
 
+    # Incidents (ADRs 0015, 0060): an incident closes after this long without
+    # harm; the incident manager catches up on detection in steps this long.
+    incident_quiet: timedelta = timedelta(minutes=2)
+    incident_step: timedelta = timedelta(minutes=15)
+    # A proposal's parameter is taken from what the culprit used over this
+    # long; an applied action is undone after rollback_after unless kept
+    # (ADR 0007).
+    proposal_basis: timedelta = timedelta(minutes=1)
+    rollback_after: timedelta = timedelta(minutes=30)
+
     # Detection loop.
     detect_every: timedelta = timedelta(seconds=10)
     # Batches arrive every 10 s; ticks younger than this may be incomplete.

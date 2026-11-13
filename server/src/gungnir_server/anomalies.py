@@ -30,12 +30,14 @@ class RecordRow:
     context: dict | None
     # Expected behavior explains it (ADR 0002); None before S5 judged it.
     expected: bool | None = None
+    # The incident it is evidence of (ADR 0060).
+    incident_id: int | None = None
 
 
 COLUMNS = (
     "SELECT a.id, a.kind, a.detector, a.level, s.signal, s.entity, a.started_at, a.ended_at,"
     " a.direction, a.peak_score, a.value, a.workload_class, a.power_profile, a.baseline, a.episode,"
-    " a.context, a.expected FROM anomalies a JOIN series s ON s.id = a.series_id"
+    " a.context, a.expected, a.incident_id FROM anomalies a JOIN series s ON s.id = a.series_id"
 )
 
 
@@ -51,6 +53,7 @@ def records_of(
     kind: str | None = None,
     signal: str | None = None,
     entity: str | None = None,
+    incident: int | None = None,
 ) -> list[RecordRow]:
     """Records that overlap [since, until), newest first; live ones unless a
     replay is named."""
@@ -63,6 +66,7 @@ def records_of(
         " AND (%(kind)s::text IS NULL OR a.kind = %(kind)s)"
         " AND (%(sig)s::text IS NULL OR s.signal = %(sig)s)"
         " AND (%(ent)s::text IS NULL OR s.entity = %(ent)s)"
+        " AND (%(inc)s::bigint IS NULL OR a.incident_id = %(inc)s)"
         " ORDER BY a.started_at DESC LIMIT %(limit)s",
         {
             "h": host.id,
@@ -74,6 +78,7 @@ def records_of(
             "kind": kind,
             "sig": signal,
             "ent": entity,
+            "inc": incident,
             "limit": limit,
         },
     ).fetchall()

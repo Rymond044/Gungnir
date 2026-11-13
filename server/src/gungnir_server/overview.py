@@ -1,14 +1,14 @@
 """The state of a host now, for the interface's overview (slice S7): the
 agent's contact, workload class, collectors, the latest value of every
-host, device and filesystem series, sizes derived from them, and the open
-records."""
+host, device and filesystem series, sizes derived from them, the open
+records and the open incident."""
 
 from dataclasses import dataclass
 from datetime import datetime
 
 import psycopg
 
-from gungnir_server import hosts, telemetry
+from gungnir_server import hosts, incidents, telemetry
 from gungnir_server.hosts import Host
 
 
@@ -43,6 +43,8 @@ class Overview:
     devices: list[str]
     filesystems: list[str]
     open: OpenRecords
+    # The open incident, if any (ADR 0060).
+    incident: incidents.IncidentSummary | None = None
 
 
 def latest_values(conn: psycopg.Connection, host: Host) -> list[Latest]:
@@ -100,4 +102,5 @@ def of(conn: psycopg.Connection, host: Host, now: datetime) -> Overview:
         devices=sorted({x.entity for x in latest if x.signal.startswith("disk.")}),
         filesystems=sorted({x.entity for x in latest if x.signal.startswith("fs.")}),
         open=open_records(conn, host),
+        incident=incidents.open_summary(conn, host),
     )

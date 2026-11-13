@@ -9,6 +9,7 @@ import psycopg
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from psycopg_pool import ConnectionPool
+from pydantic import BaseModel
 
 from gungnir_server import (
     anomalies,
@@ -18,6 +19,7 @@ from gungnir_server import (
     charts,
     gather,
     hosts,
+    incidents,
     labels,
     maintenance,
     overview,
@@ -51,7 +53,8 @@ def create_app(pool: ConnectionPool | None = None) -> FastAPI:
         with app.state.pool.connection() as conn:
             migrate(conn)
             maintenance.ensure_partitions(conn, datetime.now(UTC))
-        workers = [maintenance.Worker(app.state.pool), pipeline.Worker(app.state.pool)]
+        manager = incidents.Manager(app.state.base, app.state.engine)
+        workers = [maintenance.Worker(app.state.pool), pipeline.Worker(app.state.pool, after=[manager])]
         for worker in workers:
             worker.start()
         yield
@@ -261,11 +264,18 @@ def list_anomalies(
     signal: str | None = None,
     entity: str | None = None,
     replay: int | None = None,
+    incident: int | None = None,
     limit: Annotated[int, Query(ge=1, le=5_000)] = 500,
 ) -> list[anomalies.RecordRow]:
-    """Records that overlap the interval, newest first."""
-    since, until = window(since, until, timedelta(days=1))
-    return anomalies.records_of(conn, host, since, replay, open, detector, limit, until, kind, signal, entity)
+    """Records that overlap the interval, newest first; those of an incident
+    whenever they were."""
+    if incident is not None:
+        since, until = datetime(2000, 1, 1, tzinfo=UTC), datetime.now(UTC) + timedelta(days=1)
+    else:
+        since, until = window(since, until, timedelta(days=1))
+    return anomalies.records_of(
+        conn, host, since, replay, open, detector, limit, until, kind, signal, entity, incident
+    )
 
 
 @router.get("/hosts/{name}/anomalies/{record_id}")
@@ -368,6 +378,47 @@ def audit_of(
         (host.id, since, until),
     ).fetchone()
     return {"since": since, "until": until, "data_since": first, **found}
+
+
+@router.get("/hosts/{name}/incidents")
+def list_incidents(
+    host: NamedHost,
+    conn: Conn,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    limit: Annotated[int, Query(ge=1, le=1_000)] = 200,
+) -> list[incidents.IncidentSummary]:
+    """Incidents that overlap the interval, newest first (ADR 0060)."""
+    since, until = window(since, until, timedelta(days=7))
+    return incidents.summaries(conn, host, since, until, limit)
+
+
+@router.get("/hosts/{name}/incidents/{incident_id}")
+def one_incident(host: NamedHost, conn: Conn, incident_id: int) -> incidents.Incident:
+    """An incident with its hypotheses, harmful first, and its proposals in rank order."""
+    found = incidents.one(conn, host, incident_id)
+    if found is None:
+        raise HTTPException(404, f"no incident {incident_id}")
+    return found
+
+
+class Decision(BaseModel):
+    decision: str
+
+
+@router.post("/hosts/{name}/incidents/{incident_id}/proposals/{proposal_id}")
+def decide(
+    host: NamedHost, conn: Conn, incident_id: int, proposal_id: int, body: Decision
+) -> incidents.ProposalRow:
+    """The operator confirms or rejects a proposal. Confirming records the
+    decision; the actuator applies it from slice S8. There is no login yet,
+    so the decision is the operator's (docs/open-questions.md)."""
+    try:
+        return incidents.decide(
+            conn, host, incident_id, proposal_id, body.decision, "operator", datetime.now(UTC)
+        )
+    except incidents.Refused as e:
+        raise HTTPException(409, str(e)) from e
 
 
 @router.get("/knowledge")
