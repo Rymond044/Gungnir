@@ -321,14 +321,11 @@ class RuleEngine:
             if m.leading and not has_leading:
                 outcome[i] = Found(m, UNOBSERVABLE)
                 continue
-            fits = sorted(
-                (
-                    item
-                    for item in self._items(m, ev)
-                    if item not in used and t0 + lo <= at(item) <= t0 + hi and self._matches(m, item, b)
-                ),
-                key=at,
-            )
+            fits = [
+                item
+                for item in ev.between(m.kind, t0 + lo, t0 + hi)
+                if item not in used and self._matches(m, item, b)
+            ]
             if fits and m.strength == CONTRADICTING:
                 contradicted = True
             if fits:

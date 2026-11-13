@@ -5,7 +5,9 @@ or from the database (`gather.evidence`); times are seconds, from the
 case's start or since the epoch.
 """
 
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass, field
+from functools import cached_property
 
 HOST = "host"
 
@@ -83,6 +85,25 @@ class Evidence:
     until: float = float("inf")
     # Signals, event types and process symptoms the host does not provide.
     unobservable: frozenset[str] = frozenset()
+
+    def between(self, kind: str, lo: float, hi: float) -> list["Item"]:
+        """Items of a kind whose time lies in [lo, hi], earliest first. A
+        week holds thousands of process snapshots; a symptom's window a few."""
+        times, items = self._by_time[kind]
+        return items[bisect_left(times, lo) : bisect_right(times, hi)]
+
+    @cached_property
+    def _by_time(self) -> dict[str, tuple[list[float], list["Item"]]]:
+        out = {}
+        for kind, items in (
+            ("anomaly", self.records),
+            ("value", self.values),
+            ("event", self.events),
+            ("process", self.processes),
+        ):
+            ordered = sorted(items, key=at)
+            out[kind] = ([at(i) for i in ordered], ordered)
+        return out
 
 
 def at(item: Item) -> float:
