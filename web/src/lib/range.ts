@@ -1,6 +1,6 @@
 // Periods the screens offer, and the interval they mean now.
 
-export type RangeKey = '15m' | '1h' | '6h' | '24h' | '7d'
+export type RangeKey = '15m' | '1h' | '6h' | '24h' | '7d' | '30d'
 
 export const RANGES: { value: RangeKey; label: string; seconds: number }[] = [
   { value: '15m', label: '15 мин', seconds: 900 },
@@ -8,6 +8,7 @@ export const RANGES: { value: RangeKey; label: string; seconds: number }[] = [
   { value: '6h', label: '6 ч', seconds: 6 * 3600 },
   { value: '24h', label: '24 ч', seconds: 86400 },
   { value: '7d', label: '7 дн', seconds: 7 * 86400 },
+  { value: '30d', label: '30 дн', seconds: 30 * 86400 },
 ]
 
 export function rangeSeconds(key: RangeKey): number {

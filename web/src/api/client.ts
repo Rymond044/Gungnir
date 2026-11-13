@@ -25,6 +25,19 @@ export function query(params: Record<string, Param>): string {
 
 export async function get<T>(path: string, params: Record<string, Param> = {}): Promise<T> {
   const response = await fetch(`/api/v1${path}${query(params)}`, { headers: { Accept: 'application/json' } })
+  return read<T>(response)
+}
+
+export async function post<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(`/api/v1${path}`, {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return read<T>(response)
+}
+
+async function read<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let detail = response.statusText
     try {

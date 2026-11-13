@@ -3,7 +3,7 @@ import { useHosts, useOverview } from '../api/hooks'
 import { age } from '../lib/format'
 import { classNames, named } from '../lib/names'
 import { useNow } from '../lib/useNow'
-import { AnalysisIcon, AnomalyIcon, KnowledgeIcon, OverviewIcon } from './icons'
+import { AnalysisIcon, AnomalyIcon, IncidentIcon, KnowledgeIcon, OverviewIcon } from './icons'
 import styles from './Layout.module.css'
 
 // The agent sends every 10 s; a minute of silence means it is not reaching
@@ -34,6 +34,15 @@ export default function Layout() {
           <NavLink to={`/hosts/${host}`} end className={link}>
             <OverviewIcon />
             Обзор
+          </NavLink>
+          <NavLink to={`/hosts/${host}/incidents`} className={link}>
+            <IncidentIcon />
+            Инциденты
+            {o?.incident && (
+              <span className={styles.badge} title="открыт инцидент; в скобках — предложения, ждущие решения">
+                {o.incident.waiting > 0 ? `${o.incident.id} (${o.incident.waiting})` : o.incident.id}
+              </span>
+            )}
           </NavLink>
           <NavLink to={`/hosts/${host}/anomalies`} className={link}>
             <AnomalyIcon />

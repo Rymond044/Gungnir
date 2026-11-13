@@ -169,6 +169,14 @@ export default function Anomaly() {
             </span>
             <span>закрывается</span>
             <span>после трёх замеров подряд в норме</span>
+            <span>инцидент</span>
+            <span>
+              {r.incident_id ? (
+                <Link to={`/hosts/${host}/incidents/${r.incident_id}`}>№ {r.incident_id}</Link>
+              ) : (
+                'не входит: в это время никому не мешали'
+              )}
+            </span>
           </div>
         </Panel>
         {r.context && Object.keys(r.context).length > 0 && (

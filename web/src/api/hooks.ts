@@ -1,14 +1,17 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { get } from './client'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { get, post } from './client'
 import type {
   Audit,
   Chart,
   Diagnosis,
   EventRow,
   HostSummary,
+  Incident,
+  IncidentSummary,
   Knowledge,
   Norm,
   Overview,
+  Proposal,
   ProcessRow,
   RecordRow,
   Run,
@@ -79,6 +82,8 @@ export interface RecordFilter {
   detector?: string
   signal?: string
   entity?: string
+  /** Records of one incident, whenever they were. */
+  incident?: number
   limit?: number
 }
 
@@ -147,5 +152,36 @@ export function useKnowledge(host: string) {
     queryKey: ['knowledge', host],
     queryFn: () => get<Knowledge>('/knowledge', { host }),
     staleTime: Infinity,
+  })
+}
+
+export function useIncidents(host: string, interval: Interval, live: boolean) {
+  return useQuery({
+    queryKey: ['incidents', host, interval],
+    queryFn: () => get<IncidentSummary[]>(`/hosts/${host}/incidents`, { ...interval }),
+    refetchInterval: live ? LIVE_MS : false,
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function useIncident(host: string, id: string) {
+  return useQuery({
+    queryKey: ['incident', host, id],
+    queryFn: () => get<Incident>(`/hosts/${host}/incidents/${id}`),
+    refetchInterval: LIVE_MS,
+  })
+}
+
+/** The operator confirms or rejects a proposal (ADR 0060). */
+export function useDecision(host: string, incident: number) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ proposal, decision }: { proposal: number; decision: 'confirm' | 'reject' }) =>
+      post<Proposal>(`/hosts/${host}/incidents/${incident}/proposals/${proposal}`, { decision }),
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: ['incident', host] })
+      void client.invalidateQueries({ queryKey: ['incidents', host] })
+      void client.invalidateQueries({ queryKey: ['overview', host] })
+    },
   })
 }

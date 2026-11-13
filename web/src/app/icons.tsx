@@ -21,6 +21,13 @@ export const OverviewIcon = () => (
   </svg>
 )
 
+export const IncidentIcon = () => (
+  <svg {...props}>
+    <path d="M12 3.5l9 16H3z" />
+    <path d="M12 10v4.5M12 17.2v.3" />
+  </svg>
+)
+
 export const AnomalyIcon = () => (
   <svg {...props}>
     <path d="M3 15h4l2.5-8 4 12 2.5-6H21" />

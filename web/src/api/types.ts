@@ -47,6 +47,70 @@ export interface Overview {
   devices: string[]
   filesystems: string[]
   open: { anomalies: number; impact: number; expected: number }
+  /** The open incident, if any (ADR 0060). */
+  incident: IncidentSummary | null
+}
+
+export interface IncidentSummary {
+  id: number
+  opened_at: string
+  /** The end of the latest harm; the incident closes two quiet minutes after it. */
+  last_harm_at: string
+  closed_at: string | null
+  workload_class: string | null
+  records: number
+  /** The best harmful hypothesis. */
+  cause: string | null
+  culprit: string | null
+  confidence: number | null
+  hypotheses: number
+  /** Proposals waiting for a decision. */
+  waiting: number
+}
+
+export interface IncidentHypothesis {
+  id: number
+  cause: string
+  culprit: string | null
+  device: string | null
+  filesystem: string | null
+  first_seen: string
+  last_seen: string
+  confidence: number
+  peak_confidence: number
+  harm: boolean
+  expected: boolean
+  /** Null once the latest diagnosis no longer gives it. */
+  rank: number | null
+  tree: Omit<Hypothesis, 'actions'>
+}
+
+export type ProposalState = 'proposed' | 'confirmed' | 'rejected' | 'expired'
+
+export interface Proposal {
+  id: number
+  hypothesis_id: number
+  action: string
+  target: string
+  /** `share` of what the target used of `signal` over the last minute; a weight has only the share. */
+  parameter: { signal: string | null; share: number; current: number | null; value: number | null }
+  effectiveness: string
+  /** The likelihood of its most likely side effect. */
+  risk: string | null
+  side_effects: { effect: string; likelihood: string }[]
+  rollback_after_s: number
+  source: string
+  rank: number
+  state: ProposalState
+  created_at: string
+  decided_at: string | null
+  decided_by: string | null
+}
+
+export interface Incident {
+  summary: IncidentSummary
+  hypotheses: IncidentHypothesis[]
+  proposals: Proposal[]
 }
 
 /** [ms, mean, min, max] */
@@ -143,6 +207,8 @@ export interface RecordRow {
   episode: number | null
   context: Record<string, number> | null
   expected: boolean | null
+  /** The incident it is evidence of. */
+  incident_id?: number | null
 }
 
 export interface EventRow {

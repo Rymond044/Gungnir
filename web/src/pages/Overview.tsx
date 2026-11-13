@@ -17,7 +17,15 @@ import {
   ms,
   percent,
 } from '../lib/format'
-import { classNames, detectorName, kindNames, named, processStates, signalNames } from '../lib/names'
+import {
+  causeNames,
+  classNames,
+  detectorName,
+  kindNames,
+  named,
+  processStates,
+  signalNames,
+} from '../lib/names'
 import { groupEvents, type EventGroup } from '../lib/events'
 import { useShownInterval, type Shown } from '../lib/interval'
 import { lastInterval } from '../lib/range'
@@ -69,6 +77,7 @@ export default function Overview() {
       </div>
       <Resources host={host} o={o} shown={shown} />
 
+      {o.incident && <OpenIncident host={host} incident={o.incident} offset={offset} now={now} />}
       <OpenStatus host={host} o={o} offset={offset} now={now} />
 
       <div className={ui.row}>
@@ -80,6 +89,48 @@ export default function Overview() {
         </div>
       </div>
     </div>
+  )
+}
+
+/** The open incident above everything else: someone is being hurt now (ADR 0060). */
+function OpenIncident({
+  host,
+  incident: i,
+  offset,
+  now,
+}: {
+  host: string
+  incident: NonNullable<OverviewData['incident']>
+  offset: number | null
+  now: number
+}) {
+  return (
+    <Panel>
+      <Link
+        to={`/hosts/${host}/incidents/${i.id}`}
+        className={`${styles.status} ${styles.statusRed}`}
+        style={{ border: 0, padding: 0 }}
+      >
+        <span className={styles.statusDot} style={{ background: 'var(--red)' }} />
+        <span className={styles.statusText}>
+          <span style={{ fontWeight: 600 }}>
+            Инцидент {i.id}:{' '}
+            {i.cause ? named(causeNames, i.cause) : 'программы ждут ресурсы, причина не найдена'}
+          </span>
+          <span className={styles.sub}>
+            с {clock(ms(i.opened_at), offset)} · {duration((now - ms(i.opened_at)) / 1000)}
+            {i.culprit && (
+              <>
+                {' · виновник: '}
+                <Entity entity={i.culprit} />
+              </>
+            )}
+            {i.waiting > 0 && ` · предложений ждут решения: ${i.waiting}`}
+          </span>
+        </span>
+        <span className={ui.button}>Открыть инцидент</span>
+      </Link>
+    </Panel>
   )
 }
 

@@ -10,6 +10,8 @@ import Anomalies from './pages/Anomalies'
 import Anomaly from './pages/Anomaly'
 import Cause from './pages/Cause'
 import Collectors from './pages/Collectors'
+import Incident from './pages/Incident'
+import Incidents from './pages/Incidents'
 import Knowledge from './pages/Knowledge'
 import Metric from './pages/Metric'
 import NotFound from './pages/NotFound'
@@ -31,6 +33,8 @@ const router = createBrowserRouter([
         errorElement: <Crash />,
         children: [
           { index: true, element: <Overview /> },
+          { path: 'incidents', element: <Incidents /> },
+          { path: 'incidents/:id', element: <Incident /> },
           { path: 'anomalies', element: <Anomalies /> },
           { path: 'anomalies/:id', element: <Anomaly /> },
           { path: 'audit', element: <Audit /> },

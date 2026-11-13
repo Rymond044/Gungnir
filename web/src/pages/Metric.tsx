@@ -72,7 +72,7 @@ export default function Metric() {
         <Key>{keys.join(', ')}</Key>
       </div>
       <div className={ui.head}>
-        <RangePicker shown={shown} offset={offset} now={now} />
+        <RangePicker shown={shown} offset={offset} now={now} ranges={['15m', '1h', '6h', '24h', '7d']} />
         <span className="muted" style={{ marginLeft: 'auto', fontSize: 13 }}>
           выделите участок графика мышью, чтобы приблизить
         </span>
