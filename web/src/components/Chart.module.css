@@ -192,6 +192,7 @@
 
 .tag {
   position: absolute;
+  white-space: nowrap;
   height: 16px;
   min-width: 18px;
   padding: 0 4px;

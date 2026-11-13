@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import type { Point } from '../api/types'
 import { clock } from '../lib/format'
 import { envelope, line, missing, nearest, niceAxis, runs, timeTicks, x, y, type Frame } from '../lib/scale'
+import { tagsOf } from '../lib/tags'
 import styles from './Chart.module.css'
 
 export interface Line {
@@ -88,8 +89,6 @@ interface Props {
 const W = 1000
 const STRIP = 7
 const TAG = 18
-// Tags closer than this share of the width go to the next row.
-const TAG_SHARE = 0.03
 // A mark longer than this share of the plot is a thin line, not a fill that hides the plot.
 const LONG_SHARE = 0.5
 // Shorter silences are the agent's batching and the detection lag.
@@ -167,9 +166,10 @@ export default function Chart({
       )
     : []
   const visibleMarks = marks.filter((m) => m.to >= since && m.from <= until)
-  const tagRows = tagRowsOf(visibleMarks, since, until)
+  const tags = tagsOf(visibleMarks, since, until)
+  const lit = new Set(visibleMarks.filter((m) => m.lit).map((m) => m.key))
   const stripsH =
-    (strips.length ? STRIP + 4 : 0) + (visibleMarks.length ? (Math.max(...tagRows.values()) + 1) * TAG : 0)
+    (strips.length ? STRIP + 4 : 0) + (tags.length ? (Math.max(...tags.map((t) => t.row)) + 1) * TAG : 0)
 
   function timeAt(e: React.PointerEvent): number {
     const box = plot.current!.getBoundingClientRect()
@@ -234,19 +234,23 @@ export default function Chart({
             />
           )
         })}
-        {visibleMarks.map((m) => (
+        {tags.map((t) => (
           <button
-            key={m.key}
+            key={t.key}
             type="button"
-            className={`${styles.tag} ${styles[`tag_${m.tone}`]} ${m.lit ? styles.tagLit : ''}`}
-            style={{ left: pct(Math.max(since, m.from)), top: (tagRows.get(m.key) ?? 0) * TAG }}
-            title={m.title}
+            className={`${styles.tag} ${styles[`tag_${t.tone}`]} ${t.keys.some((k) => lit.has(k)) ? styles.tagLit : ''}`}
+            style={{
+              left: pct(Math.max(since, t.at)),
+              top: t.row * TAG,
+              transform: t.end ? 'translateX(-100%)' : undefined,
+            }}
+            title={t.title}
             onPointerDown={(e) => e.stopPropagation()}
-            onMouseEnter={() => onMark?.(m.key)}
+            onMouseEnter={() => onMark?.(t.key)}
             onMouseLeave={() => onMark?.(null)}
-            onClick={() => onMarkClick?.(m.key)}
+            onClick={() => onMarkClick?.(t.key)}
           >
-            {m.label}
+            {t.label}
           </button>
         ))}
         <div className={styles.area} style={{ top: stripsH, height }}>
@@ -484,18 +488,4 @@ export default function Chart({
       )}
     </div>
   )
-}
-
-/** The row of each tag from zero: a tag goes to the first row where it keeps clear of the last one. */
-function tagRowsOf(marks: Mark[], since: number, until: number): Map<string, number> {
-  const last: number[] = []
-  const rows = new Map<string, number>()
-  for (const m of [...marks].sort((a, b) => a.from - b.from)) {
-    const at = (Math.max(since, m.from) - since) / (until - since)
-    let row = last.findIndex((x) => at - x >= TAG_SHARE)
-    if (row === -1) row = last.length
-    last[row] = at
-    rows.set(m.key, row)
-  }
-  return rows
 }
