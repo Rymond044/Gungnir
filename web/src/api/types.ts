@@ -425,13 +425,23 @@ export interface ExplainedStretch extends StretchBase {
   bursts: [number, number | null][]
   records: string[]
   impact: EvidenceItem[]
+  /** Host and device records no hypothesis used that ran alongside (ADR 0059). */
+  also: RecordItem[]
   hypothesis: Omit<Hypothesis, 'actions'>
   actions: PolicyAction[]
 }
 
-/** Records no hypothesis uses, by resource and time. */
+/**
+ * Records no hypothesis uses, by resource and time: the activity of a program
+ * whose own use was unusual, or not explained when only the host's signals
+ * were (ADR 0059).
+ */
 export interface OpenStretch extends StretchBase {
-  kind: 'unexplained' | 'expected'
+  kind: 'unexplained' | 'expected' | 'activity'
+  /** The group whose own use was unusual. */
+  actor: string | null
+  /** Waiting above its usual level but under the impact levels. */
+  waiting: boolean
   records: RecordItem[]
   events: EvidenceItem[]
   workload_class: string | null

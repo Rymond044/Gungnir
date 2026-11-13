@@ -61,7 +61,39 @@ def test_a_long_record_does_not_join_what_happens_hours_later(kb):
     later = [rec("mem.shmem_bytes", HOST, 7200), rec("cgroup.mem_bytes", WRITER, 7210)]
     out = audit._cluster([long, *later], [], set(), kb.ontology)
     assert [len(s.records) for s in out] == [1, 2]
-    # Memory that grows available hurts nobody; pressure that rises does.
+    # Memory that grows available hurts nobody; pressure above its usual
+    # level is waiting, not harm, until it reaches an impact level (ADR 0059).
     assert not out[0].harm
     pressure = rec("mem.pressure_some_ratio", HOST, 7220)
-    assert audit._cluster([*later, pressure], [], set(), kb.ontology)[0].harm
+    assert not audit._cluster([*later, pressure], [], set(), kb.ontology)[0].harm
+    assert audit._waits(pressure, kb.ontology)
+    severe = rec("mem.pressure_some_ratio", HOST, 7220, kind="impact", level="noticeable")
+    assert audit._cluster([*later, severe], [], set(), kb.ontology)[0].harm
+
+
+def test_a_program_using_more_than_usual_is_its_activity_not_unexplained(kb):
+    # A terminal's CPU and the host's context switches rose together, and no
+    # cause fits: the activity of the terminal, with the host's record in it.
+    terminal = "user.slice/user-1000.slice/session.slice/kitty.scope"
+    group = dataclasses.replace(rec("cgroup.cpu_cores", terminal, 100), score=9.0)
+    slice_ = dataclasses.replace(rec("cgroup.cpu_cores", "user.slice", 100), score=12.0)
+    switches = rec("cpu.context_switches_per_s", HOST, 110)
+    [s] = audit._cluster([group, slice_, switches], [], set(), kb.ontology)
+    # Of a group and the slice it is in, the deepest did it.
+    assert audit._actor(s.records, kb.ontology) == terminal
+    # Only the host's own signals unusual: nobody to name.
+    assert audit._actor([switches], kb.ontology) is None
+
+
+def test_host_records_alongside_an_explained_stretch_go_with_it(engine, kb):
+    seen = closed(copy(at=100))
+    d = engine.diagnose(ev(*seen))
+    explained = audit._join(d.hypotheses, {}, kb.ontology)
+    util = rec("disk.util_ratio", "nvme0n1", 110)
+    later = rec("disk.util_ratio", "nvme0n1", 2000)
+    impact = rec("io.pressure_some_ratio", HOST, 110, kind="impact", level="noticeable")
+    assert audit._alongside(util, explained, kb.ontology)
+    assert not audit._alongside(later, explained, kb.ontology)
+    # Impact no hypothesis used stays harm of its own.
+    assert not audit._alongside(impact, explained, kb.ontology)
+    assert explained[0].also == [util]

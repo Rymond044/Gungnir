@@ -199,7 +199,9 @@ export default function Audit() {
 }
 
 function holds(s: Stretch, record: string): boolean {
-  return s.kind === 'explained' ? s.records.includes(record) : s.records.some((r) => r.id === record)
+  return s.kind === 'explained'
+    ? s.records.includes(record) || s.also.some((r) => r.id === record)
+    : s.records.some((r) => r.id === record)
 }
 
 function stretchId(s: Stretch): string {
@@ -328,6 +330,7 @@ function LaneChart({
 function titleOf(s: Stretch): string {
   if (s.kind === 'explained') return named(causeNames, s.cause)
   if (s.kind === 'expected') return `Ожидаемое поведение: ${LANE_WORDS[s.lane]}`
+  if (s.kind === 'activity') return `Активность программы: ${LANE_WORDS[s.lane]}`
   return `Не объяснено: ${LANE_WORDS[s.lane]}`
 }
 
@@ -454,6 +457,18 @@ function Explained({
           <Actions actions={s.actions} title="" />
         </Row>
       )}
+      {s.also.length > 0 && (
+        <Row label="Заодно на хосте">
+          <span>
+            {s.also.map((r, i) => (
+              <span key={r.id}>
+                {i > 0 && '; '}
+                <Evidence item={r} host={host} offset={offset} withName />
+              </span>
+            ))}
+          </span>
+        </Row>
+      )}
       <details className={styles.why}>
         <summary>Почему механизм вывода так решил</summary>
         <Hypothesis h={{ ...s.hypothesis, actions: [] }} host={host} offset={offset} withActions={false} />
@@ -483,6 +498,12 @@ function Open({
   return (
     <>
       <Row label="Кто">
+        {s.actor && (
+          <span>
+            <Entity entity={s.actor} />{' '}
+            <span className="muted">— её собственное потребление было выше обычного</span>
+          </span>
+        )}
         {s.processes.length === 0 && s.groups.length === 0 ? (
           <span className="muted">
             {s.lane === 'disk'
@@ -543,6 +564,10 @@ function Open({
             {hurtBy.length > 0
               ? `записи влияния: ${hurtBy.map((r) => named(signalNames, r.signal)).join(', ')}`
               : 'программы ждали ресурса дольше обычного'}
+          </span>
+        ) : s.waiting ? (
+          <span className="muted">
+            ожидание ресурса выше обычного, но ниже уровня влияния: вредом не считается
           </span>
         ) : (
           <span className="muted">никому не мешало</span>

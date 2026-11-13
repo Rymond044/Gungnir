@@ -4,11 +4,20 @@ and who did it, as stretches an operator reads one by one.
 The inference engine gives a hypothesis for each burst of a cause's leading
 symptom; the audit joins the bursts of one cause and culprit that follow each
 other closely and share a process group, so one build is one stretch and the
-next build another. Records no hypothesis uses become stretches too, by
-resource and time: explained by expected behavior, or not explained, with
-the commands that used the resource, the advice the policy holds and the
-cause that came closest. The audit reads what detection attached to the
-records and changes nothing the inference engine decided.
+next build another. Host and device records no hypothesis uses that run
+alongside such a stretch go with it as what the host saw meanwhile. The
+rest become stretches by resource and time (ADR 0059): explained by
+expected behavior; the activity of a program, when its own group's use was
+unusual and no cause fits; or not explained, when only the host's or a
+device's signals were. Each comes with the commands that used the
+resource, the advice the policy holds and the cause that came closest. The
+audit reads what detection attached to the records and changes nothing the
+inference engine decided.
+
+Harm is what opens an incident: an impact record, or a hypothesis whose
+impact was matched. Waiting above its usual level but under the impact
+levels is shown as such and is not harm, nor is an event on its own, such as
+a unit that failed (ADR 0059).
 """
 
 from dataclasses import dataclass, field
@@ -16,7 +25,7 @@ from dataclasses import dataclass, field
 import psycopg
 
 from gungnir_server.base import Base
-from gungnir_server.evidence import HOST, Event, Evidence, Record, inside
+from gungnir_server.evidence import HOST, Event, Evidence, Record, inside, related, within
 from gungnir_server.inference import MATCHED, Diagnosis, Hypothesis, as_hypothesis, item_dict
 
 # Bursts further apart than this are separate stretches.
@@ -44,7 +53,7 @@ REACH_S = 300.0
 
 @dataclass
 class Stretch:
-    kind: str  # explained, expected or unexplained
+    kind: str  # explained, expected, activity or unexplained
     lane: str
     start: float
     end: float | None
@@ -55,6 +64,8 @@ class Stretch:
     bursts: list[tuple[float, float | None]] = field(default_factory=list)
     # Until when a following record still joins it.
     reach: float = 0.0
+    # Records no hypothesis uses that the host saw meanwhile.
+    also: list[Record] = field(default_factory=list)
 
 
 def audit(conn: psycopg.Connection, base: Base, ev: Evidence, d: Diagnosis) -> dict:
@@ -65,7 +76,7 @@ def audit(conn: psycopg.Connection, base: Base, ev: Evidence, d: Diagnosis) -> d
 
     explained = _join(d.hypotheses, slices, onto)
     expected_ids = set(d.expected)
-    leftover = [r for r in d.unexplained if isinstance(r, Record)]
+    leftover = [r for r in d.unexplained if isinstance(r, Record) and not _alongside(r, explained, onto)]
     leftover += [r for r in ev.records if r.id in expected_ids and inside(r, ev)]
     events = [e for e in d.unexplained if isinstance(e, Event)]
     rest = _cluster(leftover, events, expected_ids, onto)
@@ -93,6 +104,7 @@ def audit(conn: psycopg.Connection, base: Base, ev: Evidence, d: Diagnosis) -> d
                     item_dict(f.item) for f in best.with_status(MATCHED) if f.symptom.impact and f.item
                 ],
                 "processes": _commands(s.records, best.binding.culprit, slices),
+                "also": [item_dict(r) for r in sorted(s.also, key=lambda r: r.start)],
                 "hypothesis": as_hypothesis(best),
                 "actions": _actions(base, best.cause) if s.harm else [],
             }
@@ -106,17 +118,20 @@ def audit(conn: psycopg.Connection, base: Base, ev: Evidence, d: Diagnosis) -> d
             and s.start - GAP_S <= h.leading_at <= (s.end or float("inf")) + GAP_S
         ]
         tips = [advice[x] for x in sorted(resources) if x in advice] if s.harm else []
+        actor = _actor(s.records, onto)
         out.append(
             {
-                "kind": s.kind,
+                "kind": "activity" if s.kind == "unexplained" and actor else s.kind,
                 "lane": s.lane,
                 "start": s.start,
                 "end": s.end,
                 "harm": s.harm,
+                "waiting": any(_waits(r, onto) for r in s.records),
+                "actor": actor,
                 "records": [item_dict(r) for r in s.records],
                 "events": [item_dict(e) for e in s.events],
                 "workload_class": next((r.workload_class for r in s.records if r.workload_class), None),
-                "processes": _commands(s.records, None, slices),
+                "processes": _commands(s.records, actor, slices),
                 "groups": _groups(s.records, slices),
                 "advice": [{"resource": a.resource, "text": a.text, "source": a.source} for a in tips],
                 "near": {**as_hypothesis(near[0]), "reason": near[0].rejected} if near else None,
@@ -187,12 +202,50 @@ def _cluster(records: list[Record], events: list[Event], expected: set[str], ont
     return out
 
 
+def _alongside(r: Record, explained: list[Stretch], onto) -> bool:
+    """Puts a record of the host or a device, or of a group the culprit is in
+    or contains, with the explained stretch of its lane it runs alongside. An
+    impact record stays on its own: it is harm no hypothesis explains."""
+    if r.kind == "impact":
+        return False
+    lane = LANES.get(_resource(onto, r), OTHER)
+    for s in explained:
+        culprit = s.hypotheses[0].binding.culprit
+        on_it = not r.signal.startswith("cgroup.") or (culprit is not None and related(r.entity, culprit))
+        end = float("inf") if s.end is None else s.end
+        if s.lane == lane and on_it and s.start - JOIN_S <= r.start <= end + JOIN_S:
+            s.also.append(r)
+            return True
+    return False
+
+
+def _actor(records: list[Record], onto) -> str | None:
+    """The group whose own use was unusual: of a group and its ancestor the
+    deepest, then the most unusual."""
+    used = [r for r in records if _activity(r, onto)]
+    groups = {r.entity for r in used}
+    deepest = [r for r in used if not any(g != r.entity and within(g, r.entity) for g in groups)]
+    return max(deepest, key=lambda r: r.score or 0.0).entity if deepest else None
+
+
+def _activity(r: Record, onto) -> bool:
+    """A rise of a group's own use of a resource, not of its waiting."""
+    return (
+        r.kind == "anomaly"
+        and r.direction == "up"
+        and r.signal.startswith("cgroup.")
+        and not onto.signals[r.signal].impact
+    )
+
+
 def _hurts(item: Record | Event, onto) -> bool:
-    """An event, an impact record, or a rise of a signal that measures impact
-    (all of them are worse when higher)."""
-    if isinstance(item, Event):
-        return True
-    return item.kind == "impact" or (onto.signals[item.signal].impact and item.direction == "up")
+    """An impact record (ADR 0059)."""
+    return isinstance(item, Record) and item.kind == "impact"
+
+
+def _waits(r: Record, onto) -> bool:
+    """Waiting above its usual level, under the impact levels."""
+    return r.kind == "anomaly" and r.direction == "up" and onto.signals[r.signal].impact
 
 
 def _lane_of(h: Hypothesis, onto) -> str:

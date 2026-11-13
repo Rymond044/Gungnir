@@ -332,7 +332,9 @@ def test_each_burst_of_the_leading_symptom_is_its_own_hypothesis(engine):
 
 
 def test_an_advisory_answers_impact_that_no_harmful_hypothesis_explains(engine):
-    # A reader waits on the disk while no writer is seen.
-    alone = engine.diagnose(ev(rec("cgroup.io_pressure_some_ratio", READER, 10)))
-    assert [a.resource for a in alone.advisories] == ["disk"]
+    # A reader waits on the disk past an impact level while no writer is seen.
+    waits = rec("cgroup.io_pressure_some_ratio", READER, 10, kind="impact", level="noticeable")
+    assert [a.resource for a in engine.diagnose(ev(waits)).advisories] == ["disk"]
+    # Waiting above its usual level but under the impact levels is not harm (ADR 0059).
+    assert engine.diagnose(ev(rec("cgroup.io_pressure_some_ratio", READER, 10))).advisories == ()
     assert engine.diagnose(ev(*copy())).advisories == ()

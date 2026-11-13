@@ -393,14 +393,13 @@ class RuleEngine:
         return bool(activity) and all(r.id in explained for r in activity)
 
     def _advisories(self, ev: Evidence, hurt: set[Item]) -> tuple[Advisory, ...]:
-        """Advice for each resource with impact that no harmful hypothesis explains."""
+        """Advice for each resource with an impact record that no harmful
+        hypothesis explains; waiting above its usual level but under the
+        impact levels is not harm (ADR 0059)."""
         impacted = {
             self.onto.signals[r.signal].resource
             for r in ev.records
-            if inside(r, ev)
-            and r not in hurt
-            and r.signal in self.onto.signals
-            and (r.kind == "impact" or self.onto.signals[r.signal].impact)
+            if inside(r, ev) and r not in hurt and r.signal in self.onto.signals and r.kind == "impact"
         }
         return tuple(a for a in self.base.policy.advisories if a.resource in impacted)
 
