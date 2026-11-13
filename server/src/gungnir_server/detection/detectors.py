@@ -21,6 +21,8 @@ from gungnir_server.params import Params, by_pattern
 
 # MAD of a normal distribution times this is its standard deviation.
 MAD_TO_SIGMA = 1.4826
+# The request rate an average latency is taken over.
+AWAIT_OPS = {"disk.read_await_ms": "disk.read_ops_per_s", "disk.write_await_ms": "disk.write_ops_per_s"}
 
 
 @dataclass
@@ -351,7 +353,7 @@ class Robust:
         for i, meta in enumerate(f.series):
             if meta.signal in REFERENCE_SIGNALS:
                 continue
-            x = f.values[i, ctx.start :]
+            x = few_requests_out(meta, ctx, f.values[i, ctx.start :])
             median, mad, basis = per_tick(self.baselines, meta, classes, powers)
             has_baseline = ~np.isnan(median)
             floor = dirty_floor(meta, ctx)
@@ -452,6 +454,17 @@ def dirty_floor(meta: SeriesMeta, ctx: Context) -> np.ndarray | None:
         return None
     threshold = dirty_threshold(ctx)
     return None if threshold is None else threshold / (ctx.params.robust_k * MAD_TO_SIGMA)
+
+
+def few_requests_out(meta: SeriesMeta, ctx: Context, x: np.ndarray) -> np.ndarray:
+    """A device's average latency with the samples of too few requests left
+    out (ADR 0058): over a few writes a second one flush sets the average."""
+    if meta.signal not in AWAIT_OPS:
+        return x
+    ops = ctx.frame.row(AWAIT_OPS[meta.signal], meta.entity)
+    if ops is None:
+        return x
+    return np.where(ops[ctx.start :] >= ctx.params.await_min_ops, x, np.nan)
 
 
 def ewma(x: np.ndarray, lam: float, start: float | None) -> tuple[np.ndarray, float | None]:

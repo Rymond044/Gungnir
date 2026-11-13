@@ -21,7 +21,10 @@ DEFAULT_FLOORS = {
     "*_per_s": 1.0,
     "*_ms": 0.5,
     "*_tasks": 1.0,
-    "*_c": 2.0,
+    # Ordinary use moves the CPU by 10-17 degrees over its idle median
+    # (replay of 2026-11-09..13); overheating shows as thermal throttling
+    # (2.0 until 2026-11-13, ADR 0058).
+    "*_c": 4.0,
     "cpu.thermal_throttles": 1.0,
     "*_cores": 0.05,
     # A desktop's services wake up and go back to sleep all the time
@@ -38,12 +41,12 @@ DEFAULT_FLOORS = {
     # unusual however small the group (ADR 0054).
     "cgroup.mem_bytes": 32 * 2**20,
 }
-# Level signals, where slow drift matters. An EWMA estimates the mean; on a
-# skewed rate series the mean sits above the median for good, so the EWMA
-# against the baseline median would alarm all the time there. Filesystems,
-# process counts and the other memory levels drift with ordinary use; the
-# fullness of a filesystem is judged by its thresholds (ADR 0054).
-DEFAULT_EWMA_SIGNALS = ("mem.available_bytes", "swap.used_bytes")
+# Level signals judged for slow drift by an EWMA. None since 2026-11-13
+# (ADR 0058): on the host's available memory and swap the EWMA flagged
+# shifts of under one spread that last a working session, in both
+# directions, freed memory included; a leak shows as the growth of its
+# group, and memory short for the host by its cold-start limit and impact.
+DEFAULT_EWMA_SIGNALS: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -126,6 +129,16 @@ class Params:
     growth_hours: int = 3
     growth_min_share: float = 0.1
     growth_min_bytes: float = 100 * 1024 * 1024
+    # A leak rises steadily (ADR 0058): each hour by at least the spread floor
+    # of group memory, and no hour brings more than this share of the rise.
+    # One step and a flat line after it is a program that loaded something.
+    growth_max_step_share: float = 0.5
+
+    # Average disk latency is judged only over samples in which the device
+    # completed at least this many requests of the kind a second (ADR 0058):
+    # over a few writes a second one flush sets the average (Gregg pp. 75,
+    # 77). Impact is judged on every sample.
+    await_min_ops: float = 20.0
 
     # Inference engine (ADRs 0005, 0043): the weights of the words of ADR 0034, the
     # penalty of a missing symptom, and the confidence a hypothesis

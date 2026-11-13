@@ -6,9 +6,13 @@ A process's resident memory may only grow while its caches fill (Gregg p.
 320), so the level says little; monitoring memory over time shows a leak
 (Gregg p. 326). The detector keeps the minimum of each hour per group in
 its own state and judges each tick against the completed hours: the last
-`growth_hours` minima each rose, by at least `growth_min_share` of the
-first and `growth_min_bytes` in total. Minima ignore the swings of caches
-and short peaks. Slices are skipped: they only sum their children.
+`growth_hours` minima each rose by at least the spread floor of group
+memory, by at least `growth_min_share` of the first and `growth_min_bytes`
+in total, and no hour brought more than `growth_max_step_share` of the
+rise (ADR 0058): a leak is steady, a program that loaded a file once is a
+step. The hours must follow each other: those on both sides of a sleep say
+nothing about a rise. Minima ignore the swings of caches and short peaks. Slices are
+skipped: they only sum their children.
 """
 
 from itertools import pairwise
@@ -17,6 +21,7 @@ import numpy as np
 
 from gungnir_server.detection.detectors import Context
 from gungnir_server.detection.records import Evaluation, RecordSpec
+from gungnir_server.params import by_pattern
 
 SIGNAL = "cgroup.mem_bytes"
 HOUR_MS = 3_600_000
@@ -55,7 +60,10 @@ class Growth:
                 minima[hour] = min(minima.get(hour, x[j]), float(x[j]))
                 if hours[j] != judged_hour:
                     done = sorted((int(h), v) for h, v in minima.items() if int(h) < hours[j])
-                    verdict = judge([v for _, v in done[-(p.growth_hours + 1) :]], p)
+                    last = done[-(p.growth_hours + 1) :]
+                    # Hours on both sides of a sleep are not a rise in a row.
+                    following = all(b - a == HOUR_MS for (a, _), (b, _) in pairwise(last))
+                    verdict = judge([v for _, v in last], p) if following else None
                     judged_hour = hours[j]
                 if verdict is not None:
                     flags[j], scores[j], bases[j] = verdict
@@ -83,8 +91,17 @@ def judge(minima: list[float], p) -> tuple[bool, float, dict] | None:
     counts."""
     if len(minima) < p.growth_hours + 1:
         return None
-    rising = all(b > a for a, b in pairwise(minima))
+    steps = [b - a for a, b in pairwise(minima)]
     rise = minima[-1] - minima[0]
     needed = max(p.growth_min_bytes, p.growth_min_share * minima[0])
-    basis = {"basis": "growth", "hourly_minima": minima, "rise": rise, "needed": needed}
-    return rising and rise >= needed, rise / needed, basis
+    step = by_pattern(p.floors, SIGNAL) or 0.0
+    steady = min(steps) >= step and max(steps) <= p.growth_max_step_share * rise
+    basis = {
+        "basis": "growth",
+        "hourly_minima": minima,
+        "rise": rise,
+        "needed": needed,
+        "min_step": step,
+        "max_step_share": p.growth_max_step_share,
+    }
+    return steady and rise >= needed, rise / needed, basis

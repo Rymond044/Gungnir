@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
@@ -59,6 +60,10 @@ def make_frame(rows: dict[str, np.ndarray], entities: dict[str, str] | None = No
 def context(f, cls="interactive"):
     n = f.ts.size
     return Context(f, 0, np.full(n, cls, dtype=object), np.full(n, "eco/ac", dtype=object), P)
+
+
+def with_params(ctx, params):
+    return replace(ctx, params=params)
 
 
 def records(detector, ctx):
@@ -180,14 +185,18 @@ def test_group_pressure_follows_the_host_s_lowest_impact_level():
     assert not any(name.startswith("cgroup.") for name in levels)
 
 
-def test_ewma_catches_drift_the_sample_test_misses():
+def test_ewma_catches_drift_the_sample_test_misses_where_it_is_switched_on():
     x = 1e9 + np.arange(300) * 1e5  # slow growth, each sample within 3 MAD
     baselines = Fixed({("mem.available_bytes", "interactive"): (1e9, 1e7)})
-    found = records(Robust(baselines), context(make_frame({"mem.available_bytes": x})))
+    # Off by default (ADR 0058).
+    assert records(Robust(baselines), context(make_frame({"mem.available_bytes": x}))) == []
+    on = replace(P, ewma_signals=("mem.available_bytes",))
+    found = records(Robust(baselines), with_params(context(make_frame({"mem.available_bytes": x})), on))
     assert {d for d, _ in found} == {"robust.ewma"}
     # The same creep in a control group is no drift alarm.
     baselines = Fixed({("cgroup.mem_bytes", "interactive"): (1e9, 1e7)})
-    assert records(Robust(baselines), context(make_frame({"cgroup.mem_bytes": x}))) == []
+    ctx = with_params(context(make_frame({"cgroup.mem_bytes": x})), replace(on, ewma_signals=("cgroup.*",)))
+    assert records(Robust(baselines), ctx) == []
     s, last = ewma(np.array([1.0, np.nan, 3.0]), 0.5, None)
     assert np.isnan(s[1]) and s[2] == 2.0 and last == 2.0
 
@@ -244,13 +253,16 @@ def test_growth_needs_rising_hourly_minima_by_a_noticeable_share():
     swing = np.where(minutes % 7 == 0, 0, 200 * mib)
     leak = 1024 * mib + (minutes // 60) * 100 * mib + swing
     flat = 1024 * mib + swing
+    # One load of 300 MiB in the second hour, then a few MiB an hour: a step.
+    step = 1024 * mib + np.where(minutes >= 60, 300 * mib, 0) + (minutes // 60) * 2 * mib + swing
     f = Frame(
         minutes.astype(np.int64) * 60_000,
         [
             SeriesMeta(1, "cgroup.mem_bytes", "app.slice/leaky.service"),
             SeriesMeta(2, "cgroup.mem_bytes", "app.slice/steady.service"),
+            SeriesMeta(3, "cgroup.mem_bytes", "app.slice/loaded.service"),
         ],
-        np.array([leak, flat], dtype=float),
+        np.array([leak, flat, step], dtype=float),
     )
     ctx = context(f)
     found = records(Growth(), ctx)
@@ -261,7 +273,42 @@ def test_growth_needs_rising_hourly_minima_by_a_noticeable_share():
     assert opened[0].started_ms == 4 * 3_600_000
     assert opened[0].records[0].baseline["rise"] == 300 * mib
     # State keeps a few hours per group, as JSON.
-    assert set(ctx.state["minima"]) == {"1", "2"}
+    assert set(ctx.state["minima"]) == {"1", "2", "3"}
+
+
+def test_growth_is_not_judged_across_a_gap_in_the_hours():
+    from gungnir_server.detection.growth import Growth
+
+    # Two hours, a sleep of three, two more: minima rise by 150 MiB each hour
+    # with data, but never for three hours in a row.
+    mib = 1024 * 1024
+    hours = np.r_[0, 1, 5, 6, 7]
+    minutes = np.concatenate([h * 60 + np.arange(60) for h in hours])
+    level = 1024 * mib + np.concatenate([np.full(60, i * 150 * mib) for i in range(len(hours))])
+    f = Frame(
+        minutes.astype(np.int64) * 60_000,
+        [SeriesMeta(1, "cgroup.mem_bytes", "app.slice/chat.service")],
+        np.array([level], dtype=float),
+    )
+    assert [e for _, e in records(Growth(), context(f)) if hasattr(e, "records")] == []
+
+
+def test_disk_latency_is_judged_only_over_enough_requests():
+    n = 30
+    await_ms = np.full(n, 0.5)
+    await_ms[10:20] = 12.0
+    baselines = Fixed({("disk.write_await_ms", "interactive"): (0.5, 0.1)})
+
+    def found(ops):
+        f = make_frame(
+            {"disk.write_await_ms": await_ms, "disk.write_ops_per_s": np.full(n, float(ops))},
+            {"disk.write_await_ms": "nvme0n1", "disk.write_ops_per_s": "nvme0n1"},
+        )
+        return [d for d, _ in records(Robust(baselines), context(f)) if d == "robust.mad"]
+
+    # Three writes a second: one slow flush is the whole average.
+    assert found(3) == []
+    assert found(200) == ["robust.mad", "robust.mad"]
 
 
 def test_dirty_pages_count_from_the_background_writeback_threshold():

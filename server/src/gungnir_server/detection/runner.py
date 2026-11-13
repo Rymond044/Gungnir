@@ -90,17 +90,21 @@ VARIANTS = {
         Variant("robust-classes+iforest", _with_forest(_robust(per_class=True))),
         Variant("impact", lambda conn, host, params: [impact(host.name)]),
         Variant("growth", lambda conn, host, params: [Growth()]),
+        # Every branch the live loop runs, to compare parameter sets.
+        Variant("live", lambda conn, host, params: live_detectors(conn, host, params, store=False)),
     )
 }
 
 
-def live_detectors(conn: psycopg.Connection, host: Host, params: Params) -> list[Detector]:
+def live_detectors(
+    conn: psycopg.Connection, host: Host, params: Params, store: bool = True
+) -> list[Detector]:
     """Every branch at once: the control thresholds, robust statistics with
     workload classes, the forest, impact, and the growth of group memory."""
     return [
         thresholds(host.name),
         *_robust(per_class=True)(conn, host, params),
-        *_forest(conn, host, params, store=True),
+        *_forest(conn, host, params, store=store),
         impact(host.name),
         Growth(),
     ]
