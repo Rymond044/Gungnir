@@ -75,6 +75,19 @@ export default function RangePicker({
       >
         {shown.live ? 'Свой интервал' : `${dayClock(since, offset, now)} — ${dayClock(until, offset, now)}`}
       </button>
+      {shown.changed && (
+        <button
+          type="button"
+          className={ui.button}
+          title="вернуть период экрана по умолчанию"
+          onClick={() => {
+            setOpen(false)
+            shown.reset()
+          }}
+        >
+          × Сбросить
+        </button>
+      )}
       {open && (
         <Panel
           since={since}

@@ -13,6 +13,10 @@ export interface Shown {
   range: RangeKey | null
   setRange: (range: RangeKey) => void
   setSpan: (since: number, until: number) => void
+  /** Something other than the screen's own period is shown. */
+  changed: boolean
+  /** Back to the screen's own period ending now. */
+  reset: () => void
 }
 
 export function useShownInterval(fallback: RangeKey, now: number): Shown {
@@ -33,6 +37,8 @@ export function useShownInterval(fallback: RangeKey, now: number): Shown {
     setRange: (r) => update({ range: r === fallback ? null : r, since: null, until: null }),
     setSpan: (a, b) =>
       update({ range: null, since: new Date(a).toISOString(), until: new Date(b).toISOString() }),
+    changed: fixed || range !== fallback,
+    reset: () => update({ range: null, since: null, until: null }),
   }
 }
 
