@@ -111,6 +111,7 @@ Label files and result tables in `scenarios/runs/` are local, not in git.
 
 ```sh
 server replay laptop                               # five compared variants and impact over all stored data
+server replay laptop live --since 2026-11-09T12:00+00:00 --until 2026-11-13T10:00+00:00   # every live branch at once
 server replay laptop robust-classes --since 2026-10-30T00:00+00:00 --until 2026-10-31T00:00+00:00
 server evaluate laptop                             # table of the latest replay of each variant
 cd server && uv run gungnir-server evaluate laptop --out ../scenarios/runs/$(date -u +%Y%m%dT%H%M%SZ)-evaluation.md
@@ -131,6 +132,21 @@ cd server && GUNGNIR_PARAMS=/tmp/p.toml uv run gungnir-server replay laptop robu
 ```
 
 The live server uses the defaults.
+
+Recomputing live records after a change of detection: raw samples are kept three days, so only records from the oldest raw sample on can be recomputed; never reset further back (the records before it are lost). Back up first, then with the server stopped:
+
+```sql
+SELECT min(ts) FROM samples s JOIN series x ON x.id = s.series_id WHERE x.signal = 'cpu.idle_ratio';  -- T
+BEGIN;
+DELETE FROM incidents;                                             -- rebuilt from the records
+DELETE FROM anomalies WHERE replay_id IS NULL AND started_at >= 'T';
+UPDATE anomalies SET ended_at = 'T' WHERE replay_id IS NULL AND (ended_at IS NULL OR ended_at > 'T');
+UPDATE detection_state SET at = 'T', state = '{}';
+UPDATE incident_state SET at = '<when the incidents should start>';
+COMMIT;
+```
+
+Deleting incidents loses the operator's decisions: check `SELECT count(*) FROM proposals WHERE decided_at IS NOT NULL` first.
 
 ## Knowledge base
 
