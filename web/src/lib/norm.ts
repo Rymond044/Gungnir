@@ -2,7 +2,7 @@
 // workload class and power profile that has a baseline.
 
 import type { Norm } from '../api/types'
-import type { BandSegment, LimitLine } from '../components/Chart'
+import type { BandSegment, LimitLine, Step } from '../components/Chart'
 import { ms } from './format'
 import { levelNames } from './names'
 
@@ -13,6 +13,13 @@ export function bandSegments(norm: Norm | undefined): BandSegment[] {
     const b = by.get(`${s.workload_class}|${s.power_profile}`)
     return b ? [{ from: ms(s.since), to: ms(s.until), low: b.low, high: b.high }] : []
   })
+}
+
+const HOUR_MS = 3600_000
+
+/** The minimum of each hour of a group's memory, held across its hour (ADR 0058). */
+export function hourSteps(norm: Norm | undefined): Step[] {
+  return (norm?.minima ?? []).map((m) => ({ from: ms(m.hour), to: ms(m.hour) + HOUR_MS, value: m.value }))
 }
 
 /** Fixed limits; the cold-start limit only while no baseline judges the series. */

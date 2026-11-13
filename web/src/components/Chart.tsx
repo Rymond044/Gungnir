@@ -19,6 +19,13 @@ export interface BandSegment {
   high: number
 }
 
+/** A level held over a stretch of time, such as the minimum of an hour. */
+export interface Step {
+  from: number
+  to: number
+  value: number
+}
+
 export interface LimitLine {
   value: number
   label: string
@@ -58,6 +65,8 @@ interface Props {
   height?: number
   bands?: BandSegment[]
   limits?: LimitLine[]
+  /** Hourly minima of a group's memory, drawn as steps (ADR 0058). */
+  steps?: Step[]
   intervals?: Interval[]
   /** A floor for the top of the axis, so a quiet series does not fill the plot with noise. */
   minMax?: number
@@ -96,6 +105,7 @@ export default function Chart({
   height = 110,
   bands = [],
   limits = [],
+  steps = [],
   intervals = [],
   minMax = 0,
   ceiling,
@@ -295,6 +305,23 @@ export default function Chart({
                 />
               )
             })}
+            {steps.map((st, i) => {
+              const x0 = x(frame, Math.max(since, st.from))
+              const x1 = x(frame, Math.min(until, st.to))
+              if (x1 <= x0) return null
+              return (
+                <line
+                  key={`step-${i}`}
+                  x1={x0}
+                  x2={x1}
+                  y1={y(frame, st.value)}
+                  y2={y(frame, st.value)}
+                  strokeWidth={2}
+                  vectorEffect="non-scaling-stroke"
+                  style={{ stroke: 'var(--blue)' }}
+                />
+              )
+            })}
             {shown.map((l, i) => (
               <line
                 key={i}
@@ -420,6 +447,12 @@ export default function Chart({
           <span>
             <span className={styles.swatch} style={{ background: 'var(--green)', opacity: 0.4, height: 8 }} />
             норма
+          </span>
+        )}
+        {steps.length > 0 && (
+          <span>
+            <span className={styles.swatch} style={{ background: 'var(--blue)', height: 2 }} />
+            минимум часа
           </span>
         )}
         {shown.map((l) => (

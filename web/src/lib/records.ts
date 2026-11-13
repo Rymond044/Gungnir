@@ -54,6 +54,13 @@ export function recordLimit(r: RecordRow): LimitLine | null {
       const value = b.above ?? b.below
       return value !== undefined ? { value, label: 'порог', color: 'var(--ochre)' } : null
     }
+    case 'growth': {
+      // The rise that counts, from the first of the hours judged.
+      const first = b.hourly_minima?.[0]
+      return first !== undefined && b.needed !== undefined
+        ? { value: first + b.needed, label: 'утечка от', color: 'var(--ochre)' }
+        : null
+    }
     default:
       return null
   }

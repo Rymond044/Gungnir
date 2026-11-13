@@ -24,7 +24,10 @@ export function against(signal: string, b: Basis): string {
       return b.above !== undefined ? `порог: выше ${v(b.above)}` : `порог: ниже ${v(b.below)}`
     case 'growth': {
       const hours = (b.hourly_minima?.length ?? 1) - 1
-      return `рост: часовые минимумы росли ${hours} ч подряд, на ${v(b.rise)} (нужно не меньше ${v(b.needed)})`
+      let text = `рост: часовые минимумы росли ${hours} ч подряд, на ${v(b.rise)} (нужно не меньше ${v(b.needed)})`
+      if (b.min_step !== undefined && b.max_step_share !== undefined)
+        text += `, каждый час не меньше ${v(b.min_step)}, ни один не больше ${Math.round(b.max_step_share * 100)} % роста`
+      return text
     }
     case 'forest':
       return `Isolation Forest типа «${named(classNames, b.class)}»: признак ${b.feature}, z ${decimal(b.z ?? 0, 1)}`

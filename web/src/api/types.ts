@@ -96,6 +96,8 @@ export interface Norm {
   spans: Span[]
   bands: Band[]
   limits: Limit[]
+  /** Hourly minima of a group's memory: what the growth check judges. */
+  minima: { hour: string; value: number }[]
 }
 
 export interface Basis {
@@ -115,6 +117,9 @@ export interface Basis {
   rise?: number
   needed?: number
   hourly_minima?: number[]
+  /** Growth: each hour must rise by this much, and none bring more than this share. */
+  min_step?: number
+  max_step_share?: number
   feature?: string
   z?: number
   floor?: string

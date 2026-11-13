@@ -20,6 +20,7 @@ import psycopg
 from gungnir_server import frame
 from gungnir_server.baselines import UNKNOWN, Book, power_labels
 from gungnir_server.detection.detectors import MAD_TO_SIGMA, BookBaselines, load_limits
+from gungnir_server.detection.growth import SIGNAL as GROWTH_SIGNAL
 from gungnir_server.frame import FULL_PERIOD, SeriesMeta, fact_spans
 from gungnir_server.hosts import Host
 from gungnir_server.params import Params, by_pattern
@@ -176,12 +177,20 @@ class Limit:
 
 
 @dataclass(frozen=True)
+class Minimum:
+    hour: datetime
+    value: float
+
+
+@dataclass(frozen=True)
 class Norm:
     signal: str
     entity: str
     spans: list[Span]
     bands: list[Band]
     limits: list[Limit]
+    # Hourly minima of a group's memory: what the growth check judges (ADR 0058).
+    minima: list[Minimum]
 
 
 def context_spans(conn: psycopg.Connection, host: Host, since: datetime, until: datetime) -> list[Span]:
@@ -242,11 +251,18 @@ class Norms:
             return None
         meta = SeriesMeta(row[0], signal, entity)
         spans = context_spans(conn, host, since, until)
+        minima = hourly_minima(conn, meta, since, until)
         with self.lock:
-            return self._norm(conn, host, meta, spans, now)
+            return self._norm(conn, host, meta, spans, minima, now)
 
     def _norm(
-        self, conn: psycopg.Connection, host: Host, meta: SeriesMeta, spans: list[Span], now: datetime
+        self,
+        conn: psycopg.Connection,
+        host: Host,
+        meta: SeriesMeta,
+        spans: list[Span],
+        minima: list[Minimum],
+        now: datetime,
     ) -> Norm:
         signal, entity = meta.signal, meta.entity
         book = self.book(conn, host, now)
@@ -261,7 +277,23 @@ class Norms:
                 median, mad, basis = found
                 half = k * MAD_TO_SIGMA * mad
                 bands.append(Band(cls, power, median - half, median + half, median, mad, basis["samples"]))
-        return Norm(signal, entity, spans, bands, limits_of(host, signal, entity, book, self.params))
+        return Norm(signal, entity, spans, bands, limits_of(host, signal, entity, book, self.params), minima)
+
+
+def hourly_minima(
+    conn: psycopg.Connection, meta: SeriesMeta, since: datetime, until: datetime
+) -> list[Minimum]:
+    """The minimum of each hour of a group's memory, from the minute rollups,
+    for every hour that reaches into [since, until). Slices are not judged."""
+    if meta.signal != GROWTH_SIGNAL or meta.entity.endswith(".slice"):
+        return []
+    rows = conn.execute(
+        "SELECT date_trunc('hour', ts) AS h, min(min) FROM samples_1m"
+        " WHERE series_id = %s AND ts >= date_trunc('hour', %s::timestamptz) AND ts < %s"
+        " GROUP BY 1 ORDER BY 1",
+        (meta.id, since, until),
+    ).fetchall()
+    return [Minimum(h, v) for h, v in rows]
 
 
 def limits_of(host: Host, signal: str, entity: str, book: Book, params: Params) -> list[Limit]:

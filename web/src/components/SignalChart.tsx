@@ -1,7 +1,7 @@
 import { useChart, useNorm, type Interval as Span } from '../api/hooks'
 import type { Point } from '../api/types'
 import { ms } from '../lib/format'
-import { bandSegments, limitLines } from '../lib/norm'
+import { bandSegments, hourSteps, limitLines } from '../lib/norm'
 import { seriesKey } from '../lib/records'
 import Chart, { type Interval, type LimitLine, type Mark } from './Chart'
 import { Failure } from './ui'
@@ -81,6 +81,7 @@ export default function SignalChart({
   const bands = (hasNorm ? bandSegments(norm.data) : []).map((b) =>
     m === undefined ? b : { ...b, low: m - b.high, high: m - b.low },
   )
+  const steps = (hasNorm ? hourSteps(norm.data) : []).map((st) => ({ ...st, value: turn(st.value) }))
   const limits = [
     ...own,
     ...extraLimits.filter((e) => !own.some((o) => Math.abs(o.value - e.value) <= Math.abs(e.value) * 1e-6)),
@@ -96,6 +97,7 @@ export default function SignalChart({
       height={height}
       bands={bands}
       limits={limits}
+      steps={steps}
       intervals={intervals}
       minMax={minMax}
       ceiling={ceiling}

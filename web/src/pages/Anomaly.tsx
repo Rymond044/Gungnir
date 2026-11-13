@@ -40,7 +40,7 @@ function explanation(r: RecordRow): string {
     case 'robust.ewma':
       return 'Сглаженное среднее (EWMA) медленно ушло от медианы нормы: это дрейф, а не всплеск, поэтому отдельные замеры могут оставаться в полосе.'
     case 'growth':
-      return 'Часовые минимумы росли несколько часов подряд: так выглядит утечка, а не всплеск.'
+      return 'Минимум каждого часа (синие ступени) рос несколько часов подряд, каждый час заметно и без одного большого скачка: так выглядит утечка, а не всплеск и не разовая загрузка.'
     case 'threshold':
       return 'Значение пересекло фиксированный порог (пунктир).'
     case 'impact':
@@ -133,7 +133,7 @@ export default function Anomaly() {
           interval={interval}
           offsetS={offset}
           format={fmt}
-          normOf={r.detector === 'growth' ? undefined : { signal: r.signal, entity: r.entity }}
+          normOf={{ signal: r.signal, entity: r.entity }}
           extraLimits={limit ? [limit] : []}
           height={220}
           intervals={[
