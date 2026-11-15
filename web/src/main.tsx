@@ -5,6 +5,7 @@ import { createBrowserRouter, Navigate, RouterProvider } from 'react-router'
 import Crash from './app/Crash'
 import Home from './app/Home'
 import Layout from './app/Layout'
+import Actions from './pages/Actions'
 import Audit from './pages/Audit'
 import Anomalies from './pages/Anomalies'
 import Anomaly from './pages/Anomaly'
@@ -13,9 +14,11 @@ import Collectors from './pages/Collectors'
 import Incident from './pages/Incident'
 import Incidents from './pages/Incidents'
 import Knowledge from './pages/Knowledge'
+import Login from './pages/Login'
 import Metric from './pages/Metric'
 import NotFound from './pages/NotFound'
 import Overview from './pages/Overview'
+import Password from './pages/Password'
 import './styles/global.css'
 
 const queryClient = new QueryClient({
@@ -24,6 +27,8 @@ const queryClient = new QueryClient({
 
 const router = createBrowserRouter([
   { path: '/', element: <Home /> },
+  { path: '/login', element: <Login /> },
+  { path: '/password', element: <Password /> },
   {
     path: '/hosts/:host',
     element: <Layout />,
@@ -35,6 +40,7 @@ const router = createBrowserRouter([
           { index: true, element: <Overview /> },
           { path: 'incidents', element: <Incidents /> },
           { path: 'incidents/:id', element: <Incident /> },
+          { path: 'actions', element: <Actions /> },
           { path: 'anomalies', element: <Anomalies /> },
           { path: 'anomalies/:id', element: <Anomaly /> },
           { path: 'audit', element: <Audit /> },

@@ -1,9 +1,10 @@
 import { NavLink, Outlet, ScrollRestoration, useNavigate, useParams } from 'react-router'
-import { useHosts, useOverview } from '../api/hooks'
+import { post } from '../api/client'
+import { useHosts, useMe, useOverview } from '../api/hooks'
 import { age } from '../lib/format'
 import { classNames, named } from '../lib/names'
 import { useNow } from '../lib/useNow'
-import { AnalysisIcon, AnomalyIcon, IncidentIcon, KnowledgeIcon, OverviewIcon } from './icons'
+import { ActionIcon, AnalysisIcon, AnomalyIcon, IncidentIcon, KnowledgeIcon, OverviewIcon } from './icons'
 import styles from './Layout.module.css'
 
 // The agent sends every 10 s; a minute of silence means it is not reaching
@@ -15,6 +16,7 @@ export default function Layout() {
   const navigate = useNavigate()
   const hosts = useHosts()
   const overview = useOverview(host)
+  const me = useMe()
   const now = useNow(5000)
   const o = overview.data
 
@@ -43,6 +45,10 @@ export default function Layout() {
                 {o.incident.waiting > 0 ? `${o.incident.id} (${o.incident.waiting})` : o.incident.id}
               </span>
             )}
+          </NavLink>
+          <NavLink to={`/hosts/${host}/actions`} className={link}>
+            <ActionIcon />
+            Действия
           </NavLink>
           <NavLink to={`/hosts/${host}/anomalies`} className={link}>
             <AnomalyIcon />
@@ -91,6 +97,18 @@ export default function Layout() {
             <NavLink to={`/hosts/${host}/collectors`}>
               коллекторы: {working} из {o.collectors.length}
             </NavLink>
+          )}
+          {me.data && (
+            <span>
+              {me.data.name} · <NavLink to="/password">пароль</NavLink> ·{' '}
+              <button
+                type="button"
+                className={styles.linkButton}
+                onClick={() => void post('/auth/logout', {}).finally(() => window.location.assign('/login'))}
+              >
+                выйти
+              </button>
+            </span>
           )}
         </div>
       </aside>

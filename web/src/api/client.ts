@@ -37,7 +37,15 @@ export async function post<T>(path: string, body: unknown): Promise<T> {
   return read<T>(response)
 }
 
+// Pages a session is not needed for, or that a session that must change its
+// password may see (ADR 0064).
+const OPEN_PAGES = ['/login', '/password']
+
 async function read<T>(response: Response): Promise<T> {
+  if (!OPEN_PAGES.includes(window.location.pathname)) {
+    if (response.status === 401) goTo('/login')
+    if (response.status === 403) goTo('/password')
+  }
   if (!response.ok) {
     let detail = response.statusText
     try {
@@ -49,4 +57,15 @@ async function read<T>(response: Response): Promise<T> {
     throw new ApiError(response.status, detail)
   }
   return response.json() as Promise<T>
+}
+
+/** Leaves for a page outside the application's routes, keeping where to come back. */
+function goTo(page: string) {
+  const back = window.location.pathname + window.location.search
+  window.location.assign(`${page}?${new URLSearchParams({ next: back })}`)
+}
+
+/** Only a path of this application, never another site. */
+export function safeNext(next: string | null): string {
+  return next && next.startsWith('/') && !next.startsWith('//') ? next : '/'
 }

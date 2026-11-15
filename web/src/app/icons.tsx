@@ -47,3 +47,10 @@ export const KnowledgeIcon = () => (
     <path d="M5 16.5a3 3 0 0 1 3-3h10.5" />
   </svg>
 )
+
+export const ActionIcon = () => (
+  <svg {...props}>
+    <path d="M4 7h10M4 12h7M4 17h10" />
+    <path d="M17 9.5l3 2.5-3 2.5" />
+  </svg>
+)

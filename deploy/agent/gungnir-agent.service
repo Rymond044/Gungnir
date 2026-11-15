@@ -2,7 +2,7 @@
 Description=gungnIR agent: host signal collection
 Documentation=file:///etc/gungnir/agent.toml
 Wants=network-online.target
-After=network-online.target
+After=network-online.target gungnir-actuator.service
 
 [Service]
 ExecStart=/usr/local/bin/gungnir-agent --config /etc/gungnir/agent.toml
@@ -14,8 +14,9 @@ RestartSec=5
 
 # No privileges: a transient user, no capabilities, read-only system.
 DynamicUser=yes
-# Reading the system journal, kernel messages included.
-SupplementaryGroups=systemd-journal
+# Reading the system journal, kernel messages included; `gungnir` for the
+# actuator's socket (ADR 0062).
+SupplementaryGroups=systemd-journal gungnir
 # Spool for outages of the server and the journal position: /var/lib/gungnir-agent.
 StateDirectory=gungnir-agent
 CapabilityBoundingSet=

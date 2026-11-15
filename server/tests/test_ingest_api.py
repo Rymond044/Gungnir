@@ -15,7 +15,7 @@ def test_unknown_token_is_refused(client, token):
 def test_samples_are_stored_and_queryable(client, token):
     body = batch(samples=[sample(ts=RECENT + i * 5000, value=float(i)) for i in range(3)])
     response = client.post("/api/v1/ingest", json=body, headers=auth(token))
-    assert response.json() == {"accepted": 3, "inserted": 3, "out_of_window": 0}
+    assert response.json() == {"accepted": 3, "inserted": 3, "out_of_window": 0, "commands": []}
 
     rows = client.get(
         "/api/v1/hosts/laptop/samples",
@@ -33,7 +33,7 @@ def test_resent_batch_is_harmless(client, token):
     body = batch()
     client.post("/api/v1/ingest", json=body, headers=auth(token))
     response = client.post("/api/v1/ingest", json=body, headers=auth(token))
-    assert response.json() == {"accepted": 1, "inserted": 0, "out_of_window": 0}
+    assert response.json() == {"accepted": 1, "inserted": 0, "out_of_window": 0, "commands": []}
 
 
 def test_disabled_collector_is_recorded_with_reason(client, token):
@@ -76,7 +76,7 @@ def test_rows_outside_retention_are_refused_not_failed(client, token):
     old = RECENT - 30 * 86_400_000
     body = batch(samples=[sample(ts=old), sample()], processes=[process(ts=old)])
     response = client.post("/api/v1/ingest", json=body, headers=auth(token))
-    assert response.json() == {"accepted": 2, "inserted": 1, "out_of_window": 2}
+    assert response.json() == {"accepted": 2, "inserted": 1, "out_of_window": 2, "commands": []}
 
 
 def test_context_is_stored_and_queryable(client, token):

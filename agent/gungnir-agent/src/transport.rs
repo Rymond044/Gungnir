@@ -3,8 +3,10 @@
 
 use std::time::Duration;
 
-use serde::Serialize;
+use log::warn;
+use serde::{Deserialize, Serialize};
 
+use crate::actuation::Command;
 use crate::buffer::Tick;
 use crate::collectors::{CollectorStatus, Event, Process};
 
@@ -20,6 +22,9 @@ pub struct Batch<'a, B: Serialize> {
     pub collectors: &'a [CollectorStatus],
     /// Rows dropped on buffer or spool overflow since the agent started.
     pub dropped: u64,
+    /// What the actuator did since the last delivered batch (ADR 0061).
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    pub actions: &'a [serde_json::Value],
     #[serde(flatten)]
     pub body: B,
 }
@@ -98,7 +103,8 @@ pub struct AgentInfo {
 }
 
 pub enum Outcome {
-    Accepted,
+    /// With the commands the server has for the host's actuator.
+    Accepted(Vec<Command>),
     /// The server refused the batch as malformed; resending it would only
     /// fail again, so the caller discards it.
     Rejected(String),
@@ -125,7 +131,13 @@ impl Transport {
     pub fn send<B: Serialize>(&self, batch: &Batch<B>) -> Outcome {
         let result = self.http.post(&self.url).header("Authorization", &self.authorization).send_json(batch);
         match result {
-            Ok(_) => Outcome::Accepted,
+            Ok(mut response) => match response.body_mut().read_json::<Answer>() {
+                Ok(answer) => Outcome::Accepted(answer.commands),
+                Err(err) => {
+                    warn!("the server's answer has no readable commands: {err}");
+                    Outcome::Accepted(Vec::new())
+                }
+            },
             Err(ureq::Error::StatusCode(code @ (400 | 413 | 422))) => {
                 Outcome::Rejected(format!("HTTP {code}"))
             }
@@ -133,4 +145,11 @@ impl Transport {
             Err(err) => Outcome::Failed(err.to_string()),
         }
     }
+}
+
+/// The server's answer to a batch; only the commands matter here.
+#[derive(Deserialize)]
+struct Answer {
+    #[serde(default)]
+    commands: Vec<Command>,
 }

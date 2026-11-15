@@ -1,0 +1,17 @@
+# gungnIR actuator configuration. Every key is optional; the values shown are
+# the defaults (ADR 0062).
+
+socket = "/run/gungnir-actuator/actuator.sock"
+# Owner group of the socket; the agent's unit joins it (SupplementaryGroups=).
+socket_group = "gungnir"
+# Only processes of this unit may send commands.
+client_unit = "gungnir-agent.service"
+cgroup_root = "/sys/fs/cgroup"
+# The longest a change lives before its timer undoes it, at most 1800.
+max_revert_after_secs = 1800
+
+# Units never touched, whatever the server asks: the ontology's protected
+# entities. Patterns use `*` only.
+# protected_units = ["init.scope", "systemd-journald.service", "dbus.service",
+#     "dbus-broker.service", "systemd-logind.service", "user@*.service",
+#     "gungnir-agent.service", "gungnir-actuator.service"]

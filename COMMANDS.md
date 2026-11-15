@@ -21,8 +21,9 @@ Commands that write files on the host (`workload assign`, `evaluate --out`, `smd
 | New server version after a code change | `dc up -d --build server` (migrations apply at start; the agent spools meanwhile) |
 | New interface version | `dc up -d --build web` |
 | Server logs | `dc logs -f server \| grep -v ingest` |
-| New agent version | `(cd agent && cargo build --release) && (cd deploy/agent && sudo ./install.sh)` |
+| New agent and actuator version | `(cd agent && cargo build --release) && (cd deploy/agent && sudo ./install.sh)` |
 | Agent logs | `journalctl -u gungnir-agent -f` |
+| Actuator logs: every change, refusal and rollback | `journalctl -u gungnir-actuator -f` |
 | What the agent sees | `gungnir-agent --probe` |
 
 Back up the database before anything risky, restore into a scratch database to look at it:
@@ -46,7 +47,16 @@ server anomalies laptop --open         # records still open
 dc exec db psql -U gungnir -c "SELECT now() - at AS behind FROM detection_state"   # detection lag, about 20-30 s
 ```
 
-Interface: http://127.0.0.1:3000 (overview, anomalies, analysis, knowledge base). API in the browser: http://127.0.0.1:8080/docs.
+Interface: http://127.0.0.1:3000 (overview, incidents, actions, anomalies, audit, knowledge base). API in the browser: http://127.0.0.1:8080/docs; every endpoint but ingest and login needs a session (ADR 0064).
+
+## Login
+
+The account is `admin`. Its first password is made at the server's first start and shown only on this machine; the first login must change it.
+
+```sh
+server admin initial-password          # the initial password, while it is not changed
+server admin reset-password            # forgot it: a new initial password, every session ends
+```
 
 ## Tests and code checks
 

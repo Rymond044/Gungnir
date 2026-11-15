@@ -33,6 +33,8 @@ pub struct Config {
     /// Name prefixes of block devices that are never reported, neither as
     /// disks nor as mounted filesystems.
     pub disk_exclude: Vec<String>,
+    /// The actuator's socket (ADR 0062); empty when the host has none.
+    pub actuator_socket: PathBuf,
 }
 
 impl Default for Config {
@@ -51,6 +53,7 @@ impl Default for Config {
             sys_root: "/sys".into(),
             cgroup_root: "/sys/fs/cgroup".into(),
             disk_exclude: vec!["loop".into(), "ram".into()],
+            actuator_socket: "/run/gungnir-actuator/actuator.sock".into(),
         }
     }
 }

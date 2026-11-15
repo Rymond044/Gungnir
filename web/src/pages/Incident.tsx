@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { useAnomalies, useDecision, useIncident, useOverview } from '../api/hooks'
 import type { Incident as IncidentData, IncidentHypothesis, Proposal } from '../api/types'
@@ -6,6 +7,7 @@ import Hypothesis from '../components/Hypothesis'
 import RecordChip from '../components/RecordChip'
 import { Chip, Empty, Failure, Key, Loading, Panel, Source, type Tone } from '../components/ui'
 import ui from '../components/ui.module.css'
+import { actionStates, outcomes } from '../lib/actions'
 import { confidence, dayClock, duration, formatNumber, formatValue, ms, span } from '../lib/format'
 import { actionNames, causeNames, classNames, likelihoodNames, named, signalNames } from '../lib/names'
 import { useNow } from '../lib/useNow'
@@ -168,6 +170,7 @@ function Proposals({
   now: number
 }) {
   const decide = useDecision(host, incident.summary.id)
+  const [asking, setAsking] = useState<Proposal | null>(null)
   const { proposals, hypotheses } = incident
   const causeOf = new Map(hypotheses.map((h) => [h.id, named(causeNames, h.cause)]))
   if (proposals.length === 0) {
@@ -183,8 +186,8 @@ function Proposals({
   return (
     <Panel title="Что предлагается" aside="по рангу гипотезы, затем по пользе и риску">
       <span className="muted" style={{ fontSize: 13 }}>
-        Подтверждение записывает решение оператора. Применять действия будет исполнитель с автоматическим
-        откатом; пока решение только записывается.
+        Подтверждённое действие применит исполнитель на хосте. Оно откатится само по таймеру, а сразу — если к
+        концу проверки другим всё ещё мешают.
       </span>
       <table className={ui.fixed}>
         <colgroup>
@@ -219,7 +222,7 @@ function Proposals({
                     <button
                       className={`${ui.button} ${ui.primary}`}
                       disabled={decide.isPending}
-                      onClick={() => decide.mutate({ proposal: p.id, decision: 'confirm' })}
+                      onClick={() => setAsking(p)}
                     >
                       Подтвердить
                     </button>
@@ -231,6 +234,14 @@ function Proposals({
                       Отклонить
                     </button>
                   </div>
+                ) : p.action_state ? (
+                  <span>
+                    <Chip tone={actionStates[p.action_state].tone}>{actionStates[p.action_state].label}</Chip>{' '}
+                    {p.outcome && <Chip tone={outcomes[p.outcome].tone}>{outcomes[p.outcome].label}</Chip>}
+                    <div className="muted" style={{ fontSize: 12.5 }}>
+                      {p.decided_by} · <Link to={`/hosts/${host}/actions`}>в действиях</Link>
+                    </div>
+                  </span>
                 ) : (
                   <span>
                     <Chip tone={STATES[p.state].tone}>{STATES[p.state].label}</Chip>
@@ -248,7 +259,70 @@ function Proposals({
         </tbody>
       </table>
       {decide.isError && <Failure error={decide.error} />}
+      <Confirm
+        proposal={asking}
+        busy={decide.isPending}
+        onCancel={() => setAsking(null)}
+        onConfirm={(p) =>
+          decide.mutate({ proposal: p.id, decision: 'confirm' }, { onSettled: () => setAsking(null) })
+        }
+      />
     </Panel>
+  )
+}
+
+/** What exactly will change, for how long and at what risk, before the operator applies it. */
+function Confirm({
+  proposal: p,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  proposal: Proposal | null
+  busy: boolean
+  onCancel: () => void
+  onConfirm: (p: Proposal) => void
+}) {
+  const dialog = useRef<HTMLDialogElement>(null)
+  useEffect(() => {
+    const d = dialog.current
+    if (!d) return
+    if (p && !d.open) d.showModal()
+    if (!p && d.open) d.close()
+  }, [p])
+  return (
+    <dialog ref={dialog} onClose={onCancel} className={ui.dialog}>
+      {p && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <h2 style={{ margin: 0, fontSize: 16 }}>Применить действие?</h2>
+          <div>
+            <b>{named(actionNames, p.action)}</b> <Key>{p.action}</Key> для <Entity entity={p.target} />
+          </div>
+          <div className="muted" style={{ fontSize: 13 }}>
+            {parameterText(p)}
+          </div>
+          <div style={{ fontSize: 13 }}>
+            Откатится само через {span(p.rollback_after_s)}; раньше — если к концу проверки другим всё ещё
+            мешают, или по кнопке «Откатить» в действиях. Процессы не завершаются.
+          </div>
+          <div style={{ fontSize: 13 }}>
+            {p.side_effects.length === 0
+              ? 'Побочных эффектов не известно.'
+              : `Возможно: ${p.side_effects
+                  .map((e) => `${e.effect} (${likelihoodNames[e.likelihood] ?? e.likelihood})`)
+                  .join('; ')}.`}
+          </div>
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+            <button className={ui.button} onClick={onCancel} disabled={busy}>
+              Отмена
+            </button>
+            <button className={`${ui.button} ${ui.primary}`} onClick={() => onConfirm(p)} disabled={busy}>
+              Применить
+            </button>
+          </div>
+        </div>
+      )}
+    </dialog>
   )
 }
 

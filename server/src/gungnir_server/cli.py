@@ -1,6 +1,7 @@
 """Command line of the server.
 
 `serve | migrate | maintain | process | status | host add|list|rotate-token |
+admin initial-password|reset-password |
 runs import|list|quiet | calibrate | workload show|unmatched|assign | baselines |
 anomalies | replay | evaluate | smd | knowledge check | diagnose`.
 """
@@ -16,6 +17,7 @@ import psycopg
 
 from gungnir_server import (
     anomalies,
+    auth,
     base,
     baselines,
     capacity,
@@ -64,6 +66,14 @@ def main() -> None:
     host.add_parser("add", help="add a host and print its agent token once").add_argument("name")
     host.add_parser("rotate-token", help="replace a host's agent token").add_argument("name")
     host.add_parser("list", help="list hosts")
+
+    admin = commands.add_parser("admin", help="the interface's account (ADR 0064)")
+    admin_actions = admin.add_subparsers(dest="action", required=True)
+    for name, text in [
+        ("initial-password", "print the initial password while it is not changed"),
+        ("reset-password", "set a new initial password and end every session"),
+    ]:
+        admin_actions.add_parser(name, help=text).add_argument("--name", default=auth.ADMIN)
 
     runs = commands.add_parser("runs", help="labeled runs").add_subparsers(dest="action", required=True)
     imp = runs.add_parser("import", help="import a label file ('-' reads standard input)")
@@ -191,6 +201,8 @@ def main() -> None:
             print(render_baselines(host_series(conn, host), book, args.signal))
         elif args.command == "status":
             show_status(conn, args.name, args.groups)
+        elif args.command == "admin":
+            run_admin(conn, args)
         elif args.action == "add":
             try:
                 token = hosts.add(conn, args.name)
@@ -395,3 +407,17 @@ def show_status(conn: psycopg.Connection, name: str, groups: bool) -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def run_admin(conn: psycopg.Connection, args: argparse.Namespace) -> None:
+    auth.ensure_admin(conn)
+    if args.action == "initial-password":
+        password = auth.initial_password(conn, args.name)
+        if password is None:
+            sys.exit(f"'{args.name}' has changed its password; `admin reset-password` makes a new one")
+        print(password)
+    else:
+        try:
+            print(auth.reset(conn, args.name))
+        except auth.Refused as e:
+            sys.exit(str(e))

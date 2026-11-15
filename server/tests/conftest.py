@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 from psycopg import sql
 
-from gungnir_server import hosts
+from gungnir_server import auth, hosts
 from gungnir_server.api import create_app
 from gungnir_server.db import open_pool
 
@@ -33,14 +33,30 @@ def pool(database_url):
     pool.close()
 
 
+PASSWORD = "a long enough password"
+
+
 @pytest.fixture
-def client(pool):
+def anonymous(pool):
     with TestClient(create_app(pool)) as client:
         yield client
 
 
 @pytest.fixture
-def token(client, pool):
+def client(anonymous, pool):
+    """Signed in as the first account, its initial password changed."""
+    with pool.connection() as conn:
+        initial = auth.initial_password(conn)
+    assert (
+        anonymous.post("/api/v1/auth/login", json={"name": "admin", "password": initial}).status_code == 200
+    )
+    changed = anonymous.post("/api/v1/auth/password", json={"old": initial, "new": PASSWORD})
+    assert changed.status_code == 200
+    return anonymous
+
+
+@pytest.fixture
+def token(anonymous, pool):
     with pool.connection() as conn:
         return hosts.add(conn, "laptop")
 

@@ -158,6 +158,9 @@ class Params:
     # (ADR 0007).
     proposal_basis: timedelta = timedelta(minutes=1)
     rollback_after: timedelta = timedelta(minutes=30)
+    # Verification (ADR 0063): an action is judged after the longest window of
+    # its hypothesis's rule, and never sooner than this.
+    verify_min: timedelta = timedelta(minutes=1)
 
     # Detection loop.
     detect_every: timedelta = timedelta(seconds=10)

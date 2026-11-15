@@ -1,0 +1,44 @@
+[Unit]
+Description=gungnIR actuator: confirmed, reverting changes of control group limits
+Documentation=file:///etc/gungnir/actuator.toml
+# Before the agent, so its first commands find the socket.
+Before=gungnir-agent.service
+
+[Service]
+ExecStart=/usr/local/bin/gungnir-actuator --config /etc/gungnir/actuator.toml
+Restart=on-failure
+RestartSec=2
+# On stop it reverts every change not kept (ADR 0062); give it the time.
+TimeoutStopSec=20
+
+# The only privileged part (ADR 0007): root, to write limits into groups that
+# belong to users, and nothing else it does not need.
+RuntimeDirectory=gungnir-actuator
+RuntimeDirectoryMode=0755
+StateDirectory=gungnir-actuator
+StateDirectoryMode=0700
+CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_CHOWN
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/sys/fs/cgroup
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateNetwork=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@mount @reboot @swap @module @raw-io @clock @debug
+MemoryMax=32M
+
+[Install]
+WantedBy=multi-user.target

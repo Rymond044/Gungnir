@@ -223,6 +223,15 @@ dependencies = [
 [[package]]
 name = "gungnir-actuator"
 version = "0.1.0"
+dependencies = [
+ "env_logger",
+ "libc",
+ "log",
+ "serde",
+ "serde_json",
+ "signal-hook",
+ "toml",
+]
 
 [[package]]
 name = "gungnir-agent"

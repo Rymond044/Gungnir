@@ -229,3 +229,17 @@
   font-size: 13px;
   pointer-events: none;
 }
+
+/* The confirmation of an action (slice S8). */
+.dialog {
+  max-width: 520px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--text);
+}
+
+.dialog::backdrop {
+  background: rgba(28, 27, 25, 0.35);
+}

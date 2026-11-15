@@ -1,6 +1,7 @@
 //! gungnIR agent: probes its collectors, samples them at a fixed interval,
 //! buffers the samples and delivers them to the server.
 
+mod actuation;
 mod buffer;
 mod clock;
 mod collectors;
@@ -17,6 +18,7 @@ use std::time::{Duration, Instant};
 
 use log::{error, info, warn};
 
+use actuation::Actuation;
 use buffer::{Buffer, Tick};
 use collectors::{Collected, CollectorStatus, Source, State};
 use config::Config;
@@ -130,6 +132,10 @@ fn run(args: Args) -> Result<(), String> {
         },
         seq: 0,
         max_batch: config.max_batch,
+        actuation: Actuation::new(
+            (!config.actuator_socket.as_os_str().is_empty()).then(|| config.actuator_socket.clone()),
+            config.cgroup_root.clone(),
+        ),
     };
     agent.failing = vec![false; agent.sources.len()];
     info!("sending to {} every {} s", config.server_url, config.send_interval_secs);
@@ -187,6 +193,7 @@ struct Agent {
     info: AgentInfo,
     seq: u64,
     max_batch: usize,
+    actuation: Actuation,
 }
 
 enum Delivery {
@@ -239,8 +246,8 @@ impl Agent {
                 }
             };
             return match self.post(body) {
-                Outcome::Failed(reason) => self.failed(&reason),
-                _ => {
+                Err(reason) => self.failed(&reason),
+                Ok(()) => {
                     self.discard_spooled();
                     Delivery::MorePending
                 }
@@ -256,9 +263,15 @@ impl Agent {
         let ticks = head.len();
         let body = Body::from_ticks(head);
         let rows = body.rows();
-        let outcome = self.transport.send(&batch(&self.info, self.seq, &self.statuses, dropped, body));
+        let actions = self.actuation.pending();
+        let outcome =
+            self.transport.send(&batch(&self.info, self.seq, &self.statuses, dropped, &actions, body));
         match outcome {
-            Outcome::Accepted => self.buffer.consume(ticks),
+            Outcome::Accepted(commands) => {
+                self.buffer.consume(ticks);
+                self.actuation.delivered(&actions);
+                self.actuation.run(commands);
+            }
             Outcome::Rejected(reason) => {
                 error!("server rejected batch {} of {rows} rows, discarding it: {reason}", self.seq);
                 self.buffer.consume(ticks);
@@ -268,14 +281,20 @@ impl Agent {
         if self.buffer.is_empty() { Delivery::Idle } else { Delivery::MorePending }
     }
 
-    fn post(&mut self, body: StoredBody) -> Outcome {
+    /// Sends a spooled body; an error is worth retrying, a rejection is not.
+    fn post(&mut self, body: StoredBody) -> Result<(), String> {
         self.seq += 1;
         let dropped = self.buffer.dropped();
-        let outcome = self.transport.send(&batch(&self.info, self.seq, &self.statuses, dropped, body));
-        if let Outcome::Rejected(reason) = &outcome {
-            error!("server rejected a spooled batch, discarding it: {reason}");
+        let actions = self.actuation.pending();
+        match self.transport.send(&batch(&self.info, self.seq, &self.statuses, dropped, &actions, body)) {
+            Outcome::Accepted(commands) => {
+                self.actuation.delivered(&actions);
+                self.actuation.run(commands);
+            }
+            Outcome::Rejected(reason) => error!("server rejected a spooled batch, discarding it: {reason}"),
+            Outcome::Failed(reason) => return Err(reason),
         }
-        outcome
+        Ok(())
     }
 
     fn discard_spooled(&mut self) {
@@ -326,6 +345,7 @@ fn batch<'a, B: Serialize>(
     seq: u64,
     collectors: &'a [CollectorStatus],
     dropped: u64,
+    actions: &'a [serde_json::Value],
     body: B,
 ) -> Batch<'a, B> {
     Batch {
@@ -333,6 +353,7 @@ fn batch<'a, B: Serialize>(
         seq,
         collectors,
         dropped,
+        actions,
         body,
     }
 }

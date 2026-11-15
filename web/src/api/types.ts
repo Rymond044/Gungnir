@@ -105,6 +105,59 @@ export interface Proposal {
   created_at: string
   decided_at: string | null
   decided_by: string | null
+  /** The action of a confirmed proposal (ADR 0061). */
+  action_id: number | null
+  action_state: ActionState | null
+  outcome: Outcome | null
+}
+
+export type ActionState = 'queued' | 'applied' | 'kept' | 'refused' | 'reverted'
+export type Outcome = 'worked' | 'failed' | 'nothing_to_judge'
+
+export interface FileChange {
+  group: string
+  file: string
+  key?: string
+  before: string
+  after: string
+}
+
+export interface ActionLog {
+  at: string
+  event: string
+  by: string
+  detail: Record<string, unknown>
+}
+
+/** A confirmed proposal carried out by the actuator (ADRs 0061-0063). */
+export interface Action {
+  id: number
+  proposal_id: number
+  incident_id: number
+  cause: string
+  action: string
+  target: string
+  value: number | null
+  share: number | null
+  revert_after_s: number
+  verify_after_s: number
+  state: ActionState
+  outcome: Outcome | null
+  files: FileChange[] | null
+  reason: string | null
+  asked: 'revert' | 'keep' | null
+  confirmed_by: string
+  confirmed_at: string
+  applied_at: string | null
+  verified_at: string | null
+  ended_at: string | null
+  revert_at: string | null
+  log: ActionLog[]
+}
+
+export interface Account {
+  name: string
+  must_change: boolean
 }
 
 export interface Incident {

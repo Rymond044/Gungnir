@@ -256,6 +256,22 @@ impl Cgroup2 {
     }
 }
 
+/// The groups on the host whose entity is `name`, the ones an action
+/// against that entity covers (ADR 0061).
+pub fn groups_named(root: &Path, name: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    for entry in std::fs::read_dir(root).into_iter().flatten().flatten() {
+        if entry.file_type().is_ok_and(|t| t.is_dir()) {
+            let top = entry.file_name().to_string_lossy().into_owned();
+            found.push(top.clone());
+            walk(&entry.path(), &top, &mut found);
+        }
+    }
+    found.retain(|rel| entity(rel) == name);
+    found.sort();
+    found
+}
+
 /// Adds the populated leaves below `dir`. In cgroup v2 processes live only
 /// in leaves, so a populated leaf is a group that holds processes.
 fn walk(dir: &Path, rel: &str, found: &mut Vec<String>) {
@@ -418,6 +434,20 @@ mod tests {
             last_full: None,
             facts: FactLog::default(),
         }
+    }
+
+    #[test]
+    fn an_entity_names_every_instance_of_its_program() {
+        let root = scratch_dir("cgroup-named");
+        group(&root, "user.slice/app.slice/app-cp-1.scope", 0, 0, 0);
+        group(&root, "user.slice/app.slice/app-cp-2.scope", 0, 0, 0);
+        group(&root, "user.slice/app.slice/app-mv-3.scope", 0, 0, 0);
+        assert_eq!(
+            groups_named(&root, "user.slice/app.slice/app-cp.scope"),
+            ["user.slice/app.slice/app-cp-1.scope", "user.slice/app.slice/app-cp-2.scope"]
+        );
+        assert!(groups_named(&root, "user.slice/app.slice/app-rm.scope").is_empty());
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

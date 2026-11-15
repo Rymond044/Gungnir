@@ -154,3 +154,11 @@
     margin-top: 0;
   }
 }
+
+.linkButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-decoration: underline;
+}

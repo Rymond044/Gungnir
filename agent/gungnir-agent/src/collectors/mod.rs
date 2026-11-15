@@ -18,6 +18,7 @@ mod selfstat;
 mod thermal;
 mod vmstat;
 
+pub use cgroup::groups_named;
 pub use journal::Event;
 pub use processes::Process;
 

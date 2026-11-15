@@ -2,18 +2,21 @@
 
 from collections.abc import Iterator
 from contextlib import asynccontextmanager
+from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 import psycopg
-from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from psycopg_pool import ConnectionPool
 from pydantic import BaseModel
 
 from gungnir_server import (
+    actions,
     anomalies,
     audit,
+    auth,
     base,
     catalog,
     charts,
@@ -50,11 +53,17 @@ def create_app(pool: ConnectionPool | None = None) -> FastAPI:
         own = pool is None
         app.state.pool = open_pool() if own else pool
         app.state.series = telemetry.SeriesIds()
+        app.state.throttle = auth.Throttle()
         with app.state.pool.connection() as conn:
             migrate(conn)
             maintenance.ensure_partitions(conn, datetime.now(UTC))
+            auth.ensure_admin(conn)
         manager = incidents.Manager(app.state.base, app.state.engine)
-        workers = [maintenance.Worker(app.state.pool), pipeline.Worker(app.state.pool, after=[manager])]
+        verifier = actions.Verifier(app.state.base, app.state.engine)
+        workers = [
+            maintenance.Worker(app.state.pool),
+            pipeline.Worker(app.state.pool, after=[manager, verifier]),
+        ]
         for worker in workers:
             worker.start()
         yield
@@ -72,7 +81,9 @@ def create_app(pool: ConnectionPool | None = None) -> FastAPI:
             return JSONResponse({"detail": "body too large"}, status_code=413)
         return await call_next(request)
 
-    app.include_router(router, prefix="/api/v1")
+    app.include_router(open_router, prefix="/api/v1")
+    # Everything else needs a session (ADR 0064).
+    app.include_router(router, prefix="/api/v1", dependencies=[Depends(signed_in)])
 
     @app.get("/healthz")
     def healthz() -> dict:
@@ -104,15 +115,92 @@ def named_host(conn: Conn, name: str) -> Host:
     return host
 
 
+def signed_in(request: Request, conn: Conn) -> auth.Account:
+    token = request.cookies.get(auth.COOKIE)
+    account = auth.session(conn, token, datetime.now(UTC)) if token else None
+    if account is None:
+        raise HTTPException(401, "not signed in")
+    if account.must_change and not request.url.path.startswith("/api/v1/auth/"):
+        raise HTTPException(403, "the initial password must be changed first")
+    return account
+
+
 AgentHost = Annotated[Host, Depends(agent_host)]
 NamedHost = Annotated[Host, Depends(named_host)]
+Operator = Annotated[auth.Account, Depends(signed_in)]
 
+open_router = APIRouter()
 router = APIRouter()
 
 
-@router.post("/ingest")
-def ingest(batch: Batch, request: Request, conn: Conn, host: AgentHost) -> telemetry.Stored:
-    return telemetry.store(conn, request.app.state.series, host, batch, datetime.now(UTC))
+@open_router.post("/ingest")
+def ingest(batch: Batch, request: Request, conn: Conn, host: AgentHost) -> dict:
+    """Stores a batch and answers with the commands for the host's actuator
+    (ADR 0061)."""
+    now = datetime.now(UTC)
+    stored = telemetry.store(conn, request.app.state.series, host, batch, now)
+    with conn.transaction():
+        actions.record(conn, host, batch.actions)
+        commands = actions.commands(conn, host, now)
+    return {**asdict(stored), "commands": commands}
+
+
+class Credentials(BaseModel):
+    name: str
+    password: str
+
+
+def _session_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        auth.COOKIE,
+        token,
+        max_age=int(auth.IDLE.total_seconds()),
+        httponly=True,
+        samesite="strict",
+        path="/",
+    )
+
+
+@open_router.post("/auth/login")
+def login(body: Credentials, request: Request, response: Response, conn: Conn) -> dict:
+    throttle = request.app.state.throttle
+    now = datetime.now(UTC)
+    if throttle.locked(body.name, now):
+        raise HTTPException(429, "too many failed logins, try again in 15 minutes")
+    found = auth.login(conn, body.name, body.password, now)
+    if found is None:
+        throttle.failed(body.name, now)
+        raise HTTPException(401, "wrong name or password")
+    throttle.passed(body.name)
+    token, account = found
+    _session_cookie(response, token)
+    return {"name": account.name, "must_change": account.must_change}
+
+
+@router.get("/auth/me")
+def me(who: Operator) -> dict:
+    return {"name": who.name, "must_change": who.must_change}
+
+
+class PasswordChange(BaseModel):
+    old: str
+    new: str
+
+
+@router.post("/auth/password")
+def change_password(body: PasswordChange, request: Request, conn: Conn, who: Operator) -> dict:
+    try:
+        auth.change(conn, who, body.old, body.new, request.cookies[auth.COOKIE])
+    except auth.Refused as e:
+        raise HTTPException(422, str(e)) from e
+    return {"name": who.name, "must_change": False}
+
+
+@router.post("/auth/logout")
+def logout(request: Request, response: Response, conn: Conn) -> dict:
+    auth.logout(conn, request.cookies[auth.COOKIE])
+    response.delete_cookie(auth.COOKIE, path="/")
+    return {}
 
 
 @router.get("/hosts")
@@ -408,17 +496,59 @@ class Decision(BaseModel):
 
 @router.post("/hosts/{name}/incidents/{incident_id}/proposals/{proposal_id}")
 def decide(
-    host: NamedHost, conn: Conn, incident_id: int, proposal_id: int, body: Decision
+    host: NamedHost,
+    conn: Conn,
+    request: Request,
+    who: Operator,
+    incident_id: int,
+    proposal_id: int,
+    body: Decision,
 ) -> incidents.ProposalRow:
-    """The operator confirms or rejects a proposal. Confirming records the
-    decision; the actuator applies it from slice S8. There is no login yet,
-    so the decision is the operator's (docs/open-questions.md)."""
+    """The operator confirms or rejects a proposal. A confirmed one becomes
+    an action the host's actuator applies with the agent's next batch."""
+    state = request.app.state
+    now = datetime.now(UTC)
     try:
-        return incidents.decide(
-            conn, host, incident_id, proposal_id, body.decision, "operator", datetime.now(UTC)
-        )
-    except incidents.Refused as e:
+        with conn.transaction():
+            incidents.decide(conn, host, incident_id, proposal_id, body.decision, who.name, now)
+            if body.decision == "confirm":
+                actions.queue(conn, state.base, state.params, host, proposal_id, who.name, now)
+    except (incidents.Refused, actions.Refused) as e:
         raise HTTPException(409, str(e)) from e
+    found = incidents.one(conn, host, incident_id)
+    assert found is not None
+    return next(p for p in found.proposals if p.id == proposal_id)
+
+
+@router.get("/hosts/{name}/actions")
+def list_actions(
+    host: NamedHost,
+    conn: Conn,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    limit: Annotated[int, Query(ge=1, le=1_000)] = 500,
+) -> list[actions.ActionRow]:
+    """Actions confirmed in the interval and those still held, newest first,
+    each with its log."""
+    since, until = window(since, until, timedelta(days=7))
+    return actions.history(conn, host, since, until, limit)
+
+
+class Ask(BaseModel):
+    op: str
+
+
+@router.post("/hosts/{name}/actions/{action_id}")
+def ask_action(host: NamedHost, conn: Conn, who: Operator, action_id: int, body: Ask) -> actions.ActionRow:
+    """Revert an applied action at once, or keep it past its timer."""
+    try:
+        with conn.transaction():
+            actions.ask(conn, host, action_id, body.op, who.name, datetime.now(UTC))
+    except actions.Refused as e:
+        raise HTTPException(409, str(e)) from e
+    found = actions.one(conn, host, action_id)
+    assert found is not None
+    return found
 
 
 @router.get("/knowledge")

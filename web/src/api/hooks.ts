@@ -1,6 +1,8 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { get, post } from './client'
 import type {
+  Account,
+  Action,
   Audit,
   Chart,
   Diagnosis,
@@ -184,4 +186,30 @@ export function useDecision(host: string, incident: number) {
       void client.invalidateQueries({ queryKey: ['overview', host] })
     },
   })
+}
+
+export function useActions(host: string, interval: Interval, live: boolean) {
+  return useQuery({
+    queryKey: ['actions', host, interval],
+    queryFn: () => get<Action[]>(`/hosts/${host}/actions`, { ...interval }),
+    refetchInterval: live ? LIVE_MS : false,
+    placeholderData: keepPreviousData,
+  })
+}
+
+/** Revert an applied action at once, or keep it past its timer (ADR 0062). */
+export function useAsk(host: string) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ action, op }: { action: number; op: 'revert' | 'keep' }) =>
+      post<Action>(`/hosts/${host}/actions/${action}`, { op }),
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: ['actions', host] })
+      void client.invalidateQueries({ queryKey: ['incident', host] })
+    },
+  })
+}
+
+export function useMe() {
+  return useQuery({ queryKey: ['me'], queryFn: () => get<Account>('/auth/me'), staleTime: 60_000 })
 }

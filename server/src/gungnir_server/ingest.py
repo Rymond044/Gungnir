@@ -80,6 +80,27 @@ class AgentInfo(Strict):
     ] = None
 
 
+class FileChange(Strict):
+    group: Annotated[str, Field(max_length=1024)]
+    file: Annotated[str, Field(max_length=64)]
+    key: Annotated[str | None, Field(max_length=64)] = None
+    before: Annotated[str, Field(max_length=255)]
+    after: Annotated[str, Field(max_length=255)]
+
+
+class ActionEntry(Strict):
+    """A line of the actuator's log, or a refusal the agent made itself when
+    the actuator was out of reach (ADR 0061)."""
+
+    # Absent from the agent's own refusals.
+    seq: Annotated[int | None, Field(ge=1)] = None
+    id: Annotated[int, Field(ge=1)]
+    at: Ms
+    event: Literal["applied", "refused", "reverted", "kept"]
+    reason: Annotated[str | None, Field(max_length=2000)] = None
+    files: Annotated[list[FileChange], Field(max_length=256)] = []
+
+
 class Batch(Strict):
     agent: AgentInfo
     seq: Annotated[int, Field(ge=1)]
@@ -90,3 +111,4 @@ class Batch(Strict):
     facts: Annotated[list[Fact], Field(max_length=MAX_CONTEXT_ROWS)] = []
     processes: Annotated[list[Process], Field(max_length=MAX_CONTEXT_ROWS)] = []
     events: Annotated[list[Event], Field(max_length=MAX_CONTEXT_ROWS)] = []
+    actions: Annotated[list[ActionEntry], Field(max_length=MAX_CONTEXT_ROWS)] = []

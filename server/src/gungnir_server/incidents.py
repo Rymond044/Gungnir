@@ -441,6 +441,10 @@ class ProposalRow:
     created_at: datetime
     decided_at: datetime | None
     decided_by: str | None
+    # The action of a confirmed proposal (slice S8).
+    action_id: int | None
+    action_state: str | None
+    outcome: str | None
 
 
 @dataclass(frozen=True)
@@ -524,9 +528,11 @@ def one(conn: psycopg.Connection, host: Host, incident_id: int) -> Incident | No
         (incident_id,),
     ).fetchall()
     props = conn.execute(
-        "SELECT id, hypothesis_id, action, target, parameter, effectiveness, risk, side_effects,"
-        " extract(epoch FROM rollback_after)::float, source, rank, state, created_at, decided_at, decided_by"
-        " FROM proposals WHERE incident_id = %s ORDER BY rank, id",
+        "SELECT p.id, p.hypothesis_id, p.action, p.target, p.parameter, p.effectiveness, p.risk,"
+        " p.side_effects, extract(epoch FROM p.rollback_after)::float, p.source, p.rank, p.state,"
+        " p.created_at, p.decided_at, p.decided_by, a.id, a.state, a.outcome"
+        " FROM proposals p LEFT JOIN actions a ON a.proposal_id = p.id WHERE p.incident_id = %s"
+        " ORDER BY p.rank, p.id",
         (incident_id,),
     ).fetchall()
     return Incident(
@@ -551,7 +557,8 @@ def decide(
     now: datetime,
 ) -> ProposalRow:
     """Records the operator's decision on a proposal still waiting for one.
-    Confirming records it only; the actuator applies it from slice S8."""
+    The action of a confirmed one is queued by `actions.queue` in the same
+    transaction."""
     if decision not in DECISIONS:
         raise Refused(f"decision must be one of {', '.join(DECISIONS)}")
     row = conn.execute(
