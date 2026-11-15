@@ -27,7 +27,9 @@ from gungnir_server.evidence import (
     Value,
     at,
     inside,
+    is_host_waiting,
     related,
+    shows_harm,
     within,
 )
 from gungnir_server.params import Params
@@ -89,6 +91,8 @@ class Hypothesis:
     rejected: str | None = None
     # Some of its impact is matched: it hurt the others, not only ran.
     harm: bool = True
+    # The matched impact that shows it (ADR 0065).
+    hurt: tuple[Item, ...] = ()
 
     def with_status(self, status: str) -> list[Found]:
         return [f for f in self.found if f.status == status]
@@ -107,6 +111,8 @@ class Diagnosis:
     # Causes whose leading symptom was seen but that the gate refused or
     # the cut-off dropped, each with the reason (ADR 0055).
     near: tuple[Hypothesis, ...] = ()
+    # Pressure that is the culprits' own waiting, not harm (ADR 0065).
+    own: frozenset[Item] = frozenset()
 
     def causes(self) -> list[str]:
         """Causes in rank order, each once."""
@@ -128,6 +134,8 @@ class RuleEngine:
         self.weights = params.strength_weights
         self.alpha = params.penalty_alpha
         self.cutoff = params.hypothesis_cutoff
+        self.levels = harm_levels()
+        self.own_within = params.own_waiting_within.total_seconds()
 
     def diagnose(self, ev: Evidence) -> Diagnosis:
         found = [h for rule in self.base.rules.values() for h in self._hypotheses(rule, ev)]
@@ -144,15 +152,36 @@ class RuleEngine:
                 h.binding.culprit or "",
             ),
         )
+        # The host's pressure that a culprit's activity explains is the
+        # culprit's own waiting: no cause shows harm by it (ADR 0065).
+        own = own_waiting(shown, ev.records, self.own_within)
+        shown = [self._hurting(h, ev, own) for h in shown]
         explained = {r.id for r in ev.records if self._explained(r, ev)}
         shown = [replace(h, expected=self._expected(h, explained)) for h in shown]
         used = {f.item for h in shown for f in h.with_status(MATCHED)}
         unexplained = [r for r in ev.records if r not in used and r.id not in explained and inside(r, ev)]
         unexplained += [e for e in ev.events if e not in used and inside(e, ev)]
-        hurt = {f.item for h in shown if h.harm for f in h.with_status(MATCHED) if f.symptom.impact}
+        hurt = {i for h in shown for i in h.hurt}
         advisories = self._advisories(ev, hurt)
         expected = sorted(r.id for r in ev.records if r.id in explained and inside(r, ev))
-        return Diagnosis(tuple(shown), tuple(unexplained), tuple(expected), advisories, near)
+        return Diagnosis(tuple(shown), tuple(unexplained), tuple(expected), advisories, near, frozenset(own))
+
+    def _hurting(self, h: Hypothesis, ev: Evidence, own: set[Item]) -> Hypothesis:
+        # A group at its own limit is the subject of a cause without a
+        # culprit: its waiting is the harm even while it is busy itself.
+        lead = next((f.item for f in h.with_status(MATCHED) if f.symptom.leading), None)
+        subject = lead.entity if isinstance(lead, Record) and lead.entity != HOST else None
+        # Harm before the interval belongs to what was diagnosed then; a
+        # long window may bring the cause back, not its old harm.
+        hurt = tuple(
+            f.item
+            for f in h.with_status(MATCHED)
+            if f.symptom.impact
+            and inside(f.item, ev)
+            and not (f.item in own and not (h.binding.culprit is None and _on_subject(f.item, subject)))
+            and shows_harm(f.item, h.binding.culprit, ev, self.levels)
+        )
+        return replace(h, harm=bool(hurt), hurt=hurt)
 
     def _near(self, current: list[Hypothesis]) -> tuple[Hypothesis, ...]:
         """The best refused candidate of each cause whose leading symptom was
@@ -340,12 +369,13 @@ class RuleEngine:
         found = tuple(outcome[i] for i in range(len(rule.symptoms)))
 
         impact = [f for f in found if f.symptom.impact]
-        harm = any(f.status == MATCHED for f in impact)
+        seen = any(f.status == MATCHED for f in impact)
+        harm = any(f.status == MATCHED and shows_harm(f.item, b.culprit, ev, self.levels) for f in impact)
         rejected = None
         if contradicted:
             rejected = CONTRADICTED
         # Without its leading symptom only the impact tells that something happened.
-        elif not has_leading and not harm and not all(f.status == UNOBSERVABLE for f in impact):
+        elif not has_leading and not seen and not all(f.status == UNOBSERVABLE for f in impact):
             rejected = NO_IMPACT
         elif any(
             f.status == MISSING and f.symptom.strength == "characteristic" and not f.symptom.impact
@@ -399,6 +429,39 @@ class RuleEngine:
             if inside(r, ev) and r not in hurt and r.signal in self.onto.signals and r.kind == "impact"
         }
         return tuple(a for a in self.base.policy.advisories if a.resource in impacted)
+
+
+def own_waiting(hypotheses: list[Hypothesis], records: tuple[Record, ...], within: float) -> set[Item]:
+    """Waiting that is the culprits' own (ADR 0065): the host's waiting, and
+    the pressure of a group that is the culprit of a hypothesis or holds or
+    is held by one, when it began within `within` seconds of a culprit's
+    leading symptom. A busy program waits for what it overloads; a program
+    that ran long before it began to wait was made to by someone else."""
+    active = [(h.binding.culprit, h.leading_at) for h in hypotheses if h.binding.culprit]
+
+    def own(r: Record) -> bool:
+        for culprit, t0 in active:
+            if abs(r.start - t0) > within:
+                continue
+            if is_host_waiting(r):
+                return True
+            if r.entity != HOST and "_pressure_" in r.signal and related(r.entity, culprit):
+                return True
+        return False
+
+    return {r for r in records if own(r)}
+
+
+def _on_subject(item: Item, subject: str | None) -> bool:
+    return subject is not None and isinstance(item, Record) and related(item.entity, subject)
+
+
+def harm_levels() -> dict[str, float]:
+    """The noticeable impact level of each pressure of the host (ADR 0065),
+    from the shipped impact file; a group's pressure takes its resource's."""
+    from gungnir_server.detection.detectors import pressure_levels
+
+    return pressure_levels()
 
 
 def as_dict(d: Diagnosis) -> dict:

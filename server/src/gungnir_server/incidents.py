@@ -17,7 +17,8 @@ the operator; it expires when its hypothesis is no longer given or the
 incident closes. Applying a confirmed one is the actuator's work (slice S8).
 
 `advance` decides what happens to the incident from the harm it is shown and
-reads no database, so the live loop and a replay can share it.
+reads no database. The live loop and a replay (slice S9) run the same steps;
+a replay's incidents carry its id and read only its records.
 """
 
 import json
@@ -34,7 +35,13 @@ from gungnir_server import frame, gather
 from gungnir_server.base import Base
 from gungnir_server.evidence import Evidence, Record, inside
 from gungnir_server.hosts import Host
-from gungnir_server.inference import MATCHED, Diagnosis, Hypothesis, InferenceEngine, as_hypothesis
+from gungnir_server.inference import (
+    MATCHED,
+    Diagnosis,
+    Hypothesis,
+    InferenceEngine,
+    as_hypothesis,
+)
 from gungnir_server.params import Params
 from gungnir_server.policy import Entry
 from gungnir_server.rules import CULPRIT_CLASS, STRENGTHS
@@ -96,9 +103,11 @@ def advance(
 
 
 def harm_of(d: Diagnosis, ev: Evidence) -> list[Harm]:
-    """Impact records of the interval and the matched impact of harmful hypotheses."""
-    items = {f.item for h in d.harmful() for f in h.with_status(MATCHED) if f.symptom.impact and f.item}
-    items |= {r for r in ev.records if r.kind == "impact" and inside(r, ev)}
+    """The matched impact of harmful hypotheses that shows someone was hurt,
+    and the impact records of the interval, except the host's own pressure
+    where a culprit's activity explains it (ADR 0065)."""
+    items = {i for h in d.harmful() for i in h.hurt}
+    items |= {r for r in ev.records if r.kind == "impact" and inside(r, ev) and r not in d.own}
     return [
         Harm(i.start, i.end) if isinstance(i, Record) else Harm(i.at, i.at)
         for i in sorted(items, key=lambda i: i.start if isinstance(i, Record) else i.at)
@@ -138,28 +147,62 @@ class Manager:
                 raise
             at = end
 
-    def step(self, conn: psycopg.Connection, host: Host, p: Params, since: datetime, until: datetime) -> None:
+    def replay(
+        self,
+        conn: psycopg.Connection,
+        host: Host,
+        p: Params,
+        replay_id: int,
+        since: datetime,
+        until: datetime,
+    ) -> int:
+        """Incidents over the records of a replay, in steps as the live loop
+        takes them while it keeps up; returns how many were opened."""
+        conn.execute("DELETE FROM incidents WHERE replay_id = %s", (replay_id,))
+        at = since
+        while at < until:
+            end = min(until, at + p.replay_incident_step)
+            self.step(conn, host, p, at, end, replay_id)
+            at = end
+        conn.execute(
+            "UPDATE incidents SET closed_at = greatest(last_harm_at, %s) WHERE replay_id = %s"
+            " AND closed_at IS NULL",
+            (until, replay_id),
+        )
+        conn.commit()
+        row = conn.execute("SELECT count(*) FROM incidents WHERE replay_id = %s", (replay_id,)).fetchone()
+        return row[0]
+
+    def step(
+        self,
+        conn: psycopg.Connection,
+        host: Host,
+        p: Params,
+        since: datetime,
+        until: datetime,
+        replay_id: int | None = None,
+    ) -> None:
         quiet = p.incident_quiet.total_seconds()
         found = conn.execute(
             "SELECT id, opened_at, last_harm_at FROM incidents"
-            " WHERE host_id = %s AND closed_at IS NULL AND replay_id IS NULL",
-            (host.id,),
+            " WHERE host_id = %s AND closed_at IS NULL AND replay_id IS NOT DISTINCT FROM %s",
+            (host.id, replay_id),
         ).fetchone()
         current = (found[0], Current(found[1].timestamp(), found[2].timestamp())) if found else None
         if current is None:
-            ev = gather.evidence(conn, host, self.base, since, until)
+            ev = gather.evidence(conn, host, self.base, since, until, replay_id)
             harm = harm_of(self.engine.diagnose(ev), ev)
-            step = advance(None, harm, until.timestamp(), self._last_harm(conn, host), quiet)
+            step = advance(None, harm, until.timestamp(), self._last_harm(conn, host, replay_id), quiet)
             if step.incident is None:
                 return
-            current = (self._open(conn, host, step.incident, ev), step.incident)
+            current = (self._open(conn, host, step.incident, replay_id), step.incident)
         while current is not None:
             incident_id, state = current
             opened = frame.from_ms(round(state.opened * 1000))
             if until <= opened:
                 # A step before the open incident began: nothing of it to judge.
                 return
-            ev = gather.evidence(conn, host, self.base, max(opened, until - MAX_SPAN), until)
+            ev = gather.evidence(conn, host, self.base, max(opened, until - MAX_SPAN), until, replay_id)
             d = self.engine.diagnose(ev)
             harm = harm_of(d, ev)
             step = advance(state, harm, until.timestamp(), None, quiet)
@@ -172,9 +215,10 @@ class Manager:
             self._hypotheses(conn, incident_id, d, seen_until)
             self._proposals(conn, host, p, incident_id, d, ev, seen_until)
             conn.execute(
-                "UPDATE anomalies SET incident_id = %s WHERE host_id = %s AND replay_id IS NULL"
-                " AND incident_id IS NULL AND started_at <= %s AND (ended_at IS NULL OR ended_at >= %s)",
-                (incident_id, host.id, seen_until, opened),
+                "UPDATE anomalies SET incident_id = %s WHERE host_id = %s"
+                " AND replay_id IS NOT DISTINCT FROM %s AND incident_id IS NULL AND started_at <= %s"
+                " AND (ended_at IS NULL OR ended_at >= %s)",
+                (incident_id, host.id, replay_id, seen_until, opened),
             )
             if step.closed_at is None:
                 return
@@ -183,21 +227,26 @@ class Manager:
                 "UPDATE proposals SET state = 'expired' WHERE incident_id = %s AND state = 'proposed'",
                 (incident_id,),
             )
-            log.info("incident %d of %s closed", incident_id, host.name)
+            if replay_id is None:
+                log.info("incident %d of %s closed", incident_id, host.name)
             # Harm after the quiet period opens the next incident in the same step.
             later = [h for h in harm if h.start > step.closed_at]
             nxt = advance(None, later, until.timestamp(), step.incident.last_harm, quiet)
-            current = (self._open(conn, host, nxt.incident, ev), nxt.incident) if nxt.incident else None
+            current = (
+                (self._open(conn, host, nxt.incident, replay_id), nxt.incident) if nxt.incident else None
+            )
 
     @staticmethod
-    def _last_harm(conn: psycopg.Connection, host: Host) -> float | None:
+    def _last_harm(conn: psycopg.Connection, host: Host, replay_id: int | None) -> float | None:
         row = conn.execute(
-            "SELECT max(last_harm_at) FROM incidents WHERE host_id = %s AND replay_id IS NULL", (host.id,)
+            "SELECT max(last_harm_at) FROM incidents"
+            " WHERE host_id = %s AND replay_id IS NOT DISTINCT FROM %s",
+            (host.id, replay_id),
         ).fetchone()
         return row[0].timestamp() if row and row[0] else None
 
     @staticmethod
-    def _open(conn: psycopg.Connection, host: Host, state: Current, ev: Evidence) -> int:
+    def _open(conn: psycopg.Connection, host: Host, state: Current, replay_id: int | None) -> int:
         opened = _at(state.opened)
         cls = conn.execute(
             "SELECT value FROM facts WHERE host_id = %s AND name = 'workload.class' AND entity = 'host'"
@@ -205,11 +254,12 @@ class Manager:
             (host.id, opened),
         ).fetchone()
         (incident_id,) = conn.execute(
-            "INSERT INTO incidents (host_id, opened_at, last_harm_at, workload_class)"
-            " VALUES (%s, %s, %s, %s) RETURNING id",
-            (host.id, opened, _at(state.last_harm), cls[0] if cls else None),
+            "INSERT INTO incidents (host_id, opened_at, last_harm_at, workload_class, replay_id)"
+            " VALUES (%s, %s, %s, %s, %s) RETURNING id",
+            (host.id, opened, _at(state.last_harm), cls[0] if cls else None, replay_id),
         ).fetchone()
-        log.info("incident %d of %s opened at %s", incident_id, host.name, opened)
+        if replay_id is None:
+            log.info("incident %d of %s opened at %s", incident_id, host.name, opened)
         return incident_id
 
     # Hypotheses
@@ -494,7 +544,8 @@ SUMMARY = (
     " (SELECT count(*) FROM hypotheses h WHERE h.incident_id = i.id),"
     " (SELECT count(*) FROM proposals p WHERE p.incident_id = i.id AND p.state = 'proposed')"
     " FROM incidents i LEFT JOIN LATERAL (SELECT cause, culprit, peak_confidence FROM hypotheses h"
-    "  WHERE h.incident_id = i.id AND h.harm ORDER BY h.peak_confidence DESC LIMIT 1) b ON true"
+    "  WHERE h.incident_id = i.id AND h.harm"
+    " ORDER BY h.rank IS NULL, h.peak_confidence DESC LIMIT 1) b ON true"
 )
 
 

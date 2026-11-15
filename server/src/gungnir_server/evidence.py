@@ -5,11 +5,15 @@ or from the database (`gather.evidence`); times are seconds, from the
 case's start or since the epoch.
 """
 
+import re
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass, field
 from functools import cached_property
 
 HOST = "host"
+# Waiting of the whole host: pressure counts every task and direct reclaim is
+# done by whoever allocates, the culprit's own among them.
+HOST_WAITING = re.compile(r"(cpu|mem|io)\.pressure_(some|full)_ratio|mem\.direct_reclaims_per_s")
 
 
 @dataclass(frozen=True)
@@ -28,6 +32,8 @@ class Record:
     score: float | None = None
     # The host's workload class when the record opened.
     workload_class: str | None = None
+    # The value that opened it.
+    value: float | None = None
 
 
 @dataclass(frozen=True)
@@ -114,6 +120,35 @@ def inside(item: Item, ev: Evidence) -> bool:
     """The item overlaps the interval asked about."""
     end = item.end if isinstance(item, Record) else at(item)
     return end is None or end >= ev.since
+
+
+def shows_harm(item: Item, culprit: str | None, ev: "Evidence", levels: dict[str, float]) -> bool:
+    """Whether a matched impact symptom of a hypothesis shows that someone
+    was hurt (ADR 0065):
+
+    - the host's own pressure counts every task, and direct reclaim is done
+      by whoever allocates, so beside a culprit they rise with the culprit's
+      own stalls and say nothing of the others; without one (heat, steal, a
+      failing disk) they are the harm;
+    - waiting above its usual level but under the noticeable impact level of
+      its resource is unusual, not harm (ADR 0059);
+    - a process caught waiting in one snapshot is what any I/O looks like: it
+      stands for harm only where the groups' pressure cannot be read.
+    """
+    if isinstance(item, SeenProcess):
+        return any(s.startswith("cgroup.") and "_pressure_" in s for s in ev.unobservable)
+    if not isinstance(item, Record):
+        return True
+    if culprit and is_host_waiting(item):
+        return False
+    # A group's pressure is judged by the level of its resource on the host.
+    host_signal = item.signal.removeprefix("cgroup.").replace("_", ".", 1)
+    level = levels.get(item.signal if item.entity == HOST else host_signal)
+    return item.kind == "impact" or level is None or item.value is None or item.value >= level
+
+
+def is_host_waiting(item: Item) -> bool:
+    return isinstance(item, Record) and item.entity == HOST and bool(HOST_WAITING.fullmatch(item.signal))
 
 
 def within(group: str, ancestor: str) -> bool:

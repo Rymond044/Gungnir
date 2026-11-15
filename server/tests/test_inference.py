@@ -338,3 +338,25 @@ def test_an_advisory_answers_impact_that_no_harmful_hypothesis_explains(engine):
     # Waiting above its usual level but under the impact levels is not harm (ADR 0059).
     assert engine.diagnose(ev(rec("cgroup.io_pressure_some_ratio", READER, 10))).advisories == ()
     assert engine.diagnose(ev(*copy())).advisories == ()
+
+
+def test_harm_is_the_others_waiting_at_a_noticeable_level():
+    from gungnir_server.evidence import Evidence, Record, SeenProcess, shows_harm
+
+    levels = {"io.pressure_some_ratio": 0.10, "cpu.pressure_some_ratio": 0.10}
+    ev = Evidence((), (), (), (), {}, {}, 0, 100, frozenset())
+
+    def rec(signal, entity, value, kind="anomaly"):
+        return Record("1", signal, entity, kind, "robust.mad", "up", 10, value=value)
+
+    # The host's pressure beside a culprit is the culprit's own; without one it is the harm.
+    assert not shows_harm(rec("cpu.pressure_some_ratio", "host", 0.5), WRITER, ev, levels)
+    assert shows_harm(rec("cpu.pressure_some_ratio", "host", 0.5), None, ev, levels)
+    # A group waiting more than usual but below the noticeable level is not hurt.
+    assert not shows_harm(rec("cgroup.io_pressure_some_ratio", READER, 0.04), WRITER, ev, levels)
+    assert shows_harm(rec("cgroup.io_pressure_some_ratio", READER, 0.13), WRITER, ev, levels)
+    # A process caught waiting stands for harm only where groups' pressure cannot be read.
+    caught = SeenProcess("waiting_on_io", "editor", 11, "D", READER, 10)
+    assert not shows_harm(caught, WRITER, ev, levels)
+    blind = Evidence((), (), (), (), {}, {}, 0, 100, frozenset({"cgroup.io_pressure_some_ratio"}))
+    assert shows_harm(caught, WRITER, blind, levels)

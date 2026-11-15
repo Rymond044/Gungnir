@@ -148,11 +148,17 @@ class Params:
     )
     penalty_alpha: float = 0.5
     hypothesis_cutoff: float = 0.3
+    # A group's pressure that began within this long of its own activity is
+    # its own waiting, not harm (ADR 0065); about the time detection takes
+    # to open a record.
+    own_waiting_within: timedelta = timedelta(seconds=30)
 
     # Incidents (ADRs 0015, 0060): an incident closes after this long without
     # harm; the incident manager catches up on detection in steps this long.
     incident_quiet: timedelta = timedelta(minutes=2)
     incident_step: timedelta = timedelta(minutes=15)
+    # A replay diagnoses as often as the live loop does while it keeps up.
+    replay_incident_step: timedelta = timedelta(seconds=10)
     # A proposal's parameter is taken from what the culprit used over this
     # long; an applied action is undone after rollback_after unless kept
     # (ADR 0007).

@@ -3,7 +3,8 @@
 `serve | migrate | maintain | process | status | host add|list|rotate-token |
 admin initial-password|reset-password |
 runs import|list|quiet | calibrate | workload show|unmatched|assign | baselines |
-anomalies | replay | evaluate | smd | knowledge check | diagnose`.
+anomalies | replay | evaluate | compare | smd | knowledge check | diagnose |
+proposals list|confirm|reject | actions`.
 """
 
 import argparse
@@ -16,13 +17,16 @@ from pathlib import Path
 import psycopg
 
 from gungnir_server import (
+    actions,
     anomalies,
     auth,
     base,
     baselines,
     capacity,
+    comparison,
     gather,
     hosts,
+    incidents,
     labels,
     maintenance,
     ontology,
@@ -125,6 +129,27 @@ def main() -> None:
     ev.add_argument("name")
     ev.add_argument("--out", type=Path, help="also write the table to this Markdown file")
 
+    cp = commands.add_parser(
+        "compare", help="thresholds, statistics and the hybrid by their alerts, over a replay of 'live'"
+    )
+    cp.add_argument("name")
+    cp.add_argument("--replay", type=int, help="this replay instead of the latest of 'live'")
+    cp.add_argument("--out", type=Path, help="also write the tables to this Markdown file")
+
+    pr = commands.add_parser("proposals", help="proposals of the open incident").add_subparsers(
+        dest="action", required=True
+    )
+    pr.add_parser("list", help="proposals waiting for a decision").add_argument("name")
+    for name in incidents.DECISIONS:
+        d = pr.add_parser(name, help=f"{name} a proposal, as an operator on the server's machine")
+        d.add_argument("name")
+        d.add_argument("proposal", type=int)
+        d.add_argument("--by", required=True, help="who decides, written to the action log")
+
+    ac = commands.add_parser("actions", help="actions of the last hours: state, outcome, who confirmed")
+    ac.add_argument("name")
+    ac.add_argument("--hours", type=float, default=24)
+
     sm = commands.add_parser("smd", help="robust branch and forest on the Server Machine Dataset")
     sm.add_argument("root", type=Path, help="the dataset's directory: train/, test/, test_label/, ...")
     sm.add_argument("--machine", action="append", help="only these machines")
@@ -191,6 +216,12 @@ def main() -> None:
             run_replays(conn, args)
         elif args.command == "evaluate":
             run_evaluation(conn, args)
+        elif args.command == "compare":
+            run_comparison(conn, args)
+        elif args.command == "proposals":
+            run_proposals(conn, args)
+        elif args.command == "actions":
+            show_actions(conn, args)
         elif args.command == "anomalies":
             show_anomalies(conn, args)
         elif args.command == "diagnose":
@@ -327,6 +358,53 @@ def run_replays(conn: psycopg.Connection, args) -> None:
         replay_id, written = replay.replay(conn, host, variant, since, until, p)
         span = f"{since:%Y-%m-%d %H:%M} to {until:%Y-%m-%d %H:%M} UTC"
         print(f"replay {replay_id}: {variant}, {written} records, {span}")
+        if variant == "live":
+            kb = base.load()
+            manager = incidents.Manager(kb, RuleEngine(kb, p))
+            opened = manager.replay(conn, host, p, replay_id, since, until)
+            print(f"replay {replay_id}: {opened} incidents")
+
+
+def run_comparison(conn: psycopg.Connection, args) -> None:
+    host = need_host(conn, args.name)
+    replay_id = args.replay or replay.latest_replays(conn, host).get("live")
+    if replay_id is None:
+        sys.exit("no replay of 'live' yet: run `gungnir-server replay <host> live` first")
+    c = comparison.compare(conn, host, replay_id, params.load())
+    span = f"{c.since:%Y-%m-%d %H:%M} to {c.until:%Y-%m-%d %H:%M} UTC"
+    report = f"# Alerts on {host.name}, replay {replay_id}, {span}\n\n{comparison.table(c)}\n"
+    for name in comparison.APPROACHES:
+        if missed := c.scores[name].missed:
+            report += f"\nMissed by {name}: {', '.join(missed)}\n"
+    if wrong := c.scores["hybrid"].wrong:
+        report += "\nCause not first (top three given):\n\n" + "".join(f"- {w}\n" for w in wrong)
+    print(report)
+    if args.out:
+        args.out.write_text(report)
+
+
+def run_proposals(conn: psycopg.Connection, args) -> None:
+    host = need_host(conn, args.name)
+    found = incidents.open_summary(conn, host)
+    if found is None:
+        sys.exit(f"no open incident on '{host.name}'")
+    incident = incidents.one(conn, host, found.id)
+    assert incident is not None
+    if args.action == "list":
+        for pr in incident.proposals:
+            if pr.state == "proposed":
+                value = pr.parameter.get("value")
+                print(f"{pr.id}\tincident {found.id}\t{pr.action}\t{pr.target}\t{value}")
+        return
+    now = datetime.now(UTC)
+    try:
+        with conn.transaction():
+            incidents.decide(conn, host, found.id, args.proposal, args.action, args.by, now)
+            if args.action == "confirm":
+                actions.queue(conn, base.load(), params.load(), host, args.proposal, args.by, now)
+    except (incidents.Refused, actions.Refused) as e:
+        sys.exit(str(e))
+    print(f"proposal {args.proposal}: {incidents.DECISIONS[args.action]} by {args.by}")
 
 
 def run_evaluation(conn: psycopg.Connection, args) -> None:
@@ -345,6 +423,19 @@ def run_evaluation(conn: psycopg.Connection, args) -> None:
     print(report)
     if args.out:
         args.out.write_text(report)
+
+
+def show_actions(conn: psycopg.Connection, args) -> None:
+    host = need_host(conn, args.name)
+    now = datetime.now(UTC)
+    zone = host_zone(hosts.summary(conn, host.name))
+    for a in reversed(actions.history(conn, host, now - timedelta(hours=args.hours), now)):
+        value = a.value if a.value is not None else f"share {a.share}"
+        applied = stamp(a.applied_at, zone) if a.applied_at else "-"
+        print(
+            f"{a.id}\tincident {a.incident_id}\t{a.cause}\t{a.action} {value}\t{a.target}\t{a.state}"
+            f"\t{a.outcome or '-'}\tby {a.confirmed_by}\tapplied {applied}\t{a.reason or ''}".rstrip()
+        )
 
 
 def show_anomalies(conn: psycopg.Connection, args) -> None:

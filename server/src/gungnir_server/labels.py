@@ -8,6 +8,11 @@ one JSON object per phase to `scenarios/runs/<time>-<kind>.jsonl`:
      "expected": ["cpu.user_ratio"], "scope": "gungnir-cal-cpu-50",
      "command": "stress-ng --cpu 9 --timeout 60s"}
 
+A fault scenario (slice S9) also says what the phase should give: `cause`,
+the root cause the inference engine should name (null where none applies),
+and `harm`, whether someone is hurt so that an incident should open; `scope`
+is then the culprit's.
+
 Import stores the phases and keeps the raw samples of the whole run past
 retention. Phases not marked normal stay out of baselines and training, with
 a tail after each phase for the load to fade.
@@ -41,6 +46,8 @@ class PhaseLabel(BaseModel):
     expected: list[SignalName] = []
     scope: Annotated[str | None, Field(max_length=255)] = None
     command: Annotated[str | None, Field(max_length=2000)] = None
+    cause: Label | None = None
+    harm: bool | None = None
 
     @model_validator(mode="after")
     def ordered(self):
@@ -65,10 +72,11 @@ def import_phases(conn: psycopg.Connection, host: Host, phases: list[PhaseLabel]
         for p in phases:
             conn.execute(
                 "INSERT INTO labeled_runs (host_id, run, kind, phase, since, until, normal, expected,"
-                " scope, command) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                " scope, command, cause, harm) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
                 " ON CONFLICT (host_id, run, phase) DO UPDATE SET kind = EXCLUDED.kind,"
                 " since = EXCLUDED.since, until = EXCLUDED.until, normal = EXCLUDED.normal,"
-                " expected = EXCLUDED.expected, scope = EXCLUDED.scope, command = EXCLUDED.command",
+                " expected = EXCLUDED.expected, scope = EXCLUDED.scope, command = EXCLUDED.command,"
+                " cause = EXCLUDED.cause, harm = EXCLUDED.harm",
                 (
                     host.id,
                     p.run,
@@ -80,6 +88,8 @@ def import_phases(conn: psycopg.Connection, host: Host, phases: list[PhaseLabel]
                     p.expected,
                     p.scope,
                     p.command,
+                    p.cause,
+                    p.harm,
                 ),
             )
         for run in sorted({p.run for p in phases}):
@@ -104,6 +114,8 @@ class Phase:
     normal: bool
     expected: list[str]
     scope: str | None
+    cause: str | None = None
+    harm: bool | None = None
 
 
 def phases_of(
@@ -114,7 +126,7 @@ def phases_of(
     run: str | None = None,
 ) -> list[Phase]:
     rows = conn.execute(
-        "SELECT run, kind, phase, since, until, normal, expected, scope FROM labeled_runs"
+        "SELECT run, kind, phase, since, until, normal, expected, scope, cause, harm FROM labeled_runs"
         " WHERE host_id = %(h)s AND (%(run)s::text IS NULL OR run = %(run)s)"
         " AND (%(until)s::timestamptz IS NULL OR since < %(until)s)"
         " AND (%(since)s::timestamptz IS NULL OR until > %(since)s - interval '1 hour')"

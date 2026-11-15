@@ -41,20 +41,35 @@ def test_harm_that_ended_long_ago_opens_and_closes_in_one_step():
 START = datetime(2026, 11, 13, 9, 0, tzinfo=UTC)
 
 
-def record(conn, host, signal, entity, at_s, end_s=None, kind="anomaly", context=None):
+def record(
+    conn,
+    host,
+    signal,
+    entity,
+    at_s,
+    end_s=None,
+    kind="anomaly",
+    context=None,
+    replay_id=None,
+    detector=None,
+    direction="up",
+):
     ids = SeriesIds().resolve(conn, host.id, {(signal, entity)})
     conn.execute(
         "INSERT INTO anomalies (host_id, series_id, kind, detector, level, started_at, ended_at,"
-        " direction, peak_score, baseline, context)"
-        " VALUES (%s, %s, %s, 'robust.mad', %s, %s, %s, 'up', 9, '{}', %s)",
+        " direction, peak_score, baseline, context, replay_id)"
+        " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 9, '{}', %s, %s)",
         (
             host.id,
             ids[(signal, entity)],
             kind,
+            detector or ("impact" if kind == "impact" else "robust.mad"),
             "noticeable" if kind == "impact" else None,
             START + timedelta(seconds=at_s),
             None if end_s is None else START + timedelta(seconds=end_s),
+            direction,
             Jsonb(context) if context else None,
+            replay_id,
         ),
     )
 
@@ -155,3 +170,51 @@ def test_a_parameter_is_taken_while_the_culprit_was_active_and_is_never_zero(con
     # Long after it stopped there is nothing to take a share of.
     later = (START + timedelta(seconds=600), START + timedelta(seconds=700))
     assert incidents.consumption(conn, host, P, WRITER, "cgroup.write_bytes_per_s", later) is None
+
+
+def test_a_replay_has_incidents_of_its_own_records_only(conn, manager):
+    host = seed.add_host(conn)
+    (replay_id,) = conn.execute(
+        "INSERT INTO replays (host_id, variant, since, until, params) VALUES (%s, 'live', %s, %s, '{}')"
+        " RETURNING id",
+        (host.id, START, START + timedelta(minutes=10)),
+    ).fetchone()
+    for at, end, signal, entity, extra in (
+        (100, 170, "cgroup.write_bytes_per_s", WRITER, None),
+        (105, 170, "disk.write_bytes_per_s", DISK, {"disk.write_request_bytes": 131072}),
+        (110, 170, "cgroup.io_pressure_some_ratio", READER, None),
+    ):
+        record(conn, host, signal, entity, at, end, context=extra, replay_id=replay_id)
+    # A live record of the same time is not the replay's evidence.
+    record(conn, host, "cgroup.io_pressure_some_ratio", READER, 400, 450, kind="impact")
+    conn.commit()
+    assert manager.replay(conn, host, P, replay_id, START, START + timedelta(minutes=10)) == 1
+    [(opened, closed, cause)] = conn.execute(
+        "SELECT i.opened_at, i.closed_at, h.cause FROM incidents i JOIN hypotheses h ON h.incident_id = i.id"
+        " WHERE i.replay_id = %s AND h.rank = 1",
+        (replay_id,),
+    ).fetchall()
+    assert opened == START + timedelta(seconds=110) and closed == START + timedelta(seconds=170 + QUIET)
+    assert cause == "bulk_sequential_writer"
+    assert incidents.summaries(conn, host, START, START + timedelta(hours=1)) == []
+    # Replaying again replaces its incidents.
+    assert manager.replay(conn, host, P, replay_id, START, START + timedelta(minutes=10)) == 1
+
+
+def test_the_hosts_own_pressure_beside_a_culprit_is_not_harm(conn, manager):
+    host = seed.add_host(conn)
+    # A fork storm: the host waits for CPU, but only the storm's own threads do.
+    record(conn, host, "cgroup.cpu_cores", WRITER, 100, 170)
+    record(conn, host, "cpu.idle_ratio", "host", 102, 170, direction="down")
+    record(conn, host, "cpu.pressure_some_ratio", "host", 105, 170, kind="impact")
+    # Its group waits for what it overloads, from the moment it starts.
+    record(conn, host, "cgroup.cpu_pressure_some_ratio", WRITER, 105, 170, kind="impact")
+    detected_until(conn, host, 400)
+    manager(conn, host, P, START)
+    assert incidents.summaries(conn, host, START - timedelta(hours=1), START + timedelta(hours=1)) == []
+    # Another program waiting in its own group is.
+    record(conn, host, "cgroup.cpu_pressure_some_ratio", READER, 110, 170, kind="impact")
+    conn.execute("UPDATE incident_state SET at = %s WHERE host_id = %s", (START, host.id))
+    manager(conn, host, P, START)
+    [found] = incidents.summaries(conn, host, START - timedelta(hours=1), START + timedelta(hours=1))
+    assert found.cause == "cpu_hog" and found.culprit == WRITER

@@ -11,7 +11,6 @@ is still hurt; one that failed is reverted at once. Every step goes to
 """
 
 import logging
-import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -20,7 +19,7 @@ from psycopg.types.json import Jsonb
 
 from gungnir_server import frame, gather
 from gungnir_server.base import Base
-from gungnir_server.evidence import Record, inside
+from gungnir_server.evidence import Record, inside, is_host_waiting
 from gungnir_server.hosts import Host
 from gungnir_server.inference import MATCHED, InferenceEngine
 from gungnir_server.ingest import ActionEntry
@@ -33,8 +32,6 @@ log = logging.getLogger(__name__)
 READS_ITSELF = {"memory_high", "cpu_weight"}
 # Harm in this long before the action and at the end of its window counts.
 TAIL = timedelta(seconds=30)
-# Pressure of the whole host: it counts every task, the target among them.
-HOST_PRESSURE = re.compile(r"(cpu|mem|io)\.pressure_(some|full)_ratio")
 # A queued action the host has not answered for this long is given up.
 UNANSWERED = timedelta(minutes=5)
 
@@ -249,8 +246,8 @@ class Verifier:
     ) -> list[str]:
         """Who other than the target and its children was hurt in the
         interval: impact records and the impact symptoms of harmful
-        hypotheses (the harm of ADR 0060). The host's own pressure is left
-        out: it counts the target's stalls too, which a limit causes on
+        hypotheses (the harm of ADRs 0060, 0065). The host's own pressure is
+        not harm: it counts the target's stalls too, which a limit causes on
         purpose, while the others' waiting shows in their own groups."""
         ev = gather.evidence(conn, host, self.base, since, until)
         d = self.engine.diagnose(ev)
@@ -263,7 +260,7 @@ class Verifier:
             and inside(r, ev)
             and r.entity != target
             and not r.entity.startswith(target + "/")
-            and not (r.entity == "host" and HOST_PRESSURE.fullmatch(r.signal))
+            and not is_host_waiting(r)
         )
 
 

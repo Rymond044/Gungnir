@@ -130,6 +130,29 @@ cd server && uv run gungnir-server smd ~/datasets/OmniAnomaly/ServerMachineDatas
 cd server && uv run gungnir-server smd ~/datasets/OmniAnomaly/ServerMachineDataset --machine machine-1-1
 ```
 
+### Fault scenarios and the three approaches (S9)
+
+```sh
+scenarios/suite.sh laptop --pilot          # one pass at middle intensity, about 70 min; leave the laptop alone
+scenarios/suite.sh laptop                  # five passes, intensity low, middle, high, about 6 h (a night)
+scenarios/suite.sh laptop --level 2 cpu_hog writeback_storm    # some scenarios at one intensity
+scenarios/actions.sh laptop                # cpu_hog, writeback_storm, two_hogs: a proposal confirmed by the script, about 25 min
+scenarios/leak.sh laptop                   # С-1: a slow leak, 4-6 h, the proposal confirmed by the script
+server replay laptop live --since <first phase> --until <last phase + 5 min>    # also replays incidents
+server compare laptop                      # alerts of thresholds, statistics and the hybrid; causes of the hybrid
+cd server && uv run gungnir-server compare laptop --out ../scenarios/runs/$(date -u +%Y%m%dT%H%M%SZ)-comparison.md
+```
+
+Each phase's label says the cause and whether someone was hurt: the script measures the victim's own stall (pressure counters of its scope) and calls it harm from 0.10 on; a group held by its own limit is hurt by construction. `runs/<run>.harm.tsv` keeps the measured shares. A phase that hurt nobody should raise no alert; one that did should raise one, and the hybrid should name its cause and culprit. Raw samples live three days: replay within them, and dump the database after a night run.
+
+Proposals and actions from the server's machine (the scenario scripts use these):
+
+```sh
+server proposals list laptop                                # waiting proposals of the open incident
+server proposals confirm laptop <id> --by "<who>"           # or reject; written to the action log
+server actions laptop --hours 6                             # state, outcome, who confirmed
+```
+
 Variants: `thresholds`, `robust-host`, `robust-classes`, `iforest`, `robust-classes+iforest`, `impact`. Table columns: phases found (a record of an expected signal overlaps the phase), opened inside (that record started inside the phase), recall, median delay, false alarms per hour outside phases, false alarms per hour on quiet intervals.
 
 ### Trying other parameters

@@ -76,7 +76,7 @@ def evidence(
 def _records(conn, host, early, until, replay_id, known) -> tuple[list[Record], list[Value]]:
     rows = conn.execute(
         "SELECT a.id, s.signal, s.entity, a.kind, a.detector, a.direction, a.started_at, a.ended_at,"
-        " a.level, a.peak_score, a.workload_class, a.context FROM anomalies a"
+        " a.level, a.peak_score, a.workload_class, a.context, a.value FROM anomalies a"
         " JOIN series s ON s.id = a.series_id"
         " WHERE a.host_id = %(h)s AND a.replay_id IS NOT DISTINCT FROM %(r)s"
         " AND a.started_at <= %(until)s AND (a.ended_at IS NULL OR a.ended_at >= %(early)s)"
@@ -84,7 +84,7 @@ def _records(conn, host, early, until, replay_id, known) -> tuple[list[Record], 
         {"h": host.id, "r": replay_id, "until": until, "early": early},
     ).fetchall()
     records, values = [], []
-    for rid, signal, entity, kind, detector, direction, start, end, level, score, cls, context in rows:
+    for rid, signal, entity, kind, detector, direction, start, end, level, score, cls, context, value in rows:
         if signal not in known:
             continue
         record = Record(
@@ -99,11 +99,12 @@ def _records(conn, host, early, until, replay_id, known) -> tuple[list[Record], 
             level,
             score,
             cls,
+            value,
         )
         records.append(record)
-        for name, value in (context or {}).items():
+        for name, attached in (context or {}).items():
             if name in known:
-                values.append(Value(name, entity, value, record.start, record.id))
+                values.append(Value(name, entity, attached, record.start, record.id))
     return records, values
 
 

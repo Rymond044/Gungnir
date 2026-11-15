@@ -189,6 +189,42 @@ direction = "up"
 at = 10
 
 [[case]]
+name = "a unit at its MemoryHigh reads its pages back from swap"
+expect = "group_memory_throttled"
+not = ["bulk_reader"]
+provenance = { source = "admin-guide/cgroup-v2 memory.high; S9 pilot 20261115T145738Z group_memory_throttled", grade = "measured" }
+
+[[case.record]]
+signal = "cgroup.mem_high_events"
+role = "culprit"
+direction = "up"
+at = 0
+
+[[case.record]]
+signal = "cgroup.mem_pressure_some_ratio"
+role = "culprit"
+direction = "up"
+at = 5
+
+[[case.record]]
+signal = "cgroup.read_bytes_per_s"
+role = "culprit"
+direction = "up"
+at = 5
+
+[[case.record]]
+signal = "disk.read_bytes_per_s"
+role = "device"
+direction = "up"
+at = 5
+
+[[case.record]]
+signal = "cgroup.io_pressure_some_ratio"
+role = "others"
+direction = "up"
+at = 10
+
+[[case]]
 name = "an archive unpacked into /tmp fills memory"
 expect = "tmpfs_growth"
 not = ["memory_hog", "kernel_memory_growth"]
