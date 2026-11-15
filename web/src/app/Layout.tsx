@@ -63,7 +63,7 @@ export default function Layout() {
             {open > 0 && (
               <span
                 className={`${styles.badge} ${o?.open.impact ? '' : styles.badgeQuiet}`}
-                title="открытые аномалии и записи влияния"
+                title="открытые аномалии и записи вреда"
               >
                 {open}
               </span>

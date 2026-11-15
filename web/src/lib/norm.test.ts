@@ -45,7 +45,7 @@ it('draws the band only where the class has a baseline', () => {
 })
 
 it('names limits by their kind and level', () => {
-  expect(limitLines(norm)).toEqual([{ value: 0.1, label: 'влияние: заметное', color: 'var(--red)' }])
+  expect(limitLines(norm)).toEqual([{ value: 0.1, label: 'вред', color: 'var(--red)' }])
 })
 
 it('drops the cold-start limit once a baseline judges the series', () => {

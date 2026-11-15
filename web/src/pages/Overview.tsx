@@ -152,16 +152,16 @@ function OpenStatus({
   const dot = impact > 0 ? 'var(--red)' : anomalies > 0 ? 'var(--ochre)' : 'var(--green)'
   const title =
     impact > 0
-      ? `Влияние: программы ждут ресурсы (${impact})`
+      ? `Вред: программы ждут ресурсы (${impact})`
       : anomalies > 0
-        ? 'Необычное поведение без влияния'
+        ? 'Необычное поведение без вреда'
         : 'Всё спокойно'
   const sub =
     total === 0
       ? 'Открытых аномалий нет; программам хватает ресурсов.'
       : `Открыто: ${anomalies} ${plural(anomalies, 'аномалия', 'аномалии', 'аномалий')}` +
         (expected ? `, из них ожидаемых ${expected}` : '') +
-        `, записей влияния ${impact}.`
+        `, записей вреда ${impact}.`
   const rows = [...(open.data ?? [])].sort(
     (a, b) => (b.kind === 'impact' ? 1 : 0) - (a.kind === 'impact' ? 1 : 0) || b.peak_score - a.peak_score,
   )

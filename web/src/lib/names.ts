@@ -261,13 +261,13 @@ export const detectorNames: Record<string, string> = {
   'robust.mad': 'отклонение от нормы',
   'robust.ewma': 'дрейф от нормы (EWMA)',
   iforest: 'Isolation Forest',
-  impact: 'влияние',
+  impact: 'вред',
   growth: 'устойчивый рост',
 }
 
 export const kindNames: Record<string, string> = {
   anomaly: 'аномалия',
-  impact: 'влияние',
+  impact: 'вред',
 }
 
 export const levelNames: Record<string, string> = {

@@ -4,7 +4,6 @@
 import type { Norm } from '../api/types'
 import type { BandSegment, LimitLine, Step } from '../components/Chart'
 import { ms } from './format'
-import { levelNames } from './names'
 
 export function bandSegments(norm: Norm | undefined): BandSegment[] {
   if (!norm) return []
@@ -30,8 +29,7 @@ export function limitLines(norm: Norm | undefined): LimitLine[] {
     .filter((l) => !(judged && l.kind === 'cold start'))
     .map((l) => {
       const value = (l.above ?? l.below) as number
-      if (l.kind === 'impact')
-        return { value, label: `влияние: ${levelNames[l.level ?? ''] ?? l.level}`, color: 'var(--red)' }
+      if (l.kind === 'impact') return { value, label: 'вред', color: 'var(--red)' }
       if (l.kind === 'threshold') return { value, label: 'порог', color: 'var(--ochre)' }
       return { value, label: 'холодный старт', color: 'var(--faint)' }
     })

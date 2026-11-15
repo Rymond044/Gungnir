@@ -46,7 +46,7 @@ export default function Anomalies() {
       <div className={ui.head}>
         <h1>Журнал аномалий</h1>
         <span className="muted">
-          записи детекции: необычное поведение (аномалия) и ожидание ресурсов программами (влияние)
+          записи детекции: необычное поведение (аномалия) и ожидание ресурсов программами (вред)
         </span>
       </div>
       <div className={ui.head}>
@@ -67,7 +67,7 @@ export default function Anomalies() {
           options={[
             { value: 'any', label: 'Все' },
             { value: 'anomaly', label: 'Аномалии' },
-            { value: 'impact', label: 'Влияние' },
+            { value: 'impact', label: 'Вред' },
           ]}
           value={kind}
           onChange={(v) => set('kind', v, 'any')}
@@ -161,7 +161,7 @@ export default function Anomalies() {
       </Panel>
       <span className="muted" style={{ fontSize: 13 }}>
         {kindNames.anomaly}: значение необычно для этого хоста в текущем типе нагрузки. {kindNames.impact}:
-        программы ждут CPU, память или диск дольше допустимого; влияние открывает инцидент даже при ожидаемом
+        программы ждут CPU, память или диск дольше допустимого; вред открывает инцидент даже при ожидаемом
         поведении.
       </span>
     </div>

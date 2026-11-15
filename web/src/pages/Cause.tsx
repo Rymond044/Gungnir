@@ -240,7 +240,7 @@ function SymptomRow({ s, pos }: { s: RuleSymptom; pos: (t: number) => string }) 
           <span>{symptomNames(s.kind, s.names)}</span>
           <Chip tone={TONE[s.strength]}>{strengthNames[s.strength]}</Chip>
           {s.leading && <Chip tone="ochre">ведущий</Chip>}
-          {s.impact && <Chip tone="red">влияние</Chip>}
+          {s.impact && <Chip tone="red">вред</Chip>}
         </span>
         <span className="muted" style={{ fontSize: 12.5 }}>
           {symptomKindNames[s.kind]} на: {roleNames[s.role] ?? s.role} · {symptomWindow(w)}

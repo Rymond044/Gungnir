@@ -44,7 +44,7 @@ function explanation(r: RecordRow): string {
     case 'threshold':
       return 'Значение пересекло фиксированный порог (пунктир).'
     case 'impact':
-      return 'Программы ждали ресурс дольше допустимого уровня влияния (пунктир).'
+      return 'Программы ждали ресурс дольше допустимого уровня вреда (пунктир).'
     case 'iforest':
       return 'Isolation Forest счёл необычным сочетание нескольких метрик за последнюю минуту.'
     default:

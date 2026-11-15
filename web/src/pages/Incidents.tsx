@@ -92,7 +92,7 @@ export default function Incidents() {
                           )}
                         </>
                       ) : (
-                        <span className="muted">причина не найдена, есть записи влияния</span>
+                        <span className="muted">причина не найдена, есть записи вреда</span>
                       )}
                     </td>
                     <td className="mono">{i.confidence === null ? '—' : confidence(i.confidence)}</td>

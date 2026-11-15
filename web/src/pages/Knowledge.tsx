@@ -17,7 +17,6 @@ import {
   eventNames,
   factNames,
   gradeNames,
-  levelNames,
   likelihoodNames,
   named,
   processNames,
@@ -224,7 +223,7 @@ function Signals({ k }: { k: KB }) {
                     <div>
                       <Key>{s.name}</Key>
                     </div>
-                    {s.impact && <Chip tone="red">измеряет влияние</Chip>}
+                    {s.impact && <Chip tone="red">измеряет вред</Chip>}
                   </td>
                   <td>
                     {named(resourceNames, s.resource)}
@@ -435,7 +434,7 @@ function Expected({ k }: { k: KB }) {
     <div className={ui.page}>
       <Panel
         title="Ожидаемое поведение"
-        aside="необычное, которое объясняет тип нагрузки; влияние никогда не ожидаемое"
+        aside="необычное, которое объясняет тип нагрузки; вред никогда не ожидаемый"
       >
         <table>
           <tbody>
@@ -479,7 +478,7 @@ function Expected({ k }: { k: KB }) {
 
 function Limits({ k }: { k: KB }) {
   return (
-    <Panel title="Пороги и уровни влияния" aside="фиксированные пределы детекции">
+    <Panel title="Пороги и уровни вреда" aside="фиксированные пределы детекции">
       <table>
         <thead>
           <tr>
@@ -492,13 +491,7 @@ function Limits({ k }: { k: KB }) {
         <tbody>
           {k.limits.map((l, i) => (
             <tr key={i}>
-              <td>
-                {l.kind === 'impact' ? (
-                  <Chip tone="red">влияние: {levelNames[l.level ?? ''] ?? l.level}</Chip>
-                ) : (
-                  <Chip tone="ochre">порог</Chip>
-                )}
-              </td>
+              <td>{l.kind === 'impact' ? <Chip tone="red">вред</Chip> : <Chip tone="ochre">порог</Chip>}</td>
               <td>
                 {named(signalNames, l.signal)}
                 <div>

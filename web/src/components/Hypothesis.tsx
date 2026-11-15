@@ -69,7 +69,7 @@ export function Symptom({ s, host, offset }: { s: FoundSymptom; host: string; of
           </span>
           <Chip tone={STRENGTH_TONE[s.strength]}>{strengthNames[s.strength]}</Chip>
           {s.leading && <Chip tone="ochre">ведущий</Chip>}
-          {s.impact && <Chip tone="red">влияние</Chip>}
+          {s.impact && <Chip tone="red">вред</Chip>}
         </div>
         <span className={styles.faint} style={{ fontSize: 12.5 }}>
           на: {roleNames[s.role] ?? s.role} · {symptomWindow(s.window)} · <Key>{s.names.join(' | ')}</Key>

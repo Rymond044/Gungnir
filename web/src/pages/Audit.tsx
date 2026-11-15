@@ -562,13 +562,11 @@ function Open({
         {s.harm ? (
           <span>
             {hurtBy.length > 0
-              ? `записи влияния: ${hurtBy.map((r) => named(signalNames, r.signal)).join(', ')}`
+              ? `записи вреда: ${hurtBy.map((r) => named(signalNames, r.signal)).join(', ')}`
               : 'программы ждали ресурса дольше обычного'}
           </span>
         ) : s.waiting ? (
-          <span className="muted">
-            ожидание ресурса выше обычного, но ниже уровня влияния: вредом не считается
-          </span>
+          <span className="muted">ожидание ресурса выше обычного, но ниже порога вреда</span>
         ) : (
           <span className="muted">никому не мешало</span>
         )}
@@ -605,9 +603,9 @@ function nearReason(h: NonNullable<OpenStretch['near']>): string {
     case 'contradicted':
       return 'нашёлся противоречащий симптом'
     case 'only impact':
-      return 'видно только влияние, без признаков самой причины'
+      return 'виден только вред, без признаков самой причины'
     case 'no impact':
-      return 'без ведущего симптома и без влияния'
+      return 'без ведущего симптома и без вреда'
     case 'below cut-off':
       return `уверенность ${confidence(h.confidence)} ниже порога`
     default:
