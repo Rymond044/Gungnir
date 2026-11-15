@@ -52,10 +52,6 @@ export default function Login() {
           Войти
         </button>
         {error !== null && <Failure error={error} />}
-        <span className={styles.hint}>
-          Первый пароль показан только на машине сервера:{' '}
-          <span className="mono">gungnir-server admin initial-password</span>
-        </span>
       </form>
     </div>
   )

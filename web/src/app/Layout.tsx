@@ -41,8 +41,15 @@ export default function Layout() {
             <IncidentIcon />
             Инциденты
             {o?.incident && (
-              <span className={styles.badge} title="открыт инцидент; в скобках — предложения, ждущие решения">
-                {o.incident.waiting > 0 ? `${o.incident.id} (${o.incident.waiting})` : o.incident.id}
+              <span
+                className={styles.badge}
+                title={
+                  o.incident.waiting > 0
+                    ? `открыт инцидент ${o.incident.id}; предложений ждут решения: ${o.incident.waiting}`
+                    : `открыт инцидент ${o.incident.id}`
+                }
+              >
+                {o.incident.waiting > 0 ? `ждут: ${o.incident.waiting}` : 'открыт'}
               </span>
             )}
           </NavLink>

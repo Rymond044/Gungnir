@@ -103,7 +103,7 @@ export default function Metric() {
         ) : (
           <table className={ui.fixed}>
             <colgroup>
-              <col style={{ width: 130 }} />
+              <col style={{ width: 170 }} />
               <col style={{ width: 150 }} />
               <col />
               <col style={{ width: 150 }} />

@@ -19,6 +19,8 @@ import numpy as np
 
 from gungnir_server.params import Params
 
+MAX_SCORE = 1e9
+
 
 @dataclass(frozen=True)
 class RecordSpec:
@@ -125,7 +127,9 @@ class Tracker:
                     if current["missing"] >= p.stale_after:
                         events.append(self._close(ev.key, track, current["last_hit"] + step_ms))
                 continue
-            score = float(ev.scores[i])
+            # A "below" limit met by zero scores infinity, which the state's
+            # JSON cannot hold; anything this large reads ">999" anyway.
+            score = min(float(ev.scores[i]), MAX_SCORE)
             if ev.flags[i]:
                 if current:
                     current.update(last_hit=t, normals=0, missing=0, peak=max(current["peak"], score))

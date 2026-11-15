@@ -101,9 +101,9 @@ export default function Anomalies() {
           <Empty>{show === 'open' ? 'Открытых записей нет.' : 'За период записей нет.'}</Empty>
         ) : (
           <div className={ui.scroll}>
-            <table className={ui.fixed} style={{ minWidth: 980 }}>
+            <table className={ui.fixed} style={{ minWidth: 1040 }}>
               <colgroup>
-                <col style={{ width: 110 }} />
+                <col style={{ width: 170 }} />
                 <col />
                 <col style={{ width: 170 }} />
                 <col style={{ width: 140 }} />

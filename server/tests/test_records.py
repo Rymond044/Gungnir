@@ -1,6 +1,8 @@
+import json
+
 import numpy as np
 
-from gungnir_server.detection.records import Closed, Evaluation, Opened, RecordSpec, Tracker
+from gungnir_server.detection.records import MAX_SCORE, Closed, Evaluation, Opened, RecordSpec, Tracker
 from gungnir_server.params import Params
 
 P = Params()
@@ -31,6 +33,13 @@ def test_three_in_a_row_open_and_three_normal_close():
     assert isinstance(closed, Closed) and closed.ended_ms == 35000
     assert closed.token == opened.token
     assert t.tracks == {}
+
+
+def test_an_infinite_score_is_kept_as_a_number_json_can_hold():
+    t = Tracker(P)
+    [opened] = t.feed(ev([1, 1, 1], scores=[np.inf] * 3))
+    assert opened.score == MAX_SCORE
+    json.dumps(t.to_json(), allow_nan=False)
 
 
 def test_two_hits_open_nothing():

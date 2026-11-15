@@ -356,7 +356,7 @@ function Records({
         <table className={ui.fixed}>
           <colgroup>
             <col style={{ width: 150 }} />
-            <col style={{ width: 130 }} />
+            <col style={{ width: 170 }} />
             <col />
             <col style={{ width: 120 }} />
           </colgroup>

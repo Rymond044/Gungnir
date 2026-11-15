@@ -40,10 +40,7 @@ export default function Password() {
   return (
     <div className={styles.screen}>
       <form className={styles.form} onSubmit={submit}>
-        <span className={styles.brand}>Смена пароля</span>
-        {me.data?.must_change && (
-          <span className={styles.hint}>Начальный пароль нужно сменить, прежде чем работать дальше.</span>
-        )}
+        <span className={styles.brand}>{me.data?.must_change ? 'Задайте свой пароль' : 'Смена пароля'}</span>
         <label>
           Текущий пароль
           <input
@@ -56,7 +53,7 @@ export default function Password() {
           />
         </label>
         <label>
-          Новый пароль, не короче {MIN_LENGTH} символов
+          Новый пароль
           <input
             type="password"
             value={fresh}
@@ -67,7 +64,7 @@ export default function Password() {
           />
         </label>
         <label>
-          Ещё раз
+          Повтор
           <input
             type="password"
             value={again}
