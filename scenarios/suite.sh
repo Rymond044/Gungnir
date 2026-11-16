@@ -102,7 +102,11 @@ phase() {
         i=$((i + 1))
     fi
     culprit=("${args[@]:$i}")
-    local unit=gungnir-sc-$name victim_unit=gungnir-sc-victim-$name vpid=
+    # Each pass is a program of its own: a scope's baseline is its own
+    # history, and a name used by an earlier pass would read its load as
+    # usual (night run 20261115T173130Z, writeback_storm-5). Stamp and pass
+    # sit inside the name, where the agent does not strip them.
+    local unit=gungnir-sc-${stamp}p$pass-$name victim_unit=gungnir-sc-${stamp}p$pass-victim-$name vpid=
     # A scope that was killed stays failed and would block its name.
     systemctl --user reset-failed "$unit.scope" "$victim_unit.scope" 2>/dev/null || true
     if [ ${#victim[@]} -gt 0 ]; then

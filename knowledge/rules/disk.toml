@@ -107,6 +107,16 @@ window = [-15, 30]
 strength = "possible"
 provenance = { source = "iostat(1) %util: not a limit for devices serving requests in parallel; Gregg p. 433", grade = "documented" }
 
+# A buffered writer whose dirty pages rise by the background threshold is
+# a writeback storm (D5), however fast it writes.
+[[rule.symptom]]
+anomaly = "mem.dirty_bytes"
+direction = "up"
+role = "host"
+window = [-30, 60]
+strength = "contradicting"
+provenance = { source = "docs/research/disk-io.md D1 tell it from D5: dirty stays at its baseline with direct I/O; night run 20261115T173130Z: writeback_storm named bulk_sequential_writer in 3 of 5 passes", grade = "documented" }
+
 #################################################################
 # D2. Bulk reader or scan
 #################################################################
@@ -332,9 +342,10 @@ provenance = { source = "docs/research/disk-io.md D4 tell it from D5: dirty stay
 
 # Windows of 35 s: dirty_expire_centisecs 30 s plus one flusher wakeup,
 # dirty_writeback_centisecs 5 s (the laptop's values, the kernel defaults).
-# They open 15 s before the leading symptom: the flushers drain dirty pages as they
-# fill, so a record of three samples above the threshold can open after the
-# flush and the waiting have begun (culprit run 20261030T202141Z).
+# They open 30 s before the leading symptom: the flushers drain dirty pages as they
+# fill, so a record of a rise by the background threshold can open after the
+# flush and the waiting have begun, 4-26 s after the writes in the night run
+# 20261115T173130Z (15 s in culprit run 20261030T202141Z).
 [[rule]]
 cause = "writeback_storm"
 excludes = { culprit_class = "maintenance" }
@@ -352,7 +363,7 @@ provenance = { source = "Love p. 331; overhead run 20261028T195813Z: dirty up to
 anomaly = "disk.write_bytes_per_s"
 direction = "up"
 role = "device"
-window = [-15, 35]
+window = [-30, 35]
 strength = "characteristic"
 provenance = { source = "admin-guide/sysctl/vm dirty_expire_centisecs, dirty_writeback_centisecs", grade = "documented" }
 
@@ -360,14 +371,14 @@ provenance = { source = "admin-guide/sysctl/vm dirty_expire_centisecs, dirty_wri
 anomaly = "mem.writeback_bytes"
 direction = "up"
 role = "host"
-window = [-15, 35]
+window = [-30, 35]
 strength = "typical"
 provenance = { source = "Love p. 332", grade = "documented" }
 
 [[rule.symptom]]
 process = "writeback_flusher"
 role = "host"
-window = [-15, 60]
+window = [-30, 60]
 strength = "typical"
 provenance = { source = "Gregg p. 374; fs/fs-writeback.c flush-%s; overhead run 20261028T195813Z: +flush-btrfs-1 in state D", grade = "documented" }
 
@@ -376,7 +387,7 @@ provenance = { source = "Gregg p. 374; fs/fs-writeback.c flush-%s; overhead run 
 anomaly = "cgroup.write_bytes_per_s"
 direction = "up"
 role = "culprit"
-window = [-15, 35]
+window = [-30, 35]
 strength = "typical"
 provenance = { source = "admin-guide/cgroup-v2 Writeback", grade = "documented" }
 
@@ -384,7 +395,7 @@ provenance = { source = "admin-guide/cgroup-v2 Writeback", grade = "documented" 
 anomaly = "disk.queue_depth"
 direction = "up"
 role = "device"
-window = [-15, 60]
+window = [-30, 60]
 strength = "typical"
 provenance = { source = "overhead run 20261028T195813Z: queue depth 78", grade = "measured" }
 
@@ -392,7 +403,7 @@ provenance = { source = "overhead run 20261028T195813Z: queue depth 78", grade =
 anomaly = "cgroup.io_pressure_some_ratio"
 direction = "up"
 role = "others"
-window = [-15, 90]
+window = [-30, 90]
 strength = "characteristic"
 impact = true
 provenance = { source = "accounting/psi; Love p. 300", grade = "documented" }
@@ -400,7 +411,7 @@ provenance = { source = "accounting/psi; Love p. 300", grade = "documented" }
 [[rule.symptom]]
 process = "waiting_on_io"
 role = "others"
-window = [-15, 90]
+window = [-30, 90]
 strength = "possible"
 impact = true
 provenance = { source = "ADR 0038; proc_pid_stat(5) state D", grade = "documented" }
@@ -409,7 +420,7 @@ provenance = { source = "ADR 0038; proc_pid_stat(5) state D", grade = "documente
 anomaly = "cpu.blocked_tasks"
 direction = "up"
 role = "host"
-window = [-15, 90]
+window = [-30, 90]
 strength = "possible"
 provenance = { source = "overhead run 20261028T195813Z: up to 5 blocked tasks", grade = "measured" }
 
