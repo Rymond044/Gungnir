@@ -165,8 +165,12 @@ class Params:
     proposal_basis: timedelta = timedelta(minutes=1)
     rollback_after: timedelta = timedelta(minutes=30)
     # Verification (ADR 0063): an action is judged after the longest window of
-    # its hypothesis's rule, and never sooner than this.
+    # its hypothesis's rule, and never sooner than verify_min. A rule's window
+    # says how long its symptoms may follow the leading one (12 h for a leak),
+    # not how soon a limit acts, which is minutes; verify_max keeps the
+    # judgement well before the rollback.
     verify_min: timedelta = timedelta(minutes=1)
+    verify_max: timedelta = timedelta(minutes=10)
 
     # Detection loop.
     detect_every: timedelta = timedelta(seconds=10)

@@ -77,11 +77,12 @@ def queue(
 
 
 def verify_after(base: Base, p: Params, cause: str) -> timedelta:
-    """The longest window of the cause's rule, at least `verify_min`: the
-    longest a symptom of it may follow its leading one (ADR 0063)."""
+    """The longest window of the cause's rule, the longest a symptom of it
+    may follow its leading one, between `verify_min` and `verify_max`
+    (ADR 0063)."""
     rule = base.rules.get(cause)
     longest = max((m.window[1] for m in rule.symptoms if m.window), default=0) if rule else 0
-    return max(p.verify_min, timedelta(seconds=longest))
+    return min(p.verify_max, max(p.verify_min, timedelta(seconds=longest)))
 
 
 def note(conn: psycopg.Connection, action_id: int, at: datetime, event: str, by: str, detail: dict) -> None:

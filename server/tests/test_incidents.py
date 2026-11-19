@@ -38,7 +38,8 @@ def test_harm_that_ended_long_ago_opens_and_closes_in_one_step():
     assert step.opened and step.closed_at == 130 + QUIET
 
 
-START = datetime(2026, 11, 13, 9, 0, tzinfo=UTC)
+# Yesterday: raw samples are kept for a few days around today.
+START = datetime.now(UTC).replace(hour=9, minute=0, second=0, microsecond=0) - timedelta(days=1)
 
 
 def record(

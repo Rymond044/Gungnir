@@ -106,6 +106,13 @@ def test_a_confirmed_proposal_is_applied_verified_and_kept(conn, kb, engine):
     assert incidents.one(conn, host, incident_id).proposals[0].action_state in {"kept", None}
 
 
+def test_a_long_rule_window_is_cut_to_be_judged_before_the_rollback(kb):
+    # A leak's symptoms may follow its growth by 12 h, but a limit acts in
+    # minutes and the actuator undoes it after 30 (ADR 0063).
+    assert actions.verify_after(kb, P, "memory_leak") == P.verify_max < P.rollback_after
+    assert actions.verify_after(kb, P, "bulk_sequential_writer") < P.verify_max
+
+
 def test_an_action_that_leaves_others_waiting_is_rolled_back(conn, kb, engine):
     host, incident_id, proposal = copy_incident(conn, kb, engine)
     incidents.decide(conn, host, incident_id, proposal.id, "confirm", "admin", START)
