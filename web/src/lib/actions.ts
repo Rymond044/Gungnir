@@ -16,7 +16,7 @@ export const outcomes: Record<Outcome, { label: string; tone: Tone; title: strin
   failed: {
     label: 'не помогло',
     tone: 'red',
-    title: 'к концу проверки другим всё ещё мешали; действие откачено',
+    title: 'к концу проверки другим всё ещё мешали',
   },
   nothing_to_judge: {
     label: 'не с чем сравнить',
