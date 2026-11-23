@@ -57,7 +57,9 @@ export default function Incidents() {
                 <th>когда</th>
                 <th>длилось</th>
                 <th>причина и виновник</th>
-                <th>уверенность</th>
+                <th title="Для открытого инцидента — текущая уверенность; для закрытого — максимальная за его время">
+                  уверенность
+                </th>
                 <th>предложения</th>
               </tr>
             </thead>
@@ -95,7 +97,14 @@ export default function Incidents() {
                         <span className="muted">причина не найдена, есть записи вреда</span>
                       )}
                     </td>
-                    <td className="mono">{i.confidence === null ? '—' : confidence(i.confidence)}</td>
+                    <td>
+                      <span className="mono">{i.confidence === null ? '—' : confidence(i.confidence)}</span>
+                      {i.closed_at !== null && i.confidence !== null && (
+                        <div className="muted" style={{ fontSize: 12.5 }}>
+                          максимальная
+                        </div>
+                      )}
+                    </td>
                     <td>
                       {i.waiting > 0 ? (
                         <Chip tone="ochre">ждут решения: {i.waiting}</Chip>

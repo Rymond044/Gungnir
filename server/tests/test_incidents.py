@@ -38,6 +38,37 @@ def test_harm_that_ended_long_ago_opens_and_closes_in_one_step():
     assert step.opened and step.closed_at == 130 + QUIET
 
 
+def test_open_summary_follows_current_rank_and_closed_summary_preserves_the_peak(conn):
+    host = seed.add_host(conn)
+    incident_id = conn.execute(
+        "INSERT INTO incidents (host_id, opened_at, last_harm_at) VALUES (%s, %s, %s) RETURNING id",
+        (host.id, START, START),
+    ).fetchone()[0]
+    conn.cursor().executemany(
+        "INSERT INTO hypotheses (incident_id, cause, culprit, first_seen, last_seen, confidence,"
+        " peak_confidence, harm, expected, rank, tree)"
+        " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, false, %s, '{}')",
+        [
+            (incident_id, "cpu_hog", WRITER, START, START, 0.65, 0.75, True, 1),
+            (incident_id, "bulk_reader", READER, START, START, 0.60, 0.95, True, 2),
+            (incident_id, "swap_io", READER, START, START, 0.99, 0.99, True, None),
+            (incident_id, "process_churn", WRITER, START, START, 1.0, 1.0, False, 3),
+        ],
+    )
+    current = incidents.open_summary(conn, host)
+    assert (current.cause, current.culprit, current.confidence) == ("cpu_hog", WRITER, 0.65)
+    assert incidents.one(conn, host, incident_id).summary == current
+    assert incidents.summaries(conn, host, START, START + timedelta(hours=1)) == [current]
+
+    conn.execute("UPDATE hypotheses SET rank = NULL WHERE incident_id = %s", (incident_id,))
+    unexplained = incidents.open_summary(conn, host)
+    assert (unexplained.cause, unexplained.culprit, unexplained.confidence) == (None, None, None)
+
+    conn.execute("UPDATE incidents SET closed_at = %s WHERE id = %s", (START, incident_id))
+    historical = incidents.one(conn, host, incident_id).summary
+    assert (historical.cause, historical.culprit, historical.confidence) == ("swap_io", READER, 0.99)
+
+
 # Yesterday: raw samples are kept for a few days around today.
 START = datetime.now(UTC).replace(hour=9, minute=0, second=0, microsecond=0) - timedelta(days=1)
 

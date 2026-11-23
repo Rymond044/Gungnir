@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router'
 import { useAnomalies, useEvents, useOverview, useProcesses } from '../api/hooks'
 import type { Overview as OverviewData } from '../api/types'
 import Entity from '../components/Entity'
+import Confidence from '../components/Confidence'
 import SignalChart, { type SeriesSpec } from '../components/SignalChart'
 import { usedFrom } from '../lib/norm'
 import { Chip, Empty, Failure, Key, Loading, Panel } from '../components/ui'
@@ -126,6 +127,12 @@ function OpenIncident({
               </>
             )}
             {i.waiting > 0 && ` · предложений ждут решения: ${i.waiting}`}
+            {i.confidence !== null && (
+              <>
+                {' · '}
+                <Confidence value={i.confidence} />
+              </>
+            )}
           </span>
         </span>
         <span className={ui.button}>Открыть инцидент</span>

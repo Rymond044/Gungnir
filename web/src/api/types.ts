@@ -59,7 +59,7 @@ export interface IncidentSummary {
   closed_at: string | null
   workload_class: string | null
   records: number
-  /** The best harmful hypothesis. */
+  /** Current leading harmful hypothesis while open; historical peak when closed. */
   cause: string | null
   culprit: string | null
   confidence: number | null

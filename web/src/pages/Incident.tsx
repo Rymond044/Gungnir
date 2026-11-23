@@ -3,12 +3,13 @@ import { Link, useParams } from 'react-router'
 import { useAnomalies, useDecision, useIncident, useOverview } from '../api/hooks'
 import type { Incident as IncidentData, IncidentHypothesis, Proposal } from '../api/types'
 import Entity from '../components/Entity'
+import Confidence from '../components/Confidence'
 import Hypothesis from '../components/Hypothesis'
 import RecordChip from '../components/RecordChip'
 import { Chip, Empty, Failure, Key, Loading, Panel, Source, type Tone } from '../components/ui'
 import ui from '../components/ui.module.css'
 import { actionStates, outcomes } from '../lib/actions'
-import { confidence, dayClock, duration, formatNumber, formatValue, ms, span } from '../lib/format'
+import { dayClock, duration, formatNumber, formatValue, ms, span } from '../lib/format'
 import { actionNames, causeNames, classNames, likelihoodNames, named, signalNames } from '../lib/names'
 import { useNow } from '../lib/useNow'
 
@@ -75,6 +76,17 @@ export default function Incident() {
           Аудит этого времени
         </Link>
       </div>
+      <div className={ui.head}>
+        {s.cause ? (
+          <>
+            <b>{named(causeNames, s.cause)}</b>
+            {s.culprit && <Entity entity={s.culprit} />}
+            <Confidence value={s.confidence} historical={!open} />
+          </>
+        ) : (
+          <span className="muted">{open ? 'Причина сейчас не найдена' : 'Причина не найдена'}</span>
+        )}
+      </div>
       {open && (
         <span className="muted" style={{ fontSize: 13 }}>
           Закроется через две минуты после того, как вред прекратится; последний вред —{' '}
@@ -92,7 +104,15 @@ export default function Incident() {
           </Empty>
         ) : (
           harmful.map((h, i) => (
-            <Found key={h.id} h={h} first={i === 0} host={host} offset={offset} now={now} />
+            <Found
+              key={h.id}
+              h={h}
+              first={i === 0}
+              host={host}
+              offset={offset}
+              now={now}
+              historical={!open}
+            />
           ))
         )}
       </Panel>
@@ -100,7 +120,7 @@ export default function Incident() {
       {other.length > 0 && (
         <Panel title="Что ещё было в это время" aside="без вреда или уже не подтверждается">
           {other.map((h) => (
-            <Found key={h.id} h={h} host={host} offset={offset} now={now} />
+            <Found key={h.id} h={h} host={host} offset={offset} now={now} historical={!open} />
           ))}
         </Panel>
       )}
@@ -116,6 +136,7 @@ function Found({
   host,
   offset,
   now,
+  historical,
 }: {
   h: IncidentHypothesis
   /** The best harmful hypothesis is shown unfolded. */
@@ -123,6 +144,7 @@ function Found({
   host: string
   offset: number | null
   now: number
+  historical: boolean
 }) {
   return (
     <details open={first} style={{ marginBottom: 10 }}>
@@ -130,7 +152,10 @@ function Found({
         {h.rank !== null ? `${h.rank}. ` : ''}
         <Link to={`/hosts/${host}/knowledge/${h.cause}`}>{named(causeNames, h.cause)}</Link>{' '}
         <Key>{h.cause}</Key> {h.culprit && <Entity entity={h.culprit} />} ·{' '}
-        <span className="mono">{confidence(h.peak_confidence)}</span>
+        <Confidence
+          value={historical || h.rank === null ? h.peak_confidence : h.confidence}
+          historical={historical || h.rank === null}
+        />
         {h.harm ? (
           <>
             {' '}

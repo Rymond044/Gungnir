@@ -522,7 +522,7 @@ class IncidentSummary:
     closed_at: datetime | None
     workload_class: str | None
     records: int
-    # The best harmful hypothesis, if any.
+    # Current leading harmful hypothesis while open; historical peak when closed.
     cause: str | None
     culprit: str | None
     confidence: float | None
@@ -540,12 +540,15 @@ class Incident:
 SUMMARY = (
     "SELECT i.id, i.opened_at, i.last_harm_at, i.closed_at, i.workload_class,"
     " (SELECT count(*) FROM anomalies a WHERE a.incident_id = i.id),"
-    " b.cause, nullif(b.culprit, ''), b.peak_confidence,"
+    " b.cause, nullif(b.culprit, ''),"
+    " CASE WHEN i.closed_at IS NULL THEN b.confidence ELSE b.peak_confidence END,"
     " (SELECT count(*) FROM hypotheses h WHERE h.incident_id = i.id),"
     " (SELECT count(*) FROM proposals p WHERE p.incident_id = i.id AND p.state = 'proposed')"
-    " FROM incidents i LEFT JOIN LATERAL (SELECT cause, culprit, peak_confidence FROM hypotheses h"
-    "  WHERE h.incident_id = i.id AND h.harm"
-    " ORDER BY h.rank IS NULL, h.peak_confidence DESC LIMIT 1) b ON true"
+    " FROM incidents i LEFT JOIN LATERAL (SELECT cause, culprit, confidence, peak_confidence"
+    " FROM hypotheses h WHERE h.incident_id = i.id AND h.harm"
+    " AND (i.closed_at IS NOT NULL OR h.rank IS NOT NULL)"
+    " ORDER BY CASE WHEN i.closed_at IS NULL THEN h.rank END NULLS LAST,"
+    " h.peak_confidence DESC, h.id LIMIT 1) b ON true"
 )
 
 
