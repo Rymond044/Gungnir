@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router'
 import { useActions, useAsk, useOverview } from '../api/hooks'
 import type { Action } from '../api/types'
 import Entity from '../components/Entity'
+import ActionVerification from '../components/ActionVerification'
 import RangePicker from '../components/RangePicker'
 import { Chip, Empty, Failure, Key, Loading, Panel } from '../components/ui'
 import ui from '../components/ui.module.css'
@@ -116,6 +117,7 @@ function Row({
         </div>
         <details style={{ fontSize: 13, marginTop: 4 }}>
           <summary className="muted">журнал</summary>
+          <ActionVerification action={a} host={host} offset={offset} now={now} />
           {a.files && a.files.length > 0 && (
             <div style={{ margin: '4px 0' }}>
               {a.files.map((f, i) => (
