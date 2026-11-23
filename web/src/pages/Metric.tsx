@@ -17,8 +17,12 @@ import { entityName } from '../lib/entity'
 const COLORS = ['var(--ink)', 'var(--blue)', 'var(--ochre)', 'var(--red)', 'var(--gray)', 'var(--green)']
 
 function parse(key: string): { signal: string; entity: string } {
-  const [signal, entity] = key.split('@')
-  return { signal, entity: entity || 'host' }
+  // A cgroup path can itself contain @, as in user@1000.service.
+  const at = key.indexOf('@')
+  return {
+    signal: at < 0 ? key : key.slice(0, at),
+    entity: at < 0 ? 'host' : key.slice(at + 1) || 'host',
+  }
 }
 
 /**
