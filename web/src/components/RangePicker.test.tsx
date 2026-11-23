@@ -1,7 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react'
-import { expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, expect, it, vi } from 'vitest'
 import type { Shown } from '../lib/interval'
 import RangePicker from './RangePicker'
+
+afterEach(cleanup)
 
 it('picks an interval of its own on one calendar, start then end, with hours from lists', () => {
   const now = Date.UTC(2026, 10, 9, 15, 0)
@@ -51,4 +53,23 @@ it("resets an interval of its own to the screen's period", () => {
   render(<RangePicker shown={shown} offset={0} now={now} />)
   fireEvent.click(screen.getByText(/Сбросить/))
   expect(reset).toHaveBeenCalled()
+})
+
+it('includes the last five minutes of yesterday in the host timezone', () => {
+  const now = Date.UTC(2026, 10, 23, 10, 0)
+  const setSpan = vi.fn()
+  const shown: Shown = {
+    interval: { since: new Date(now - 3600_000).toISOString(), until: new Date(now).toISOString() },
+    live: true,
+    range: '1h',
+    setRange: vi.fn(),
+    setSpan,
+    changed: false,
+    reset: vi.fn(),
+  }
+  render(<RangePicker shown={shown} offset={10800} now={now} />)
+  fireEvent.click(screen.getByText('Свой интервал'))
+  fireEvent.click(screen.getByText('Вчера'))
+  fireEvent.click(screen.getByText('Показать'))
+  expect(setSpan).toHaveBeenCalledWith(Date.UTC(2026, 10, 21, 21), Date.UTC(2026, 10, 22, 21))
 })

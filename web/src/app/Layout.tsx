@@ -1,6 +1,7 @@
 import { NavLink, Outlet, ScrollRestoration, useNavigate, useParams } from 'react-router'
 import { post } from '../api/client'
 import { useHosts, useMe, useOverview } from '../api/hooks'
+import { isStale } from '../lib/freshness'
 import { age } from '../lib/format'
 import { classNames, named } from '../lib/names'
 import { useNow } from '../lib/useNow'
@@ -22,7 +23,7 @@ export default function Layout() {
 
   const link = ({ isActive }: { isActive: boolean }) => `${styles.link} ${isActive ? styles.active : ''}`
   const seen = o?.host.last_seen_at ? (now - Date.parse(o.host.last_seen_at)) / 1000 : null
-  const stale = seen === null || seen > STALE_S
+  const stale = isStale(o?.host.last_seen_at, now)
   const working = o?.collectors.filter((c) => c.state !== 'disabled').length ?? 0
   const open = (o?.open.anomalies ?? 0) + (o?.open.impact ?? 0)
 
@@ -99,6 +100,18 @@ export default function Layout() {
             <span className={`${styles.led} ${stale ? styles.ledStale : ''}`} />
             {seen === null ? 'агент не выходил на связь' : `агент: ${age(seen)}`}
           </span>
+          {(['samples_at', 'detection_at', 'diagnosis_at'] as const).map((key) => {
+            const timestamp = o?.[key]
+            const lag = timestamp ? Math.max(0, (now - Date.parse(timestamp)) / 1000) : null
+            const label = key === 'samples_at' ? 'сбор' : key === 'detection_at' ? 'detection' : 'диагностика'
+            return (
+              <span key={key} className={styles.contact} title={timestamp ?? 'Нет отметки обработки'}>
+                <span className={`${styles.led} ${lag === null || lag > STALE_S ? styles.ledStale : ''}`} />
+                {label}: {lag === null ? 'нет данных' : `${age(lag)}${lag > STALE_S ? ' · отстаёт' : ''}`}
+              </span>
+            )
+          })}
+          {overview.isError && <span role="alert">Не удалось обновить состояние хоста</span>}
           {o && <span>нагрузка: {named(classNames, o.workload_class ?? 'unknown')}</span>}
           {o && (
             <NavLink to={`/hosts/${host}/collectors`}>

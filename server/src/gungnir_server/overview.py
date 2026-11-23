@@ -45,15 +45,18 @@ class Overview:
     open: OpenRecords
     # The open incident, if any (ADR 0060).
     incident: incidents.IncidentSummary | None = None
+    samples_at: datetime | None = None
+    detection_at: datetime | None = None
+    diagnosis_at: datetime | None = None
 
 
 def latest_values(conn: psycopg.Connection, host: Host) -> list[Latest]:
-    """The newest sample of each series that is not a control group's."""
+    """The newest sample of each series, including control groups for collection freshness."""
     rows = conn.execute(
         "SELECT s.signal, s.entity, last.ts, last.value FROM series s"
         " JOIN LATERAL (SELECT ts, value FROM samples WHERE series_id = s.id"
         "  ORDER BY ts DESC LIMIT 1) last ON true"
-        " WHERE s.host_id = %s AND s.signal NOT LIKE 'cgroup.%%' ORDER BY s.signal, s.entity",
+        " WHERE s.host_id = %s ORDER BY s.signal, s.entity",
         (host.id,),
     ).fetchall()
     return [Latest(*row) for row in rows]
@@ -86,8 +89,11 @@ def of(conn: psycopg.Connection, host: Host, now: datetime) -> Overview:
     by_name = {(f.name, f.entity): f for f in facts}
     cls = by_name.get(("workload.class", "host"))
     power = by_name.get(("power.profile", "host"))
-    latest = latest_values(conn, host)
+    all_latest = latest_values(conn, host)
+    latest = [x for x in all_latest if not x.signal.startswith("cgroup.")]
     memory, swap = sizes(latest)
+    detection = conn.execute("SELECT at FROM detection_state WHERE host_id = %s", (host.id,)).fetchone()
+    diagnosis = conn.execute("SELECT at FROM incident_state WHERE host_id = %s", (host.id,)).fetchone()
     return Overview(
         host=summary,
         now=now,
@@ -103,4 +109,7 @@ def of(conn: psycopg.Connection, host: Host, now: datetime) -> Overview:
         filesystems=sorted({x.entity for x in latest if x.signal.startswith("fs.")}),
         open=open_records(conn, host),
         incident=incidents.open_summary(conn, host),
+        samples_at=max((x.ts for x in all_latest), default=None),
+        detection_at=detection[0] if detection else None,
+        diagnosis_at=diagnosis[0] if diagnosis else None,
     )

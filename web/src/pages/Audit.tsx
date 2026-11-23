@@ -104,7 +104,7 @@ export default function Audit() {
                 live={shown.live}
                 offset={offset}
                 onSelect={shown.setSpan}
-                stretches={all.filter(({ s }) => s.lane === l)}
+                stretches={picked.filter(({ s }) => s.lane === l)}
                 hovered={hovered}
                 onHover={setHovered}
                 now={now}

@@ -44,7 +44,7 @@ export default function Incident() {
     until: new Date(Math.min(now, end + AUDIT_MARGIN_MS)).toISOString(),
     harm: '1',
   })
-  const harmful = hypotheses.filter((h) => h.harm && h.rank !== null)
+  const harmful = hypotheses.filter((h) => h.harm && (!open || h.rank !== null))
   const other = hypotheses.filter((h) => !harmful.includes(h))
 
   return (

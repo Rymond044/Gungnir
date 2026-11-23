@@ -153,7 +153,13 @@ function Row({
           {a.state === 'applied' && !a.outcome && verifyAt !== null && (
             <div>проверка в {dayClock(verifyAt, offset, now)}</div>
           )}
-          {a.revert_at && <div>откат через {span((ms(a.revert_at) - now) / 1000)}</div>}
+          {a.state === 'applied' && a.revert_at && (
+            <div>
+              {ms(a.revert_at) > now
+                ? `откат через ${span((ms(a.revert_at) - now) / 1000)}`
+                : 'Срок отката истёк; ждём подтверждения исполнителя'}
+            </div>
+          )}
           {a.asked && live && <div>{a.asked === 'revert' ? 'откат запрошен' : 'запрошено оставить'}</div>}
           {(a.state === 'refused' || a.state === 'reverted') && a.reason && <div>{reasonText(a.reason)}</div>}
         </div>
@@ -171,7 +177,7 @@ function Row({
             {canKeep && (
               <button
                 className={ui.button}
-                disabled={busy || a.asked === 'keep'}
+                disabled={busy || a.asked === 'keep' || a.asked === 'revert'}
                 title="не откатывать по таймеру: до завершения группы или перезагрузки"
                 onClick={() => onAsk('keep')}
               >

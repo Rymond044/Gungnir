@@ -16,9 +16,11 @@ export default function Runs({ host }: { host: string }) {
   const diagnosis = useDiagnosis(host, run ? { run } : null, false)
 
   return (
-    <Panel title="Прогоны сценариев" aside="что вывод называет в каждой фазе размеченного прогона">
+    <Panel title="Прогоны сценариев" aside="что текущая база знаний объясняет в сохранённых фазах">
       {runs.isPending ? (
         <Loading />
+      ) : runs.isError ? (
+        <Failure error={runs.error} />
       ) : scenarios.length === 0 ? (
         <Empty>Размеченных прогонов с нагрузкой нет.</Empty>
       ) : (

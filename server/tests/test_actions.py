@@ -228,3 +228,18 @@ def test_failed_logins_lock_the_name_and_a_reset_ends_every_session(client, pool
         assert auth.initial_password(conn) == fresh
     assert client.get("/api/v1/hosts").status_code == 401
     client.post("/api/v1/auth/logout")
+
+
+def test_keep_cannot_replace_a_pending_rollback(conn, kb, engine):
+    host, incident_id, proposal = copy_incident(conn, kb, engine)
+    incidents.decide(conn, host, incident_id, proposal.id, "confirm", "admin", START)
+    action_id = actions.queue(conn, kb, P, host, proposal.id, "admin", START)
+    applied(conn, host, action_id, 160)
+    conn.execute("UPDATE actions SET outcome = 'worked' WHERE id = %s", (action_id,))
+    actions.ask(conn, host, action_id, "revert", "admin", START)
+    with pytest.raises(actions.Refused, match="rollback is pending"):
+        actions.ask(conn, host, action_id, "keep", "admin", START)
+    assert actions.commands(conn, host, START) == [
+        {"id": action_id, "op": "revert", "reason": "reverted by admin"}
+    ]
+    assert actions.one(conn, host, action_id).asked == "revert"

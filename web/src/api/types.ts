@@ -36,6 +36,9 @@ export interface Latest {
 export interface Overview {
   host: HostSummary
   now: string
+  samples_at: string | null
+  detection_at: string | null
+  diagnosis_at: string | null
   workload_class: string | null
   workload_since: string | null
   power_profile: string | null

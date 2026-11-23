@@ -156,7 +156,7 @@ function Panel({
   const quick = (back: number) => {
     const start = toWall(fromWall({ ...today, hour: 0, minute: 0 }, offset) - back * DAY, offset)
     setFrom(start)
-    setTo(back === 0 ? round(today) : { ...start, hour: 23, minute: 55 })
+    setTo(back === 0 ? round(today) : { ...today, hour: 0, minute: 0 })
     setPicking(false)
   }
 

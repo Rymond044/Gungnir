@@ -38,8 +38,8 @@ export default function Incidents() {
           <Failure error={incidents.error} />
         ) : incidents.data.length === 0 ? (
           <Empty>
-            За это время никому не мешали. Необычная активность без вреда видна в аудите, инцидента она не
-            открывает.
+            За это время инцидентов не зарегистрировано. Необычная активность без вреда видна в аудите,
+            инцидента она не открывает.
           </Empty>
         ) : (
           <table className={ui.fixed}>

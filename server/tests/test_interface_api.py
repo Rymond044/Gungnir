@@ -43,6 +43,7 @@ def test_overview_derives_memory_size_and_lists_devices(client, token):
     )
     client.post("/api/v1/ingest", json=body, headers=auth(token))
     found = client.get("/api/v1/hosts/laptop/overview").json()
+    assert found["samples_at"] is not None
     assert found["memory_bytes"] == 16e9
     assert found["devices"] == ["nvme0n1"]
     assert found["open"] == {"anomalies": 0, "impact": 0, "expected": 0}
@@ -154,3 +155,36 @@ def test_incidents_list_one_and_a_decision_on_nothing(client, token):
     assert refused.status_code == 409
     wrong = client.post("/api/v1/hosts/laptop/incidents/1/proposals/1", json={"decision": "apply"})
     assert wrong.status_code == 409
+
+
+def test_overview_reports_processing_watermarks_independently(conn):
+    from gungnir_server import hosts, overview
+
+    hosts.add(conn, "freshness")
+    host = hosts.by_name(conn, "freshness")
+    now = datetime.now(UTC)
+    empty = overview.of(conn, host, now)
+    assert empty.samples_at is None
+    assert empty.detection_at is None
+    assert empty.diagnosis_at is None
+    detected = now - timedelta(minutes=3)
+    diagnosed = now - timedelta(minutes=5)
+    conn.execute(
+        "INSERT INTO detection_state (host_id, at, state) VALUES (%s, %s, '{}')",
+        (host.id, detected),
+    )
+    conn.execute("INSERT INTO incident_state (host_id, at) VALUES (%s, %s)", (host.id, diagnosed))
+    found = overview.of(conn, host, now)
+    assert found.detection_at == detected
+    assert found.diagnosis_at == diagnosed
+
+
+def test_collection_freshness_counts_control_group_samples_without_adding_them_to_overview(client, token):
+    client.post(
+        "/api/v1/ingest",
+        json=batch(samples=[sample(signal="cgroup.cpu_cores", entity="test.scope", value=0.5)]),
+        headers=auth(token),
+    )
+    found = client.get("/api/v1/hosts/laptop/overview").json()
+    assert found["samples_at"] is not None
+    assert found["latest"] == []

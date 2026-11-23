@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
-import { post, safeNext } from '../api/client'
+import { ApiError, post, safeNext } from '../api/client'
 import type { Account } from '../api/types'
 import { Failure } from '../components/ui'
 import ui from '../components/ui.module.css'
@@ -23,7 +23,13 @@ export default function Login() {
       const account = await post<Account>('/auth/login', { name, password })
       navigate(account.must_change ? `/password?${new URLSearchParams({ next })}` : next, { replace: true })
     } catch (err) {
-      setError(err)
+      setError(
+        err instanceof ApiError && err.status === 401
+          ? new ApiError(401, 'Неверное имя или пароль.')
+          : err instanceof ApiError && err.status === 429
+            ? new ApiError(429, 'Слишком много неудачных попыток входа. Повторите позже.')
+            : err,
+      )
     } finally {
       setBusy(false)
     }

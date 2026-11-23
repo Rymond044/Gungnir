@@ -29,7 +29,7 @@ import {
 import styles from './Knowledge.module.css'
 import Runs from './Runs'
 
-// React Flow is the largest dependency; only the graph tab loads it.
+// Only the graph tab loads the force graph dependency.
 const Graph = lazy(() => import('./KnowledgeGraph'))
 
 const TABS = [
@@ -147,6 +147,9 @@ function Causes({ k, host }: { k: KB; host: string }) {
         value={q}
         onChange={(e) => setQ(e.target.value)}
       />
+      {!k.causes.some((c) => match(c.name, c.label, c.comment)) && (
+        <Empty>Причин по запросу не найдено.</Empty>
+      )}
       {DOMAINS.map((domain) => {
         const causes = k.causes.filter((c) => c.domain === domain && match(c.name, c.label, c.comment))
         if (causes.length === 0) return null
@@ -203,6 +206,7 @@ function Signals({ k }: { k: KB }) {
         value={q}
         onChange={(e) => setQ(e.target.value)}
       />
+      {rows.length === 0 && <Empty>Метрик по запросу не найдено.</Empty>}
       <Panel>
         <div className={ui.scroll}>
           <table style={{ minWidth: 860 }}>

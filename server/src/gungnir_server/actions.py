@@ -180,16 +180,19 @@ def ask(conn: psycopg.Connection, host: Host, action_id: int, op: str, by: str, 
     """Revert at once, or keep past the timer once verification found the
     action worked (or had nothing to judge)."""
     row = conn.execute(
-        "SELECT state, outcome FROM actions WHERE id = %s AND host_id = %s FOR UPDATE", (action_id, host.id)
+        "SELECT state, outcome, asked FROM actions WHERE id = %s AND host_id = %s FOR UPDATE",
+        (action_id, host.id),
     ).fetchone()
     if row is None:
         raise Refused(f"no action {action_id}")
-    state, outcome = row
+    state, outcome, asked = row
     if op == "revert":
         if state not in ("applied", "kept"):
             raise Refused("only an applied action can be reverted")
         reason = f"reverted by {by}"
     elif op == "keep":
+        if asked == "revert":
+            raise Refused("an action cannot be kept while rollback is pending")
         if state != "applied":
             raise Refused("only an applied action can be kept")
         if outcome not in ("worked", "nothing_to_judge"):

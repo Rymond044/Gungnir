@@ -84,3 +84,16 @@ it('does not interpret missing historical evidence as an absence of impact', () 
   expect(screen.getByText('Подробные свидетельства этой проверки не сохранены.')).toBeVisible()
   expect(screen.queryByText('Признаков деградации других программ не обнаружено.')).not.toBeInTheDocument()
 })
+
+it('keeps a recorded verdict visible when its verification log is unavailable', () => {
+  const saved = action({})
+  saved.log = []
+  render(
+    <MemoryRouter>
+      <ActionVerification action={saved} host="laptop" offset={0} now={Date.parse(verified)} />
+    </MemoryRouter>,
+  )
+  expect(screen.getByText('Проверка эффекта')).toBeVisible()
+  expect(screen.getByText('Подробные свидетельства этой проверки не сохранены.')).toBeVisible()
+  expect(screen.queryByText('Признаков деградации других программ не обнаружено.')).not.toBeInTheDocument()
+})

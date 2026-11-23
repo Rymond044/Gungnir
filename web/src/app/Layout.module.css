@@ -114,8 +114,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  /* The age changes every few seconds; one line keeps the bar from jumping. */
-  white-space: nowrap;
+  white-space: normal;
   font-variant-numeric: tabular-nums;
 }
 

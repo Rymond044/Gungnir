@@ -4,6 +4,7 @@ import type { Overview as OverviewData } from '../api/types'
 import Entity from '../components/Entity'
 import Confidence from '../components/Confidence'
 import SignalChart, { type SeriesSpec } from '../components/SignalChart'
+import { isStale } from '../lib/freshness'
 import { usedFrom } from '../lib/norm'
 import { Chip, Empty, Failure, Key, Loading, Panel } from '../components/ui'
 import ui from '../components/ui.module.css'
@@ -155,16 +156,22 @@ function OpenStatus({
   const open = useAnomalies(host, { open: true, limit: 200 })
   const { anomalies, impact, expected } = o.open
   const total = anomalies + impact
+  const stale = [o.host.last_seen_at, o.samples_at, o.detection_at, o.diagnosis_at].some((at) =>
+    isStale(at, now),
+  )
   const tone = impact > 0 ? styles.statusRed : ''
-  const dot = impact > 0 ? 'var(--red)' : anomalies > 0 ? 'var(--ochre)' : 'var(--green)'
+  const dot = impact > 0 ? 'var(--red)' : anomalies > 0 || stale ? 'var(--ochre)' : 'var(--green)'
   const title =
     impact > 0
       ? `Вред: программы ждут ресурсы (${impact})`
-      : anomalies > 0
-        ? 'Необычное поведение без вреда'
-        : 'Всё спокойно'
-  const sub =
-    total === 0
+      : stale
+        ? 'Текущее состояние не подтверждено'
+        : anomalies > 0
+          ? 'Необычное поведение без вреда'
+          : 'Всё спокойно'
+  const sub = stale
+    ? 'Сбор или обработка данных отстают. Ниже показаны последние известные записи.'
+    : total === 0
       ? 'Открытых аномалий нет; программам хватает ресурсов.'
       : `Открыто: ${anomalies} ${plural(anomalies, 'аномалия', 'аномалии', 'аномалий')}` +
         (expected ? `, из них ожидаемых ${expected}` : '') +

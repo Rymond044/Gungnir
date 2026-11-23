@@ -25,9 +25,9 @@ export default function ActionVerification({
   now: number
 }) {
   const verified = [...action.log].reverse().find((e) => e.event === 'verified')
-  if (!verified) return null
-  const before = evidence(verified.detail.before)
-  const after = evidence(verified.detail.after)
+  if (!verified && !action.outcome) return null
+  const before = evidence(verified?.detail.before)
+  const after = evidence(verified?.detail.after)
   return (
     <section aria-label="Проверка эффекта" style={{ margin: '10px 0' }}>
       <b>Проверка эффекта</b>
@@ -35,7 +35,7 @@ export default function ActionVerification({
       <div className="muted">
         Сравнивается влияние на другие программы, без ожидания самой ограниченной цели.
       </div>
-      {before !== null && after !== null && action.applied_at ? (
+      {verified && before !== null && after !== null && action.applied_at ? (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px 24px', marginTop: 6 }}>
           {[
             { label: 'До применения', items: before, until: ms(action.applied_at) },

@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
-import { useNavigate, useSearchParams } from 'react-router'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 import { post, safeNext } from '../api/client'
 import { useMe } from '../api/hooks'
 import { Failure } from '../components/ui'
@@ -77,6 +77,7 @@ export default function Password() {
         <button className={`${ui.button} ${ui.primary}`} disabled={busy || mismatch}>
           Сменить
         </button>
+        {me.data && !me.data.must_change && <Link to="/">Отмена</Link>}
         {error !== null && <Failure error={error} />}
       </form>
     </div>
