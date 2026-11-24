@@ -75,6 +75,56 @@ def test_one_baseline_for_the_host_sums_the_classes():
     assert (1, baselines.ALL_CLASSES) in baselines.compute(rows, p, per_class=False)
 
 
+def test_book_falls_back_to_pooled_history_without_borrowing_other_series(monkeypatch):
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+
+    from gungnir_server.charts import MAD_TO_SIGMA, Norms, Span
+    from gungnir_server.detection.detectors import BookBaselines
+
+    p = Params(baseline_min_hours=1, power_min_hours=1)
+    now = datetime(2026, 11, 24, 10, tzinfo=UTC)
+    rows = [
+        hist_row(1, "idle", "eco/ac", [0.1] * 400),
+        hist_row(1, "build", "eco/ac", [0.9] * 400),
+        hist_row(2, "idle", "eco/ac", [100] * 720),
+    ]
+    monkeypatch.setattr(baselines, "load_hists", lambda *a: [(*r[:3], now, *r[3:]) for r in rows])
+    monkeypatch.setattr(baselines, "capacities", lambda *a: {})
+    book = baselines.Book(None, None, p).at(now)
+    meta = frame.SeriesMeta(1, "cpu.user_ratio", "host")
+    lookup = BookBaselines(book)
+    median, mad, basis = lookup.lookup(meta, "backup", "eco/ac")
+    assert basis["class"] == "*" and basis["samples"] == 800
+    assert median < 1
+    assert lookup.lookup(frame.SeriesMeta(3, meta.signal, "other"), "backup", "eco/ac") is None
+    norms = Norms(p)
+    monkeypatch.setattr(norms, "book", lambda *a: book)
+    norm = norms._norm(
+        None, SimpleNamespace(name="laptop"), meta, [Span(now, now, "backup", "eco/ac")], [], now
+    )
+    [band] = norm.bands
+    assert band.source_class == "*" and band.workload_class == "backup"
+    assert band.high == median + p.robust_k * MAD_TO_SIGMA * mad
+    # A learned class takes precedence, including its own power correction.
+    own = baselines.Baseline(2.0, 0.2, 720, {"eco/ac": 0.5})
+    book.baselines[(1, "backup")] = own
+    median, mad, basis = lookup.lookup(meta, "backup", "eco/ac")
+    assert median == 1 and mad == 0.1
+    assert basis["class"] == "backup" and basis["factor"] == 0.5
+
+
+def test_pooled_history_still_needs_the_minimum_observation_time():
+    from gungnir_server.detection.detectors import BookBaselines
+
+    book = baselines.Book(None, None, Params(baseline_min_hours=1))
+    rows = [hist_row(1, "idle", "eco/ac", [0.1] * 300), hist_row(1, "build", "eco/ac", [0.9] * 300)]
+    book.baselines = baselines.compute(rows, book.params, per_class=False)
+    assert (
+        BookBaselines(book).lookup(frame.SeriesMeta(1, "cpu.user_ratio", "host"), "build", "eco/ac") is None
+    )
+
+
 def test_sparse_group_series_expand_to_zero_rates_and_unchanged_memory():
     grid = np.arange(0, 60_000, 5_000, dtype=np.int64)
     ts = np.array([10_000, 30_000], dtype=np.int64)

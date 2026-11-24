@@ -48,6 +48,14 @@ it('names limits by their kind and level', () => {
   expect(limitLines(norm)).toEqual([{ value: 0.1, label: 'вред', color: 'var(--red)' }])
 })
 
+it('keeps the current class span and marks the pooled fallback', () => {
+  const pooled = { ...norm.bands[0], workload_class: 'build', source_class: '*' }
+  const segments = bandSegments({ ...norm, bands: [...norm.bands, pooled] })
+  expect(segments).toHaveLength(2)
+  expect(segments[1]).toMatchObject({ from: Date.parse(norm.spans[1].since), pooled: true, high: 5 })
+  expect(segments[0].pooled).toBeUndefined()
+})
+
 it('drops the cold-start limit once a baseline judges the series', () => {
   const cold = {
     ...norm,

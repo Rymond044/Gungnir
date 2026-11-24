@@ -276,6 +276,8 @@ class Book:
             self._hours.setdefault(row[3], []).append(row)
         rows = [(r[0], r[1], r[2], r[4], r[5]) for hour in self._hours.values() for r in hour]
         self.baselines = compute(rows, self.params, self.per_class)
+        if self.per_class:
+            self.baselines.update(compute(rows, self.params, per_class=False))
         self.collected = collected(rows, self.params, self.per_class)
         self.capacity = capacities(self.conn, self.host, t)
         self.version = version

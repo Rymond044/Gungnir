@@ -193,6 +193,7 @@ export interface Span {
 }
 
 export interface Band {
+  source_class?: string
   workload_class: string
   power_profile: string
   low: number

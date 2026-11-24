@@ -165,6 +165,7 @@ class Band:
     median: float
     mad: float
     samples: int
+    source_class: str = ""
 
 
 @dataclass(frozen=True)
@@ -276,7 +277,18 @@ class Norms:
                     continue
                 median, mad, basis = found
                 half = k * MAD_TO_SIGMA * mad
-                bands.append(Band(cls, power, median - half, median + half, median, mad, basis["samples"]))
+                bands.append(
+                    Band(
+                        cls,
+                        power,
+                        median - half,
+                        median + half,
+                        median,
+                        mad,
+                        basis["samples"],
+                        basis["class"],
+                    )
+                )
         return Norm(signal, entity, spans, bands, limits_of(host, signal, entity, book, self.params), minima)
 
 

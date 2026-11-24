@@ -14,6 +14,7 @@ export interface Line {
 
 /** A stretch of the normal band, in one workload class and power profile. */
 export interface BandSegment {
+  pooled?: boolean
   from: number
   to: number
   low: number
@@ -450,7 +451,7 @@ export default function Chart({
         {bands.length > 0 && (
           <span>
             <span className={styles.swatch} style={{ background: 'var(--green)', opacity: 0.4, height: 8 }} />
-            норма
+            {bands.some((b) => b.pooled) ? 'норма (включая общую по всем типам нагрузки)' : 'норма'}
           </span>
         )}
         {steps.length > 0 && (

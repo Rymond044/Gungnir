@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
+from gungnir_server import baselines
 from gungnir_server.detection import forest
 from gungnir_server.detection.detectors import (
     BookBaselines,
@@ -96,6 +97,21 @@ def test_cold_start_judges_against_capacity():
     assert found[0][1].records[0].baseline == {"basis": "calibration"}
 
 
+def test_robust_uses_pooled_history_until_the_current_class_is_learned():
+    x = np.full(40, 0.20)
+    x[20:26] = 0.60
+    ctx = context(make_frame({"cpu.user_ratio": x}), cls="build")
+    book = baselines.Book(None, None, P)
+    book.version = datetime(2026, 11, 24, tzinfo=UTC)
+    book.baselines[(1, "*")] = baselines.Baseline(0.2, 0.02, 5000)
+    found = records(Robust(BookBaselines(book), ewma=False), ctx)
+    [(_, opened), (_, closed)] = found
+    assert opened.started_ms == 100_000 and closed.ended_ms == 130_000
+    assert opened.records[0].baseline["class"] == "*"
+    book.baselines[(1, "build")] = baselines.Baseline(0.5, 0.1, 5000)
+    assert records(Robust(BookBaselines(book), ewma=False), ctx) == []
+
+
 GROUP = "user.slice/user-1000.slice/user@1000.service/app.slice/app-cp.scope"
 
 
@@ -160,7 +176,7 @@ def test_host_counts_zero_at_rest_are_judged_without_a_baseline():
     swapping = np.zeros(n)
     swapping[5:10] = 1700.0
     rows = {"swap.out_pages_per_s": swapping, "mem.major_faults_per_s": swapping}
-    book = SimpleNamespace(params=P, capacity={}, get=lambda series_id, cls: None)
+    book = SimpleNamespace(params=P, capacity={}, per_class=True, get=lambda series_id, cls: None)
     found = records(Robust(BookBaselines(book), ewma=False), context(make_frame(rows)))
     signals = {f"{e.records[0].direction}" for _, e in found if hasattr(e, "records")}
     assert len(found) == 2 and signals == {"up"}

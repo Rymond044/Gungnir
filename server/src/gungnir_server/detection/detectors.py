@@ -187,6 +187,10 @@ class BookBaselines:
 
     def lookup(self, meta, cls, power):
         b = self.book.get(meta.id, cls)
+        source_class = cls if self.book.per_class else "*"
+        if b is None and self.book.per_class:
+            b = self.book.get(meta.id, "*")
+            source_class = "*"
         if b is None:
             return None
         factor = b.factor(power)
@@ -199,7 +203,7 @@ class BookBaselines:
                 "basis": "baseline",
                 "median": median,
                 "mad": mad,
-                "class": cls if self.book.per_class else "*",
+                "class": source_class,
                 "power": power,
                 "factor": factor,
                 "samples": b.samples,

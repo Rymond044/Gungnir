@@ -10,7 +10,17 @@ export function bandSegments(norm: Norm | undefined): BandSegment[] {
   const by = new Map(norm.bands.map((b) => [`${b.workload_class}|${b.power_profile}`, b]))
   return norm.spans.flatMap((s) => {
     const b = by.get(`${s.workload_class}|${s.power_profile}`)
-    return b ? [{ from: ms(s.since), to: ms(s.until), low: b.low, high: b.high }] : []
+    return b
+      ? [
+          {
+            from: ms(s.since),
+            to: ms(s.until),
+            low: b.low,
+            high: b.high,
+            ...(b.source_class === '*' ? { pooled: true } : {}),
+          },
+        ]
+      : []
   })
 }
 
