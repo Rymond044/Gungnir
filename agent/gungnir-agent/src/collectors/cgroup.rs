@@ -227,7 +227,8 @@ impl Cgroup2 {
             put("cpu.nr_periods", field(&text, "nr_periods"));
             put("cpu.nr_throttled", field(&text, "nr_throttled"));
         }
-        if let Ok(text) = read(&dir.join("memory.events")) {
+        // Hierarchical counters would attribute a child's limit to its parent.
+        if let Ok(text) = read(&dir.join("memory.events.local")) {
             put("memory.high", field(&text, "high"));
             put("memory.max", field(&text, "max"));
             put("memory.oom_kill", field(&text, "oom_kill"));
@@ -423,7 +424,7 @@ mod tests {
         w("cpu.stat", format!("usage_usec {usage}\nuser_usec 0\nsystem_usec 0\n"));
         w("io.stat", format!("259:0 rbytes=0 wbytes={wbytes} rios=0 wios=0 dbytes=0 dios=0\n"));
         w("memory.current", format!("{mem}\n"));
-        w("memory.events", "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\n".into());
+        w("memory.events.local", "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\n".into());
     }
 
     fn source(root: &Path) -> Cgroup2 {
@@ -434,6 +435,32 @@ mod tests {
             last_full: None,
             facts: FactLog::default(),
         }
+    }
+
+    #[test]
+    fn memory_events_belong_to_the_group_not_its_children() {
+        let root = scratch_dir("cgroup-local-events");
+        group(&root, "system.slice", 0, 0, 0);
+        group(&root, "system.slice/worker.service", 0, 0, 0);
+        for rel in ["system.slice", "system.slice/worker.service"] {
+            std::fs::write(root.join(rel).join("memory.events"), "high 9\nmax 7\noom_kill 2\n").unwrap();
+        }
+        std::fs::write(root.join("system.slice/memory.events.local"), "high 0\nmax 0\noom_kill 0\n").unwrap();
+        std::fs::write(
+            root.join("system.slice/worker.service/memory.events.local"),
+            "high 9\nmax 7\noom_kill 2\n",
+        )
+        .unwrap();
+        let collector = source(&root);
+        let parent = collector.snapshot("system.slice");
+        let child = collector.snapshot("system.slice/worker.service");
+        for key in ["memory.high", "memory.max", "memory.oom_kill"] {
+            assert_eq!(parent.counters.get(key), Some(&0), "{key} propagated from child");
+            assert!(child.counters[key] > 0);
+        }
+        std::fs::remove_file(root.join("system.slice/memory.events.local")).unwrap();
+        assert!(!collector.snapshot("system.slice").counters.contains_key("memory.max"));
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
