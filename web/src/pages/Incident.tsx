@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router'
 import { useAnomalies, useDecision, useIncident, useOverview } from '../api/hooks'
 import type { Incident as IncidentData, IncidentHypothesis, Proposal } from '../api/types'
 import Entity from '../components/Entity'
+import IncidentSteps from '../components/IncidentSteps'
 import Confidence from '../components/Confidence'
 import Hypothesis from '../components/Hypothesis'
 import RecordChip from '../components/RecordChip'
@@ -93,6 +94,8 @@ export default function Incident() {
           {dayClock(ms(s.last_harm_at), offset, now)}.
         </span>
       )}
+
+      <IncidentSteps host={host} incident={incident.data} offset={offset} now={now} />
 
       <Proposals host={host} incident={incident.data} open={open} offset={offset} now={now} />
 

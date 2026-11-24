@@ -186,6 +186,12 @@ def test_the_api_confirms_with_the_account_and_the_agent_gets_the_command(client
     assert answer["commands"] == []
     [row] = client.get("/api/v1/hosts/laptop/actions", params={"since": "2000-01-01T00:00:00Z"}).json()
     assert row["state"] == "refused" and row["reason"] == "no actuator" and row["cause"]
+    linked = client.get(f"/api/v1/hosts/laptop/incidents/{incident_id}/actions")
+    assert linked.status_code == 200 and linked.json() == [row]
+    assert client.get("/api/v1/hosts/laptop/incidents/999999/actions").status_code == 404
+    with pool.connection() as conn:
+        hosts.add(conn, "another")
+    assert client.get(f"/api/v1/hosts/another/incidents/{incident_id}/actions").status_code == 404
     revert = client.post(f"/api/v1/hosts/laptop/actions/{row['id']}", json={"op": "revert"})
     assert revert.status_code == 409
 

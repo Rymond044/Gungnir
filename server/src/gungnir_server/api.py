@@ -494,6 +494,17 @@ class Decision(BaseModel):
     decision: str
 
 
+@router.get("/hosts/{name}/incidents/{incident_id}/actions")
+def incident_actions(host: NamedHost, conn: Conn, incident_id: int) -> list[actions.ActionRow]:
+    """Every intervention of this incident, independent of the history interval."""
+    exists = conn.execute(
+        "SELECT 1 FROM incidents WHERE host_id = %s AND id = %s", (host.id, incident_id)
+    ).fetchone()
+    if exists is None:
+        raise HTTPException(404, f"no incident {incident_id}")
+    return actions.for_incident(conn, host, incident_id)
+
+
 @router.post("/hosts/{name}/incidents/{incident_id}/proposals/{proposal_id}")
 def decide(
     host: NamedHost,

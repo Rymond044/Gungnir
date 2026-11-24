@@ -8,6 +8,7 @@ vi.mock('../api/hooks', () => ({
   useOverview: () => ({ data: { host: { utc_offset_s: 0 } } }),
   useAnomalies: () => ({ data: [] }),
   useDecision: () => ({}),
+  useIncidentActions: () => ({ data: [] }),
   useIncident: () => ({
     data: {
       summary: {

@@ -174,6 +174,14 @@ export function useIncident(host: string, id: string) {
   })
 }
 
+export function useIncidentActions(host: string, id: string) {
+  return useQuery({
+    queryKey: ['incident', host, id, 'actions'],
+    queryFn: () => get<Action[]>(`/hosts/${host}/incidents/${id}/actions`),
+    refetchInterval: LIVE_MS,
+  })
+}
+
 /** The operator confirms or rejects a proposal (ADR 0060). */
 export function useDecision(host: string, incident: number) {
   const client = useQueryClient()

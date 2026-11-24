@@ -1,0 +1,56 @@
+.steps {
+  display: flex;
+  list-style: none;
+  margin: 12px 0;
+  padding: 0;
+  overflow-x: auto;
+}
+
+.steps li {
+  position: relative;
+  flex: 1;
+  min-width: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 0 16px 8px 0;
+  font-size: 13px;
+}
+
+.steps li:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 13px;
+  left: 32px;
+  right: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.marker {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  display: grid;
+  place-items: center;
+  font-weight: 600;
+}
+
+.done .marker {
+  color: var(--green);
+}
+.failed .marker {
+  color: var(--red);
+}
+.waiting .marker {
+  color: var(--ochre);
+}
+.skipped .marker {
+  color: var(--muted);
+}
+.detail,
+.steps time {
+  color: var(--muted);
+  font-size: 12px;
+}

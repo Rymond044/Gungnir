@@ -328,6 +328,14 @@ def history(
     return _with_log(conn, rows)
 
 
+def for_incident(conn: psycopg.Connection, host: Host, incident_id: int) -> list[ActionRow]:
+    rows = conn.execute(
+        COLUMNS + " WHERE a.host_id = %s AND pr.incident_id = %s ORDER BY a.confirmed_at, a.id",
+        (host.id, incident_id),
+    ).fetchall()
+    return _with_log(conn, rows)
+
+
 def one(conn: psycopg.Connection, host: Host, action_id: int) -> ActionRow | None:
     rows = conn.execute(COLUMNS + " WHERE a.host_id = %s AND a.id = %s", (host.id, action_id)).fetchall()
     found = _with_log(conn, rows)

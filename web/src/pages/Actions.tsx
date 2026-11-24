@@ -1,8 +1,9 @@
-import { Link, useParams } from 'react-router'
+import { Link, useLocation, useParams } from 'react-router'
 import { useActions, useAsk, useOverview } from '../api/hooks'
 import type { Action } from '../api/types'
 import Entity from '../components/Entity'
 import ActionVerification from '../components/ActionVerification'
+import ActionSteps from '../components/ActionSteps'
 import RangePicker from '../components/RangePicker'
 import { Chip, Empty, Failure, Key, Loading, Panel } from '../components/ui'
 import ui from '../components/ui.module.css'
@@ -96,11 +97,12 @@ function Row({
   busy: boolean
   onAsk: (op: 'revert' | 'keep') => void
 }) {
+  const location = useLocation()
   const live = a.state === 'applied' || a.state === 'kept'
   const canKeep = a.state === 'applied' && (a.outcome === 'worked' || a.outcome === 'nothing_to_judge')
   const verifyAt = a.applied_at ? ms(a.applied_at) + a.verify_after_s * 1000 : null
   return (
-    <tr className={ui.tableRow}>
+    <tr id={`action-${a.id}`} className={ui.tableRow}>
       <td className="mono">
         {dayClock(ms(a.confirmed_at), offset, now)}
         <div className="muted" style={{ fontSize: 12.5 }}>
@@ -115,8 +117,12 @@ function Row({
           {limitText(a.action, a.value, a.share)} · против «{named(causeNames, a.cause)}» ·{' '}
           <Link to={`/hosts/${host}/incidents/${a.incident_id}`}>инцидент {a.incident_id}</Link>
         </div>
-        <details style={{ fontSize: 13, marginTop: 4 }}>
+        <details
+          open={location.hash === `#action-${a.id}` || undefined}
+          style={{ fontSize: 13, marginTop: 4 }}
+        >
           <summary className="muted">журнал</summary>
+          <ActionSteps action={a} offset={offset} now={now} />
           <ActionVerification action={a} host={host} offset={offset} now={now} />
           {a.files && a.files.length > 0 && (
             <div style={{ margin: '4px 0' }}>
