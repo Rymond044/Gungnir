@@ -337,6 +337,7 @@ export interface FoundSymptom {
   window: [number, number] | null
   leading: boolean
   impact: boolean
+  overlaps_leading?: boolean
   source: string
   status: SymptomStatus
   evidence: (EvidenceItem & Record<string, unknown>) | null
@@ -422,6 +423,7 @@ export interface RuleSymptom {
   strength: Strength
   leading: boolean
   impact: boolean
+  overlaps_leading?: boolean
   window: [number, number] | null
   direction: string | null
   record: string

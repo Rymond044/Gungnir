@@ -360,3 +360,42 @@ def test_harm_is_the_others_waiting_at_a_noticeable_level():
     assert not shows_harm(caught, WRITER, ev, levels)
     blind = Evidence((), (), (), (), {}, {}, 0, 100, frozenset({"cgroup.io_pressure_some_ratio"}))
     assert shows_harm(caught, WRITER, blind, levels)
+
+
+def test_a_stale_descendant_does_not_hide_a_current_parent_culprit(engine):
+    stale = dataclasses.replace(rec("cgroup.write_bytes_per_s", WRITER + "/child", 0), end=20.0)
+    seen = copy(at=1000)
+    d = engine.diagnose(dataclasses.replace(ev(*seen, stale), since=1000.0, until=1200.0))
+    writers = [h.binding.culprit for h in d.harmful() if h.cause == "bulk_sequential_writer"]
+    assert writers == [WRITER]
+
+
+def test_a_current_descendant_still_wins_over_its_parent(engine):
+    child = WRITER + "/child"
+    seen = copy(at=1000)
+    seen.append(rec("cgroup.write_bytes_per_s", child, 1005))
+    d = engine.diagnose(dataclasses.replace(ev(*seen), since=1000.0, until=1200.0))
+    assert [h.binding.culprit for h in d.harmful() if h.cause == "bulk_sequential_writer"] == [child]
+
+
+def test_a_stale_culprit_does_not_explain_fresh_swapping(gate):
+    stale = dataclasses.replace(rec("cgroup.mem_bytes", WRITER, 0), end=60.0)
+    fresh = [
+        rec("swap.out_pages_per_s", HOST, 3600),
+        rec("swap.in_pages_per_s", HOST, 3610),
+        rec("mem.pressure_some_ratio", HOST, 3620),
+        rec("mem.direct_reclaims_per_s", HOST, 3620),
+    ]
+    d = gate.diagnose(ev(stale, *fresh, facts={"swap.enabled": "yes"}))
+    assert [h.binding.culprit for h in d.hypotheses if h.cause == "swap_io"] == [None]
+
+
+@pytest.mark.parametrize("ended", [60.0, None, 1010.0])
+def test_memory_exhaustion_names_only_a_culprit_still_growing_at_the_oom(gate, ended):
+    from gungnir_server.evidence import Event
+
+    growth = dataclasses.replace(rec("cgroup.mem_bytes", WRITER, 0), end=ended)
+    oom = rec("mem.oom_kills", HOST, 1000, kind="impact", level="severe")
+    evidence = dataclasses.replace(ev(growth, oom, until=1400), events=(Event("oom", "oom_kill", 1000),))
+    found = [h for h in gate.diagnose(evidence).hypotheses if h.cause == "memory_exhaustion"]
+    assert [h.binding.culprit for h in found] == ([None] if ended == 60 else [WRITER])

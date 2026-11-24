@@ -228,14 +228,28 @@ class RuleEngine:
             ]
             if unbound:
                 out = unbound
-        return out
+        # An old descendant anywhere in the look-back must not hide a
+        # current parent. Prefer depth only after both bindings fit the event.
+        return [
+            h
+            for h in out
+            if not any(
+                other.rejected is None
+                and other.binding.culprit
+                and h.binding.culprit
+                and other.binding.culprit != h.binding.culprit
+                and within(other.binding.culprit, h.binding.culprit)
+                and _same_event(h, other)
+                for other in out
+            )
+        ]
 
     def _bound(self, rule: Rule, ev: Evidence, b: Binding) -> list[Hypothesis]:
         return self._evaluate(rule, ev, b) if self._conditions_hold(rule, ev, b) else []
 
     def _culprits(self, rule: Rule, ev: Evidence) -> list[str | None]:
         """Groups that match the leading symptom, or any culprit symptom when
-        the leading symptom is elsewhere; of a group and its ancestor, the deepest."""
+        the leading symptom is elsewhere. Depth is resolved after window matching."""
         on_culprit = [m for m in rule.symptoms if m.role == "culprit"]
         if not on_culprit:
             return [None]
@@ -246,8 +260,7 @@ class RuleEngine:
             for item in self._items(m, ev)
             if (group := _group(item)) and self._matches(m, item, Binding(culprit=group))
         }
-        deepest = sorted(g for g in groups if not any(h != g and within(h, g) for h in groups))
-        return deepest or [None]
+        return sorted(groups) or [None]
 
     def _most_matched(self, rule: Rule, ev: Evidence, role: str) -> str | None:
         counts: dict[str, int] = {}
@@ -353,7 +366,12 @@ class RuleEngine:
             fits = [
                 item
                 for item in ev.between(m.kind, t0 + lo, t0 + hi)
-                if item not in used and self._matches(m, item, b)
+                if item not in used
+                and self._matches(m, item, b)
+                and (
+                    not m.overlaps_leading
+                    or (isinstance(item, Record) and (item.end is None or item.end >= t0))
+                )
             ]
             if fits and m.strength == CONTRADICTING:
                 contradicted = True
@@ -452,6 +470,21 @@ def own_waiting(hypotheses: list[Hypothesis], records: tuple[Record, ...], withi
     return {r for r in records if own(r)}
 
 
+def _same_event(a: Hypothesis, b: Hypothesis) -> bool:
+    if a.leading_at == b.leading_at:
+        return True
+    # Hierarchical activity records can open on different ticks. They name
+    # the same burst only while their leading records overlap.
+    leads = [next((f.item for f in h.with_status(MATCHED) if f.symptom.leading), None) for h in (a, b)]
+    left, right = leads
+    return (
+        isinstance(left, Record)
+        and isinstance(right, Record)
+        and left.start <= (right.end if right.end is not None else math.inf)
+        and right.start <= (left.end if left.end is not None else math.inf)
+    )
+
+
 def _on_subject(item: Item, subject: str | None) -> bool:
     return subject is not None and isinstance(item, Record) and related(item.entity, subject)
 
@@ -496,6 +529,7 @@ def as_hypothesis(h: Hypothesis) -> dict:
                 "window": list(f.symptom.window) if f.symptom.window else None,
                 "leading": f.symptom.leading,
                 "impact": f.symptom.impact,
+                "overlaps_leading": f.symptom.overlaps_leading,
                 "source": f.symptom.source,
                 "status": f.status,
                 "evidence": item_dict(f.item) if f.item else None,

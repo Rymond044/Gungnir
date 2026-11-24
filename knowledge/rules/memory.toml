@@ -199,8 +199,9 @@ anomaly = "cgroup.mem_bytes"
 direction = "up"
 role = "culprit"
 window = [-1800, 0]
+overlaps_leading = true
 strength = "typical"
-provenance = { source = "docs/research/memory.md M3, inferred", grade = "unverified" }
+provenance = { source = "docs/research/memory.md M3, inferred; ADR 0069: require growth to overlap OOM for culprit attribution", grade = "unverified" }
 
 [[rule.symptom]]
 anomaly = "swap.used_ratio"

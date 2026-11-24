@@ -67,6 +67,7 @@ def _rule(rule: Rule) -> dict:
                 "strength": m.strength,
                 "leading": m.leading,
                 "impact": m.impact,
+                "overlaps_leading": m.overlaps_leading,
                 "window": list(m.window) if m.window else None,
                 "direction": m.direction,
                 "record": m.record,

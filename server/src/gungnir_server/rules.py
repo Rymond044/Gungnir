@@ -31,7 +31,7 @@ PROCESS_ROLES = ("culprit", "others", "host")
 # Where each kind looks its names up in the ontology.
 CATEGORY = {"anomaly": "signal", "value": "signal", "event": "event", "process": "process"}
 FIELDS = {
-    "anomaly": {"direction", "record", "level", "detector"},
+    "anomaly": {"direction", "record", "level", "detector", "overlaps_leading"},
     "value": {"at_most", "above"},
     "event": set(),
     "process": set(),
@@ -57,6 +57,7 @@ class Symptom:
     detectors: tuple[str, ...] = ()
     at_most: float | None = None
     above: float | None = None
+    overlaps_leading: bool = False
     source: str = ""
     grade: str = ""
 
@@ -250,7 +251,17 @@ class _Checker:
             self.fail(f"{where}: detector must name some of {', '.join(DETECTORS)}")
         if detectors and record == "impact":
             self.fail(f"{where}: impact records come from the impact detector only")
-        return replace(out, direction=direction, record=record, level=level, detectors=detectors)
+        overlaps = m.get("overlaps_leading", False)
+        if not isinstance(overlaps, bool):
+            self.fail(f"{where}: overlaps_leading must be true or false")
+        return replace(
+            out,
+            direction=direction,
+            record=record,
+            level=level,
+            detectors=detectors,
+            overlaps_leading=overlaps,
+        )
 
     def _value(self, m: dict, out: Symptom, where: str) -> Symptom:
         self._signals(out, where)

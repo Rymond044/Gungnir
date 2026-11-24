@@ -46,6 +46,7 @@ function conditionText(c: Record<string, string[]>): string {
 
 function details(s: RuleSymptom): string {
   const out: string[] = []
+  if (s.overlaps_leading) out.push('запись продолжается в момент ведущего симптома')
   if (s.direction) out.push(directionNames[s.direction])
   if (s.record !== 'any') out.push(`только ${kindNames[s.record]}`)
   if (s.level) out.push(`уровень ${levelNames[s.level]}`)

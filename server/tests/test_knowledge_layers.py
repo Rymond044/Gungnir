@@ -292,3 +292,11 @@ def test_a_weight_takes_a_share_of_its_own_setting(onto, shipped, tmp_path):
     assert (entry.signal, entry.share) == (None, 0.25)
     with pytest.raises(KnowledgeError, match="only a weight"):
         load_policy(onto, shipped, tmp_path, GOOD_POLICY.replace('signal = "cgroup.write_bytes_per_s", ', ""))
+
+
+def test_overlap_constraint_is_checked_and_loaded(onto, tmp_path):
+    text = GOOD_RULE.replace('direction = "up"', 'direction = "up"\noverlaps_leading = true', 1)
+    [rule] = load_rule(onto, tmp_path, text).values()
+    assert rule.leading.overlaps_leading
+    with pytest.raises(KnowledgeError, match="overlaps_leading must be true or false"):
+        load_rule(onto, tmp_path, text.replace("overlaps_leading = true", 'overlaps_leading = "yes"'))

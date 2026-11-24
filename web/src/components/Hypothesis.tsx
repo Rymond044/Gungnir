@@ -72,7 +72,8 @@ export function Symptom({ s, host, offset }: { s: FoundSymptom; host: string; of
           {s.impact && <Chip tone="red">вред</Chip>}
         </div>
         <span className={styles.faint} style={{ fontSize: 12.5 }}>
-          на: {roleNames[s.role] ?? s.role} · {symptomWindow(s.window)} · <Key>{s.names.join(' | ')}</Key>
+          на: {roleNames[s.role] ?? s.role} · {symptomWindow(s.window)}
+          {s.overlaps_leading && ' · запись перекрывает ведущий симптом'} · <Key>{s.names.join(' | ')}</Key>
         </span>
       </div>
       <div className={styles.evidence}>
