@@ -14,3 +14,6 @@ token
 /scenarios/runs/
 # Build output of the web interface.
 /web/dist/
+
+# Local workspace instructions.
+/AGENTS.md
