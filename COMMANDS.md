@@ -190,6 +190,26 @@ server knowledge check --no-hermit                    # in the container: no Jav
 
 The ontology is `knowledge/ontology/gungnir.ttl`; open it in Protégé (File → Open) to browse it and run HermiT there (Reasoner → HermiT). Saving from Protégé rewrites the file in its own order and drops the `#` comments, so edits are made in the text and checked with the command above. HermiT reports how it classified the root causes (disk, filesystem, memory, CPU).
 
+## Manual demonstration stories
+
+The [three-story guide](../docs/demonstration.md) covers browser confirmation,
+actual verification, independent victim measurements and acknowledged rollback.
+Run each story separately; no proposal is automatically confirmed:
+
+```sh
+python3 scenarios/demo.py laptop cpu --check                 # read-only readiness
+python3 scenarios/demo.py laptop cpu --victim-workers 6       # CPU relief, desktop headroom
+python3 scenarios/demo.py laptop rollback                    # ineffective action, two culprits
+python3 scenarios/demo.py laptop expected                    # real offline build, expected annotation
+```
+
+The runner preserves local evidence and imports fresh `normal=false` labels;
+no leak, full control suite, replay or historical rescoring is included.
+After successful verification, use Revert in Chrome when prompted. The runner
+waits for actuator acknowledgement and checks the original file value before
+stopping its scopes. Evidence and actual results are recorded in the
+[2026-11-25 review](../docs/reviews/2026-11-25-demonstrations.md).
+
 ## Showing it (about 7 minutes)
 
 Before: server up, calibration run done, a day of data collected.
