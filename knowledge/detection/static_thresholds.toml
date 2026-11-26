@@ -40,3 +40,12 @@ provenance = { source = "Zabbix template Linux by Zabbix agent: Disk read/write 
 signal = "fs.used_ratio"
 above = 0.80
 provenance = { source = "Zabbix template Linux by Zabbix agent: FS space is low, {$VFS.FS.PUSED.MAX.WARN} = 80 (%), min over 5m", grade = "documented" }
+
+# A local limit event names the condition even before a baseline exists.
+# The count measures encounters with the boundary, not waiting duration.
+# PSI or OOM, rather than the event alone, establishes impact (ADR 0071).
+[[threshold]]
+signal = "cgroup.mem_max_events"
+above = 0
+samples = 1
+provenance = { source = "https://docs.kernel.org/admin-guide/cgroup-v2.html#memory-interface-files: memory.events max counts attempts to exceed the boundary, before reclaim or OOM", grade = "documented" }

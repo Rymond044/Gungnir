@@ -319,8 +319,17 @@ class RuleEngine:
         at two and another at six are two stretches of activity. Of the
         candidates of one time, a hypothesis beats a refused one."""
         leading = rule.leading
-        starts = sorted({at(i) for i in self._items(leading, ev) if self._matches(leading, i, b)})
-        has_leading = bool(starts)
+        anchors = {
+            (
+                at(item),
+                item.entity
+                if leading.role == "others" and isinstance(item, Record) and item.entity != HOST
+                else None,
+            )
+            for item in self._items(leading, ev)
+            if self._matches(leading, item, b)
+        }
+        has_leading = bool(anchors)
         if not has_leading:
             if self._observable(leading, ev):
                 return []
@@ -334,15 +343,23 @@ class RuleEngine:
             ]
             if not times:
                 return []
-            starts = [min(times)]
-        found = [h for t0 in starts if (h := self._assign(rule, ev, b, t0, has_leading))]
+            anchors = {(min(times), None)}
+        found = [
+            h for t0, subject in sorted(anchors) if (h := self._assign(rule, ev, b, t0, has_leading, subject))
+        ]
         accepted = [h for h in found if h.rejected is None]
         if accepted:
             return accepted
         return [max(found, key=lambda h: h.confidence)] if found else []
 
     def _assign(
-        self, rule: Rule, ev: Evidence, b: Binding, t0: float, has_leading: bool
+        self,
+        rule: Rule,
+        ev: Evidence,
+        b: Binding,
+        t0: float,
+        has_leading: bool,
+        subject: str | None = None,
     ) -> Hypothesis | None:
         """Gives each symptom the earliest unused item inside its
         window: the leading symptom first, then by strength. A candidate the
@@ -368,6 +385,9 @@ class RuleEngine:
                 for item in ev.between(m.kind, t0 + lo, t0 + hi)
                 if item not in used
                 and self._matches(m, item, b)
+                # A limit's leading group is its subject, not any other
+                # group whose pressure or OOM happened nearby.
+                and (subject is None or m.role != "others" or _group(item) == subject)
                 and (
                     not m.overlaps_leading
                     or (isinstance(item, Record) and (item.end is None or item.end >= t0))

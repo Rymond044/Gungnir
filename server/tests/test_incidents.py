@@ -1,11 +1,13 @@
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
 from psycopg.types.json import Jsonb
 
 from gungnir_server import base, incidents
+from gungnir_server.evidence import Evidence, Record
 from gungnir_server.incidents import Current, Harm, advance
-from gungnir_server.inference import RuleEngine
+from gungnir_server.inference import Diagnosis, RuleEngine
 from gungnir_server.params import Params
 from gungnir_server.telemetry import SeriesIds
 from tests import seed
@@ -250,3 +252,116 @@ def test_the_hosts_own_pressure_beside_a_culprit_is_not_harm(conn, manager):
     manager(conn, host, P, START)
     [found] = incidents.summaries(conn, host, START - timedelta(hours=1), START + timedelta(hours=1))
     assert found.cause == "cpu_hog" and found.culprit == WRITER
+
+
+def limit_hypotheses(manager, pressure_a, pressure_b):
+    groups = ("system.slice/aaa.service", "system.slice/zzz.service")
+    records = tuple(
+        Record(f"{signal}@{group}", signal, group, "anomaly", "threshold", "up", at, value=value)
+        for group, pressure in zip(groups, (pressure_a, pressure_b), strict=True)
+        for signal, at, value in (
+            ("cgroup.mem_max_events", 100.0, 1.0),
+            ("cgroup.mem_pressure_some_ratio", 110.0, pressure),
+        )
+    )
+    diagnosis = manager.engine.diagnose(Evidence(records=records, since=100.0, until=400.0))
+    return tuple(h for h in diagnosis.hypotheses if h.cause == "group_memory_limit")
+
+
+def test_stored_limit_explanation_keeps_the_subject_that_was_hurt(conn, manager):
+    host = seed.add_host(conn)
+    incident_id = conn.execute(
+        "INSERT INTO incidents (host_id, opened_at, last_harm_at) VALUES (%s, %s, %s) RETURNING id",
+        (host.id, START, START),
+    ).fetchone()[0]
+    hypotheses = limit_hypotheses(manager, 0.001, 0.20)
+    assert len(hypotheses) == 2 and not hypotheses[0].harm and hypotheses[1].harm
+    manager._hypotheses(conn, incident_id, Diagnosis(hypotheses, (), ()), START)
+    [(cause, culprit, device, filesystem, harm, tree)] = conn.execute(
+        "SELECT cause, culprit, device, filesystem, harm, tree FROM hypotheses WHERE incident_id = %s",
+        (incident_id,),
+    ).fetchall()
+    # Keep the existing unbound storage key, using the actually harmful subject as its explanation.
+    assert (cause, culprit, device, filesystem) == ("group_memory_limit", "", "", "")
+    assert harm and tree["harm"]
+    leading = next(symptom for symptom in tree["symptoms"] if symptom["leading"])
+    assert leading["evidence"]["entity"] == "system.slice/zzz.service"
+    assert incidents.open_summary(conn, host).cause == "group_memory_limit"
+
+
+@pytest.mark.parametrize(
+    ("harms", "expected_subject"),
+    [
+        ((False, True), "system.slice/zzz.service"),
+        ((True, True), "system.slice/aaa.service"),
+        ((False, False), "system.slice/aaa.service"),
+    ],
+)
+def test_storage_prefers_harm_but_preserves_ranking_within_each_outcome(
+    conn, manager, harms, expected_subject
+):
+    host = seed.add_host(conn)
+    incident_id = conn.execute(
+        "INSERT INTO incidents (host_id, opened_at, last_harm_at) VALUES (%s, %s, %s) RETURNING id",
+        (host.id, START, START),
+    ).fetchone()[0]
+    first, second = limit_hypotheses(manager, 0.20 if harms[0] else 0.001, 0.20 if harms[1] else 0.001)
+    assert (first.harm, second.harm) == harms
+    hypotheses = (replace(first, confidence=0.95), replace(second, confidence=0.75))
+    manager._hypotheses(conn, incident_id, Diagnosis(hypotheses, (), ()), START)
+    [(tree,)] = conn.execute("SELECT tree FROM hypotheses WHERE incident_id = %s", (incident_id,)).fetchall()
+    leading = next(symptom for symptom in tree["symptoms"] if symptom["leading"])
+    assert leading["evidence"]["entity"] == expected_subject
+
+
+def test_storage_ranks_the_selected_harmful_representatives_in_diagnosis_order(conn, manager):
+    host = seed.add_host(conn)
+    incident_id = conn.execute(
+        "INSERT INTO incidents (host_id, opened_at, last_harm_at) VALUES (%s, %s, %s) RETURNING id",
+        (host.id, START, START),
+    ).fetchone()[0]
+    harmless, harmful = limit_hypotheses(manager, 0.001, 0.20)
+    quota = manager.engine.diagnose(
+        Evidence(
+            records=(
+                Record(
+                    "quota",
+                    "cgroup.throttled_ratio",
+                    WRITER,
+                    "anomaly",
+                    "robust.mad",
+                    "up",
+                    100.0,
+                    value=0.20,
+                ),
+                Record(
+                    "wait",
+                    "cgroup.cpu_pressure_some_ratio",
+                    WRITER,
+                    "anomaly",
+                    "robust.mad",
+                    "up",
+                    110.0,
+                    value=0.20,
+                ),
+            ),
+            since=100.0,
+            until=400.0,
+        )
+    )
+    [other_harmful] = [h for h in quota.hypotheses if h.cause == "cpu_quota_throttling"]
+    assert other_harmful.harm
+    diagnosis = Diagnosis(
+        (
+            replace(harmless, confidence=0.95),
+            replace(other_harmful, confidence=0.90),
+            replace(harmful, confidence=0.75),
+        ),
+        (),
+        (),
+    )
+    manager._hypotheses(conn, incident_id, diagnosis, START)
+    rows = conn.execute(
+        "SELECT cause, confidence, harm FROM hypotheses WHERE incident_id = %s ORDER BY rank", (incident_id,)
+    ).fetchall()
+    assert rows == [("cpu_quota_throttling", 0.90, True), ("group_memory_limit", 0.75, True)]

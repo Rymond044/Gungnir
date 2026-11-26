@@ -66,6 +66,7 @@ anomaly = "mem.pressure_some_ratio"
 direction = "up"
 role = "host"
 window = [0, 120]
+impact = true
 strength = "characteristic"
 provenance = { source = "accounting/psi", grade = "documented" }
 
@@ -75,7 +76,6 @@ direction = "up"
 role = "host"
 window = [-30, 120]
 strength = "typical"
-impact = true
 provenance = { source = "Gregg p. 333; overhead run 20261028T195813Z memory: 1.8 k/s", grade = "documented" }
 
 [[rule.symptom]]
@@ -150,7 +150,6 @@ direction = "up"
 role = "host"
 window = [-30, 120]
 strength = "typical"
-impact = true
 provenance = { source = "Gregg p. 333", grade = "documented" }
 
 [[rule.symptom]]

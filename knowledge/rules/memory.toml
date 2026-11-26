@@ -4,9 +4,10 @@
 # (threshold, robust, iforest, growth).
 #
 # Host memory pressure includes the culprit's own stall, so it is evidence
-# but not impact; impact is the others' pressure, direct reclaim (an allocation
-# that blocks) and OOM kills. Causes without a culprit (M4-M7) read their
-# impact on the host or on `others`, which then stands for any group.
+# but not impact beside a culprit. Reclaim and memory.max events describe
+# the condition, not how long anyone waited. Noticeable PSI or OOM establishes
+# impact (ADR 0071). Causes without a culprit (M4-M7) read PSI on the host
+# or on `others`, which then stands for any group.
 
 #################################################################
 # M1. Memory leak
@@ -48,6 +49,7 @@ anomaly = "mem.pressure_some_ratio"
 direction = "up"
 role = "host"
 window = [0, 43200]
+impact = true
 strength = "typical"
 provenance = { source = "accounting/psi", grade = "documented" }
 
@@ -57,7 +59,6 @@ direction = "up"
 role = "host"
 window = [0, 43200]
 strength = "typical"
-impact = true
 provenance = { source = "Gregg p. 333: direct reclaim is applications blocking on memory allocations", grade = "documented" }
 
 [[rule.symptom]]
@@ -129,6 +130,7 @@ anomaly = "mem.pressure_some_ratio"
 direction = "up"
 role = "host"
 window = [0, 120]
+impact = true
 strength = "typical"
 provenance = { source = "overhead run 20261028T195813Z memory: up to 0.109", grade = "measured" }
 
@@ -138,7 +140,6 @@ direction = "up"
 role = "host"
 window = [0, 120]
 strength = "typical"
-impact = true
 provenance = { source = "Gregg p. 333; overhead run 20261028T195813Z memory: 1.8 k/s", grade = "documented" }
 
 [[rule.symptom]]
@@ -237,11 +238,9 @@ provenance = { source = "docs/research/memory.md M4; admin-guide/cgroup-v2 memor
 [[rule.symptom]]
 anomaly = "cgroup.mem_max_events"
 direction = "up"
-record = "impact"
 role = "others"
 leading = true
 strength = "characteristic"
-impact = true
 provenance = { source = "admin-guide/cgroup-v2 memory.events max", grade = "documented" }
 
 [[rule.symptom]]
@@ -342,7 +341,6 @@ direction = "up"
 role = "host"
 window = [0, 600]
 strength = "typical"
-impact = true
 provenance = { source = "Gregg p. 333", grade = "documented" }
 
 #################################################################
@@ -384,5 +382,4 @@ direction = "up"
 role = "host"
 window = [0, 43200]
 strength = "typical"
-impact = true
 provenance = { source = "Gregg p. 333", grade = "documented" }

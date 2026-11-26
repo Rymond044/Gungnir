@@ -140,8 +140,6 @@ provenance = { source = "docs/research/memory.md M4; admin-guide/cgroup-v2 memor
 signal = "cgroup.mem_max_events"
 role = "others"
 direction = "up"
-record = "impact"
-level = "noticeable"
 at = 0
 
 [[case.record]]
